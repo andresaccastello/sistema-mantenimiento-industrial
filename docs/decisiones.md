@@ -34,6 +34,20 @@ SAE continuará siendo un sistema externo. En la primera versión no habrá inte
 
 ## D-004 — Stack tecnológico
 
-**Estado:** Pendiente
+**Estado:** Aceptada
 
-Se debe definir frontend, backend y base de datos antes de crear la estructura definitiva del código.
+Se utilizará:
+
+- **Frontend:** React.
+- **Backend:** Node.js.
+- **Base de datos:** PostgreSQL.
+
+**Motivo:** el stack permite desarrollar una aplicación web desacoplada, con una API para centralizar la lógica de negocio y una base de datos relacional adecuada para usuarios, máquinas, intervenciones, repuestos, costos e historial.
+
+---
+
+## D-005 — Despliegue de infraestructura
+
+**Estado:** Pendiente de cerrar la arquitectura exacta
+
+La intención inicial es utilizar servicios cloud para la base de datos y el backend. Antes de fijar la infraestructura definitiva se documentará qué servicio alojará PostgreSQL y qué servicio ejecutará el backend Node.js, junto con las variables de entorno y la estrategia de conexión segura.
