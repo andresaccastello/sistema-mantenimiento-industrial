@@ -6,6 +6,14 @@ Proyecto de tesis orientado al desarrollo de un sistema web interno para **GI-RE
 
 Mejorar la trazabilidad del mantenimiento, reducir la pérdida de información y disponer de datos confiables sobre fallas, intervenciones, repuestos, costos, tiempos de inactividad e historial por máquina.
 
+## Stack tecnológico
+
+- **Frontend:** React
+- **Backend:** Node.js
+- **Base de datos:** PostgreSQL
+
+La infraestructura cloud definitiva se documentará antes del despliegue.
+
 ## Alcance inicial
 
 El sistema contempla:
@@ -37,16 +45,14 @@ El proyecto no busca reemplazar los sistemas administrativos o productivos exist
 
 ## Arquitectura general prevista
 
-La solución se plantea como una aplicación web de uso interno, con:
+La solución se plantea como una aplicación web con:
 
-- Frontend web.
-- Backend / API.
-- Base de datos centralizada.
+- Frontend React.
+- Backend / API en Node.js.
+- PostgreSQL como base de datos centralizada.
 - Almacenamiento de documentación respaldatoria.
-- Acceso desde equipos conectados a la red interna de la empresa.
+- Acceso desde los dispositivos autorizados.
 - Sistema SAE como referencia documental externa, sin reemplazarlo.
-
-La tecnología concreta de frontend, backend y base de datos se definirá antes de comenzar la implementación.
 
 ## Estructura prevista del repositorio
 
@@ -62,8 +68,6 @@ sistema-mantenimiento-industrial/
 ├── .gitignore
 └── README.md
 ```
-
-Las carpetas de código se crearán cuando se defina el stack tecnológico, para evitar generar estructura innecesaria.
 
 ## Estrategia de ramas
 
@@ -84,6 +88,6 @@ feat/reportes
 
 ## Estado del proyecto
 
-**Etapa actual:** inicio de implementación.
+**Etapa actual:** definición de arquitectura técnica e inicio de implementación.
 
-El relevamiento, requerimientos, alcance y modelo ambiental ya fueron desarrollados en la documentación de tesis. El siguiente paso es definir el stack tecnológico y diseñar la base técnica del sistema.
+El relevamiento, requerimientos, alcance y modelo ambiental ya fueron desarrollados en la documentación de tesis. El stack principal ya fue definido: React + Node.js + PostgreSQL.
