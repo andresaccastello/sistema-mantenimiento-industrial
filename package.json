@@ -1,0 +1,22 @@
+{
+  "name": "sistema-mantenimiento-industrial",
+  "private": true,
+  "scripts": {
+    "dev:frontend": "npm --workspace frontend run dev",
+    "build:frontend": "npm --workspace frontend run build",
+    "typecheck": "tsc --noEmit"
+  },
+  "workspaces": [
+    "frontend"
+  ],
+  "dependencies": {
+    "@neon/config": "latest",
+    "hono": "latest",
+    "pg": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/pg": "latest",
+    "typescript": "latest"
+  }
+}
