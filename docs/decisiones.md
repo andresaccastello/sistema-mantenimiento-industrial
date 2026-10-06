@@ -38,16 +38,36 @@ SAE continuará siendo un sistema externo. En la primera versión no habrá inte
 
 Se utilizará:
 
-- **Frontend:** React.
-- **Backend:** Node.js.
-- **Base de datos:** PostgreSQL.
+- **Frontend:** React + Vite + TypeScript.
+- **Backend:** Node.js ejecutado mediante Neon Functions.
+- **Framework HTTP:** Hono.
+- **Base de datos:** PostgreSQL alojado en Neon.
+- **Acceso a datos inicial:** `pg` con pool de conexiones.
+- **API:** REST.
 
-**Motivo:** el stack permite desarrollar una aplicación web desacoplada, con una API para centralizar la lógica de negocio y una base de datos relacional adecuada para usuarios, máquinas, intervenciones, repuestos, costos e historial.
+**Motivo:** el stack permite desarrollar una aplicación web desacoplada y mantener el backend próximo a la base de datos. Para la primera versión se prioriza una solución simple, con pocas capas y fácil de explicar y mantener durante la tesis.
 
 ---
 
-## D-005 — Despliegue de infraestructura
+## D-005 — Infraestructura Neon
 
-**Estado:** Pendiente de cerrar la arquitectura exacta
+**Estado:** Aceptada
 
-La intención inicial es utilizar servicios cloud para la base de datos y el backend. Antes de fijar la infraestructura definitiva se documentará qué servicio alojará PostgreSQL y qué servicio ejecutará el backend Node.js, junto con las variables de entorno y la estrategia de conexión segura.
+Neon alojará:
+
+- PostgreSQL.
+- Backend Node.js mediante Neon Functions.
+
+La configuración se mantendrá como código mediante `neon.ts`. En producción, Neon inyectará la variable `DATABASE_URL` al backend.
+
+El frontend React se desplegará por separado, ya que Neon Functions se utilizará para la API y no como hosting del cliente web.
+
+---
+
+## D-006 — ORM
+
+**Estado:** Pendiente
+
+No se incorporará un ORM al inicio. Primero se diseñará el modelo relacional y se crearán las migraciones SQL. Si más adelante aporta valor real, se evaluará incorporar una herramienta de acceso a datos.
+
+**Motivo:** evitar complejidad innecesaria durante la primera etapa y mantener visible el diseño de PostgreSQL para la tesis.
