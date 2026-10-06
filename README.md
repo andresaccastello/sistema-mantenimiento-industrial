@@ -1,6 +1,6 @@
 # Sistema de Mantenimiento Industrial
 
-Proyecto de tesis orientado al desarrollo de un sistema web interno para **GI-RE S.A.**, destinado a centralizar y gestionar la información relacionada con el mantenimiento de máquinas y equipos industriales.
+Proyecto de tesis orientado al desarrollo de un sistema web para **GI-RE S.A.**, destinado a centralizar y gestionar la información relacionada con el mantenimiento de máquinas y equipos industriales.
 
 ## Objetivo
 
@@ -8,11 +8,28 @@ Mejorar la trazabilidad del mantenimiento, reducir la pérdida de información y
 
 ## Stack tecnológico
 
-- **Frontend:** React
-- **Backend:** Node.js
-- **Base de datos:** PostgreSQL
+- **Frontend:** React + Vite + TypeScript
+- **Backend:** Node.js + Hono
+- **Backend cloud:** Neon Functions
+- **Base de datos:** PostgreSQL en Neon
+- **API:** REST
+- **Acceso inicial a datos:** `pg`
 
-La infraestructura cloud definitiva se documentará antes del despliegue.
+## Arquitectura
+
+```text
+React
+  ↓
+API REST
+  ↓
+Node.js + Hono
+Neon Functions
+  ↓
+PostgreSQL
+Neon
+```
+
+El frontend se desplegará por separado. Neon concentrará la base PostgreSQL y la ejecución del backend.
 
 ## Alcance inicial
 
@@ -34,8 +51,6 @@ Los operarios podrán registrar fallas o necesidades de mantenimiento desde un c
 
 ## Fuera de alcance inicial
 
-El proyecto no busca reemplazar los sistemas administrativos o productivos existentes. Quedan fuera del alcance inicial:
-
 - Gestión contable integral.
 - Facturación, pagos e impuestos.
 - Gestión completa de producción, ventas y clientes.
@@ -43,18 +58,7 @@ El proyecto no busca reemplazar los sistemas administrativos o productivos exist
 - Integración directa con sensores o IoT.
 - Automatización física de equipos.
 
-## Arquitectura general prevista
-
-La solución se plantea como una aplicación web con:
-
-- Frontend React.
-- Backend / API en Node.js.
-- PostgreSQL como base de datos centralizada.
-- Almacenamiento de documentación respaldatoria.
-- Acceso desde los dispositivos autorizados.
-- Sistema SAE como referencia documental externa, sin reemplazarlo.
-
-## Estructura prevista del repositorio
+## Estructura del repositorio
 
 ```text
 sistema-mantenimiento-industrial/
@@ -62,32 +66,21 @@ sistema-mantenimiento-industrial/
 ├── backend/
 ├── database/
 ├── docs/
-│   ├── alcance.md
-│   ├── arquitectura.md
-│   └── decisiones.md
+├── neon.ts
+├── .env.example
 ├── .gitignore
 └── README.md
 ```
 
 ## Estrategia de ramas
 
-- `main`: versión estable del proyecto.
+- `main`: versión estable.
 - `feat/*`: nuevas funcionalidades.
 - `fix/*`: correcciones.
-- `docs/*`: cambios de documentación.
-
-Ejemplos:
-
-```text
-feat/autenticacion
-feat/maquinas
-feat/mantenimiento
-feat/repuestos
-feat/reportes
-```
+- `docs/*`: documentación.
 
 ## Estado del proyecto
 
-**Etapa actual:** definición de arquitectura técnica e inicio de implementación.
+**Etapa actual:** inicialización técnica.
 
-El relevamiento, requerimientos, alcance y modelo ambiental ya fueron desarrollados en la documentación de tesis. El stack principal ya fue definido: React + Node.js + PostgreSQL.
+El relevamiento, requerimientos, alcance y modelo ambiental ya fueron desarrollados. El stack y la infraestructura principal quedaron definidos y el siguiente paso es inicializar el proyecto y diseñar el modelo de datos.
