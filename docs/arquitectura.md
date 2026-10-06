@@ -2,18 +2,49 @@
 
 ## Enfoque
 
-La solución se plantea como una aplicación web interna accesible desde los equipos de GI-RE S.A. mediante navegador.
+La solución se plantea como una aplicación web para GI-RE S.A., con frontend desacoplado, API y base de datos centralizada.
 
-## Componentes previstos
+## Componentes
 
-### Cliente web
-Interfaz para operarios, responsables de mantenimiento, administradores y usuarios de consulta.
+### Frontend
+
+Aplicación desarrollada con React, Vite y TypeScript.
+
+Será utilizada por:
+
+- operarios;
+- responsables de mantenimiento;
+- administradores;
+- usuarios de consulta de Dirección / I+D.
+
+El frontend consumirá la API mediante HTTP.
 
 ### Backend / API
-Contendrá la lógica de negocio del sistema, validaciones, permisos y operaciones sobre los datos.
 
-### Base de datos centralizada
-Almacenará, entre otros:
+El backend se desarrollará en Node.js y se ejecutará mediante Neon Functions.
+
+Se utilizará Hono como framework HTTP para exponer una API REST.
+
+Responsabilidades principales:
+
+- autenticación y autorización;
+- validaciones;
+- lógica de negocio;
+- gestión de máquinas;
+- intervenciones;
+- mantenimiento preventivo y correctivo;
+- repuestos;
+- costos;
+- documentación;
+- consultas y reportes.
+
+### Base de datos
+
+Se utilizará PostgreSQL alojado en Neon.
+
+El backend accederá inicialmente mediante `pg` y un pool de conexiones. La cadena de conexión se obtendrá desde `DATABASE_URL`.
+
+La base almacenará, entre otros:
 
 - usuarios;
 - perfiles y permisos;
@@ -26,26 +57,46 @@ Almacenará, entre otros:
 - movimientos de stock;
 - costos;
 - tiempos;
-- documentación;
-- historial.
+- referencias de documentación;
+- historial y estados.
 
 ### Almacenamiento documental
-Permitirá conservar o referenciar documentación respaldatoria como facturas, remitos, presupuestos, fotografías, manuales y capturas.
+
+La estrategia definitiva para facturas, remitos, fotografías, manuales y demás archivos adjuntos se definirá en una etapa posterior.
 
 ### SAE
-Se considera un sistema externo utilizado como referencia documental. No forma parte de la arquitectura funcional del nuevo sistema.
 
-## Acceso
+SAE se considera un sistema externo utilizado como referencia documental. No forma parte del núcleo funcional del nuevo sistema y no será reemplazado.
 
-El sistema deberá poder utilizarse desde PCs, notebooks, celulares o terminales conectadas a la infraestructura interna disponible en la empresa.
+## Flujo general
+
+```text
+Usuario
+   ↓
+React
+   ↓ HTTP / REST
+Neon Function - Node.js + Hono
+   ↓
+PostgreSQL en Neon
+```
+
+## Variables de entorno
+
+Nunca deberán subirse secretos al repositorio.
+
+Variables previstas:
+
+```text
+DATABASE_URL=
+VITE_API_URL=
+```
+
+En Neon Functions, `DATABASE_URL` será inyectada por la plataforma durante el despliegue.
 
 ## Decisiones pendientes
 
-Antes de iniciar el código se debe definir:
-
-- tecnología de frontend;
-- tecnología de backend;
-- motor de base de datos;
-- estrategia de autenticación;
-- estrategia para archivos adjuntos;
-- forma de despliegue dentro de la empresa.
+- autenticación y autorización definitiva;
+- almacenamiento de archivos adjuntos;
+- hosting del frontend;
+- modelo de datos definitivo;
+- estrategia de backups y recuperación.
