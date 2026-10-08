@@ -1,0 +1,33 @@
+{
+  "name": "sistema-mantenimiento-industrial",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "dev:backend": "tsx watch --env-file=.env backend/server.ts",
+    "dev:frontend": "npm run dev --workspace frontend",
+    "typecheck:backend": "tsc --noEmit -p backend/tsconfig.json",
+    "typecheck": "npm run typecheck:backend && npm run typecheck --workspace frontend",
+    "build:frontend": "npm run build --workspace frontend"
+  },
+  "dependencies": {
+    "@neon/config": "latest",
+    "bcryptjs": "^3.0.3",
+    "hono": "latest",
+    "pg": "latest"
+  },
+  "devDependencies": {
+    "@hono/node-server": "^2.1.4",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "latest",
+    "@types/pg": "latest",
+    "tsx": "^4.23.15",
+    "typescript": "latest"
+  }
+}
