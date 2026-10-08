@@ -1,12 +1,10 @@
 import { defineConfig } from '@neon/config/v1';
 
 export default defineConfig({
-  preview: {
-    functions: {
-      api: {
-        name: 'Sistema de Mantenimiento Industrial API',
-        source: './backend/functions/api.ts',
-      },
+  functions: {
+    api: {
+      name: 'Sistema de Mantenimiento Industrial API',
+      source: './backend/functions/api.ts',
     },
   },
 });
