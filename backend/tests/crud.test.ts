@@ -1,22 +1,30 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-
-// URL del entorno de desarrollo local (Asegurarse de levantar npm run dev:backend)
 import { pool } from '../functions/db.ts';
 
 const API_URL = 'http://localhost:3000/api';
 
-// Función para confirmar criptográficamente/lógicamente que estamos en una DB de pruebas
-async function ensureSafeDatabaseForWrites() {
-  const { rows } = await pool.query('SELECT current_database() as db_name');
-  const dbName = rows[0].db_name;
-  if (!dbName.endsWith('_test') && !dbName.includes('dev')) {
-    throw new Error(`BLOQUEO DE SEGURIDAD: La base de datos '${dbName}' no es de pruebas. Las operaciones de escritura en E2E requieren que la base termine en '_test' o contenga 'dev' para evitar mutar producción.`);
-  }
+// Identificación estricta de la rama de Neon
+// 1. NEON_TEST_BRANCH_ID debe existir en el entorno.
+// 2. DATABASE_URL debe coincidir con este ID.
+// 3. Opcionalmente: No debe ser la rama de producción conocida ('ep-broad-fog-b5p3znyl').
+const dbUrl = process.env.DATABASE_URL || '';
+const testBranchId = process.env.NEON_TEST_BRANCH_ID;
+
+if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-fog-b5p3znyl')) {
+  console.error('===============================================================');
+  console.error(' BLOQUEO DE SEGURIDAD (E2E TESTS)');
+  console.error('===============================================================');
+  console.error(' Las pruebas de E2E mutan la base de datos.');
+  console.error(' Para ejecutar la suite, debes configurar un entorno aislado:');
+  console.error(' 1. Define NEON_TEST_BRANCH_ID en tu .env con el ID de la rama.');
+  console.error(' 2. Define DATABASE_URL apuntando a esa rama específica.');
+  console.error(' No se iniciará ninguna prueba contra producción.');
+  console.error('===============================================================');
+  process.exit(1);
 }
 
-test('Security & Auth Tests', async (t) => {
-
+test('Security, Auth & CRUD Tests', async (t) => {
   let validToken = '';
 
   await t.test('1. Solicitud sin token debe fallar (401)', async () => {
@@ -41,7 +49,6 @@ test('Security & Auth Tests', async (t) => {
   });
 
   await t.test('4. Login correcto', async () => {
-    // Nota: Requiere ADMIN_INITIAL_PASSWORD en .env para haber creado el usuario
     const res = await fetch(`${API_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -53,12 +60,7 @@ test('Security & Auth Tests', async (t) => {
     validToken = data.token;
   });
 
-  // Tests dependientes de validToken...
-  await t.test('5. Bloqueo de mutación (Validar Entorno Seguro)', async () => {
-    await ensureSafeDatabaseForWrites();
-  });
-
-  await t.test('6. Creación inválida de sector (Nombre vacío)', async () => {
+  await t.test('5. Creación inválida de sector (Nombre vacío)', async () => {
     const res = await fetch(`${API_URL}/sectores`, {
       method: 'POST',
       headers: { 
@@ -82,9 +84,4 @@ test('Security & Auth Tests', async (t) => {
     assert.strictEqual(res.status, 400);
   });
 
-  /*
-   Para ejecutar las pruebas completas de Creación, Actualización y Borrado lógico de Sectores y Máquinas,
-   recomendamos apuntar la variable DATABASE_URL a una base de datos "Branch" de desarrollo en Neon,
-   para evitar modificar los datos de Producción, o usar una transacción controlada.
-  */
 });
