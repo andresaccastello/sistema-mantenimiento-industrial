@@ -7,7 +7,7 @@ Este modelo traduce los requerimientos de la tesis a una primera estructura rela
 - Se mantiene una separación entre usuarios, perfiles y permisos.
 - El legajo identifica al usuario que opera el sistema.
 - Una máquina pertenece a un sector.
-- Toda intervención queda asociada a una máquina, un sector, un tipo y al usuario que la registró.
+- Toda intervención queda asociada a una máquina, a un plan preventivo (si corresponde), a un tipo y al usuario que la registró.
 - Los estados de una intervención se conservan también en un historial para trazabilidad.
 - Los repuestos utilizados quedan vinculados a la intervención con cantidad y costo aplicado.
 - Se registran movimientos de stock para poder reconstruir ingresos, egresos y ajustes.
@@ -57,7 +57,7 @@ Catálogo y disponibilidad básica de repuestos.
 Detalle de repuestos utilizados en una intervención.
 
 ### movimientos_stock
-Trazabilidad de ingresos, egresos y ajustes del stock.
+Trazabilidad de ingresos, egresos y ajustes del stock, historizando el costo unitario.
 
 ### planes_mantenimiento
 Planificación preventiva configurable por tiempo, horas de uso, kilómetros u otros criterios.
@@ -73,16 +73,14 @@ PERFILES ──< USUARIOS
    └──< PERFIL_PERMISO >── PERMISOS
 
 SECTORES ──< MAQUINAS
-    │           │
-    │           └──< INTERVENCIONES >── USUARIOS
-    │                       │
-    └───────────────────────┘
+                │
+                └──< INTERVENCIONES >── USUARIOS
                             │
                             ├──< HISTORIAL_ESTADOS_INTERVENCION
                             ├──< INTERVENCION_REPUESTOS >── REPUESTOS
                             └──< DOCUMENTOS
 
-MAQUINAS ──< PLANES_MANTENIMIENTO
+MAQUINAS ──< PLANES_MANTENIMIENTO ──< INTERVENCIONES
 REPUESTOS ──< MOVIMIENTOS_STOCK
 MAQUINAS ──< DOCUMENTOS
 ```
