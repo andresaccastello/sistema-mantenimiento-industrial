@@ -68,7 +68,7 @@ CREATE TABLE tipos_intervencion (
 CREATE TABLE intervenciones (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     maquina_id BIGINT NOT NULL REFERENCES maquinas(id),
-    sector_id BIGINT NOT NULL REFERENCES sectores(id),
+    plan_mantenimiento_id BIGINT,
     tipo_intervencion_id BIGINT NOT NULL REFERENCES tipos_intervencion(id),
     creado_por_usuario_id BIGINT NOT NULL REFERENCES usuarios(id),
     responsable_usuario_id BIGINT REFERENCES usuarios(id),
@@ -144,6 +144,7 @@ CREATE TABLE movimientos_stock (
     intervencion_id BIGINT REFERENCES intervenciones(id),
     tipo VARCHAR(20) NOT NULL,
     cantidad NUMERIC(14,3) NOT NULL,
+    costo_unitario NUMERIC(14,2),
     observacion TEXT,
     realizado_por_usuario_id BIGINT NOT NULL REFERENCES usuarios(id),
     realizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -182,16 +183,22 @@ CREATE TABLE documentos (
     tamanio_bytes BIGINT,
     subido_por_usuario_id BIGINT NOT NULL REFERENCES usuarios(id),
     creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT ck_documentos_tipo 
+        CHECK (tipo_documento IS NULL OR tipo_documento IN ('FACTURA', 'REMITO', 'PRESUPUESTO', 'MANUAL', 'FOTOGRAFIA', 'COMPROBANTE', 'OTRO')),
     CONSTRAINT ck_documentos_asociacion
         CHECK (maquina_id IS NOT NULL OR intervencion_id IS NOT NULL),
     CONSTRAINT ck_documentos_tamanio
         CHECK (tamanio_bytes IS NULL OR tamanio_bytes >= 0)
 );
 
+ALTER TABLE intervenciones 
+    ADD CONSTRAINT fk_intervenciones_plan 
+    FOREIGN KEY (plan_mantenimiento_id) REFERENCES planes_mantenimiento(id);
+
 CREATE INDEX idx_usuarios_perfil ON usuarios(perfil_id);
 CREATE INDEX idx_maquinas_sector ON maquinas(sector_id);
 CREATE INDEX idx_intervenciones_maquina ON intervenciones(maquina_id);
-CREATE INDEX idx_intervenciones_sector ON intervenciones(sector_id);
+CREATE INDEX idx_intervenciones_plan ON intervenciones(plan_mantenimiento_id);
 CREATE INDEX idx_intervenciones_responsable ON intervenciones(responsable_usuario_id);
 CREATE INDEX idx_intervenciones_estado ON intervenciones(estado);
 CREATE INDEX idx_intervenciones_fecha_creacion ON intervenciones(fecha_creacion);
