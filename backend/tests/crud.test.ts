@@ -2,14 +2,20 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 
 // URL del entorno de desarrollo local (Asegurarse de levantar npm run dev:backend)
+import { pool } from '../functions/db.ts';
+
 const API_URL = 'http://localhost:3000/api';
 
-const isTestDB = process.env.DATABASE_URL?.includes('branch') || process.env.TEST_DB === 'true';
+// Función para confirmar criptográficamente/lógicamente que estamos en una DB de pruebas
+async function ensureSafeDatabaseForWrites() {
+  const { rows } = await pool.query('SELECT current_database() as db_name');
+  const dbName = rows[0].db_name;
+  if (!dbName.endsWith('_test') && !dbName.includes('dev')) {
+    throw new Error(`BLOQUEO DE SEGURIDAD: La base de datos '${dbName}' no es de pruebas. Las operaciones de escritura en E2E requieren que la base termine en '_test' o contenga 'dev' para evitar mutar producción.`);
+  }
+}
 
 test('Security & Auth Tests', async (t) => {
-  if (!isTestDB) {
-    console.warn("⚠️  Saltando pruebas de escritura para evitar modificar producción. Configura una DB de desarrollo.");
-  }
 
   let validToken = '';
 
@@ -48,7 +54,11 @@ test('Security & Auth Tests', async (t) => {
   });
 
   // Tests dependientes de validToken...
-  await t.test('5. Creación inválida de sector (Nombre vacío)', async () => {
+  await t.test('5. Bloqueo de mutación (Validar Entorno Seguro)', async () => {
+    await ensureSafeDatabaseForWrites();
+  });
+
+  await t.test('6. Creación inválida de sector (Nombre vacío)', async () => {
     const res = await fetch(`${API_URL}/sectores`, {
       method: 'POST',
       headers: { 
