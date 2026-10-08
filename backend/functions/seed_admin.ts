@@ -35,9 +35,7 @@ async function seedAdmin() {
       [legajo, 'Administrador', 'Sistema', hash, perfilId]
     );
 
-    console.log('Usuario administrador creado con éxito.');
-    console.log(`Legajo: ${legajo}`);
-    console.log(`Contraseña: ${password}`);
+    console.log('Usuario administrador procesado con éxito.');
 
   } catch (err) {
     console.error('Error creando administrador:', err);

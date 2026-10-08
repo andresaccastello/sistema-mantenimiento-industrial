@@ -1,11 +1,11 @@
 import { Hono } from 'hono';
 import { pool } from './db.ts';
-import { authMiddleware, requirePermission } from './middleware.ts';
+import { jwtVerify, dbVerify, requirePermission } from './middleware.ts';
 import { parseId, parseString, badRequest } from './validations.ts';
 
 const sectoresApp = new Hono();
 
-sectoresApp.use('*', authMiddleware);
+sectoresApp.use('*', jwtVerify, dbVerify);
 
 sectoresApp.get('/', async (c) => {
   try {

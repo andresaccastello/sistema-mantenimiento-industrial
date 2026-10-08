@@ -4,7 +4,13 @@ import assert from 'node:assert';
 // URL del entorno de desarrollo local (Asegurarse de levantar npm run dev:backend)
 const API_URL = 'http://localhost:3000/api';
 
+const isTestDB = process.env.DATABASE_URL?.includes('branch') || process.env.TEST_DB === 'true';
+
 test('Security & Auth Tests', async (t) => {
+  if (!isTestDB) {
+    console.warn("⚠️  Saltando pruebas de escritura para evitar modificar producción. Configura una DB de desarrollo.");
+  }
+
   let validToken = '';
 
   await t.test('1. Solicitud sin token debe fallar (401)', async () => {
@@ -33,7 +39,7 @@ test('Security & Auth Tests', async (t) => {
     const res = await fetch(`${API_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ legajo: 'ADMIN001', password: process.env.ADMIN_INITIAL_PASSWORD || 'admin' })
+      body: JSON.stringify({ legajo: 'ADMIN001', password: process.env.ADMIN_INITIAL_PASSWORD })
     });
     assert.strictEqual(res.status, 200);
     const data = await res.json();

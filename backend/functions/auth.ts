@@ -3,8 +3,9 @@ import { sign } from 'hono/jwt';
 import bcrypt from 'bcryptjs';
 import { pool } from './db.ts';
 
+import { JWT_SECRET } from './config.ts';
+
 const authApp = new Hono();
-const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_key_change_in_prod';
 
 authApp.post('/login', async (c) => {
   try {

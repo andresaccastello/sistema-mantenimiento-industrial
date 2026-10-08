@@ -5,10 +5,7 @@ import authApp from './auth.ts';
 import sectoresApp from './sectores.ts';
 import maquinasApp from './maquinas.ts';
 
-if (!process.env.JWT_SECRET) {
-  console.error("FATAL ERROR: JWT_SECRET no está definida en las variables de entorno.");
-  process.exit(1);
-}
+import { JWT_SECRET } from './config.ts';
 
 const app = new Hono();
 

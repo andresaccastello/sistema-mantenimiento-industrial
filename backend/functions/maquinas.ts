@@ -1,15 +1,22 @@
 import { Hono } from 'hono';
 import { pool } from './db.ts';
-import { authMiddleware, requirePermission } from './middleware.ts';
+import { jwtVerify, dbVerify, requirePermission } from './middleware.ts';
 import { parseId, parseString, badRequest } from './validations.ts';
 
 const maquinasApp = new Hono();
-maquinasApp.use('*', authMiddleware);
+maquinasApp.use('*', jwtVerify, dbVerify);
 
 maquinasApp.get('/', async (c) => {
   try {
-    // Solo devolvemos máquinas activas por defecto, salvo que se especifique un query param ?all=true
     const showAll = c.req.query('all') === 'true';
+    
+    if (showAll) {
+      const permisos = (c.get as any)('userPermissions') as string[] | undefined;
+      if (!permisos || !permisos.includes('MAQUINAS_GESTIONAR')) {
+        return c.json({ error: 'No tienes permiso para ver máquinas desactivadas' }, 403);
+      }
+    }
+    
     const activeFilter = showAll ? '' : 'WHERE m.activo = TRUE';
 
     const query = `
