@@ -1,14 +1,20 @@
 {
   "name": "sistema-mantenimiento-industrial",
+  "version": "0.1.0",
   "private": true,
-  "scripts": {
-    "dev:frontend": "npm --workspace frontend run dev",
-    "build:frontend": "npm --workspace frontend run build",
-    "typecheck": "tsc --noEmit"
+  "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
   },
   "workspaces": [
     "frontend"
   ],
+  "scripts": {
+    "dev:frontend": "npm run dev --workspace frontend",
+    "typecheck:backend": "tsc --noEmit -p backend/tsconfig.json",
+    "typecheck": "npm run typecheck:backend && npm run typecheck --workspace frontend",
+    "build:frontend": "npm run build --workspace frontend"
+  },
   "dependencies": {
     "@neon/config": "latest",
     "hono": "latest",
