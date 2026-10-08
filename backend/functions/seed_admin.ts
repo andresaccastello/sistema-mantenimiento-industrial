@@ -4,7 +4,10 @@ import bcrypt from 'bcryptjs';
 async function seedAdmin() {
   try {
     const legajo = 'ADMIN001';
-    const password = 'admin'; // Contraseña inicial (debe ser cambiada luego)
+    const password = process.env.ADMIN_INITIAL_PASSWORD; 
+    if (!password) {
+      throw new Error('ADMIN_INITIAL_PASSWORD no está configurado en .env');
+    }
 
     // Buscar si ya existe
     const exists = await pool.query('SELECT id FROM usuarios WHERE legajo = $1', [legajo]);

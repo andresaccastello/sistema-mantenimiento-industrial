@@ -1,24 +1,27 @@
 import { Hono } from 'hono';
 import { pool } from './db.ts';
 import { authMiddleware, requirePermission } from './middleware.ts';
+import { parseId, parseString, badRequest } from './validations.ts';
 
 const maquinasApp = new Hono();
-
-// Todos los endpoints de máquinas requieren estar autenticados
 maquinasApp.use('*', authMiddleware);
 
-// Obtener todas las máquinas (con información de su sector)
 maquinasApp.get('/', async (c) => {
   try {
-    const { rows } = await pool.query(
-      `SELECT m.id, m.nombre, m.tipo, m.estado, m.ubicacion, m.observaciones, m.activo, m.creado_en,
-              s.id as sector_id, s.nombre as sector_nombre
-       FROM maquinas m
-       JOIN sectores s ON m.sector_id = s.id
-       ORDER BY m.nombre`
-    );
+    // Solo devolvemos máquinas activas por defecto, salvo que se especifique un query param ?all=true
+    const showAll = c.req.query('all') === 'true';
+    const activeFilter = showAll ? '' : 'WHERE m.activo = TRUE';
+
+    const query = `
+      SELECT m.id, m.nombre, m.tipo, m.estado, m.ubicacion, m.observaciones, m.activo, m.creado_en,
+             s.id as sector_id, s.nombre as sector_nombre
+      FROM maquinas m
+      JOIN sectores s ON m.sector_id = s.id
+      ${activeFilter}
+      ORDER BY m.nombre
+    `;
+    const { rows } = await pool.query(query);
     
-    // Formatear la salida para anidar el sector
     const result = rows.map(r => ({
       id: r.id,
       nombre: r.nombre,
@@ -28,12 +31,8 @@ maquinasApp.get('/', async (c) => {
       observaciones: r.observaciones,
       activo: r.activo,
       creado_en: r.creado_en,
-      sector: {
-        id: r.sector_id,
-        nombre: r.sector_nombre
-      }
+      sector: { id: r.sector_id, nombre: r.sector_nombre }
     }));
-
     return c.json(result);
   } catch (error) {
     console.error('Error obteniendo máquinas:', error);
@@ -41,10 +40,11 @@ maquinasApp.get('/', async (c) => {
   }
 });
 
-// Obtener una máquina por ID
 maquinasApp.get('/:id', async (c) => {
   try {
-    const id = c.req.param('id');
+    const id = parseId(c.req.param('id'));
+    if (!id) return badRequest(c, 'ID inválido');
+
     const { rows } = await pool.query(
       `SELECT m.id, m.nombre, m.tipo, m.estado, m.ubicacion, m.observaciones, m.activo, m.creado_en,
               s.id as sector_id, s.nombre as sector_nombre
@@ -54,24 +54,12 @@ maquinasApp.get('/:id', async (c) => {
       [id]
     );
 
-    if (rows.length === 0) {
-      return c.json({ error: 'Máquina no encontrada' }, 404);
-    }
-    
+    if (rows.length === 0) return c.json({ error: 'Máquina no encontrada' }, 404);
     const r = rows[0];
     return c.json({
-      id: r.id,
-      nombre: r.nombre,
-      tipo: r.tipo,
-      estado: r.estado,
-      ubicacion: r.ubicacion,
-      observaciones: r.observaciones,
-      activo: r.activo,
-      creado_en: r.creado_en,
-      sector: {
-        id: r.sector_id,
-        nombre: r.sector_nombre
-      }
+      id: r.id, nombre: r.nombre, tipo: r.tipo, estado: r.estado, 
+      ubicacion: r.ubicacion, observaciones: r.observaciones, activo: r.activo, creado_en: r.creado_en,
+      sector: { id: r.sector_id, nombre: r.sector_nombre }
     });
   } catch (error) {
     console.error('Error obteniendo máquina:', error);
@@ -79,18 +67,32 @@ maquinasApp.get('/:id', async (c) => {
   }
 });
 
-// Crear una nueva máquina (Requiere permiso MAQUINAS_GESTIONAR)
+// Helper para chequear si el sector es válido y activo
+async function validateSector(sector_id: number): Promise<boolean> {
+  const sRes = await pool.query('SELECT activo FROM sectores WHERE id = $1', [sector_id]);
+  if (sRes.rows.length === 0 || !sRes.rows[0].activo) return false;
+  return true;
+}
+
 maquinasApp.post('/', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
   try {
-    const { nombre, sector_id, tipo, estado, ubicacion, observaciones } = await c.req.json();
+    const body = await c.req.json();
+    const nombre = parseString(body.nombre);
+    const sector_id = parseId(body.sector_id);
+    const tipo = parseString(body.tipo);
+    const estado = parseString(body.estado) || 'OPERATIVA';
+    const ubicacion = parseString(body.ubicacion);
+    const observaciones = parseString(body.observaciones);
     
-    if (!nombre || !sector_id) {
-      return c.json({ error: 'El nombre y el sector_id son requeridos' }, 400);
+    if (!nombre || !sector_id) return badRequest(c, 'El nombre y el sector_id son requeridos y válidos');
+    
+    if (!(await validateSector(sector_id))) {
+      return badRequest(c, 'El sector especificado no existe o está inactivo');
     }
 
     const { rows } = await pool.query(
       `INSERT INTO maquinas (nombre, sector_id, tipo, estado, ubicacion, observaciones) 
-       VALUES ($1, $2, $3, COALESCE($4, 'OPERATIVA'), $5, $6) 
+       VALUES ($1, $2, $3, $4, $5, $6) 
        RETURNING id, nombre, tipo, estado, ubicacion, observaciones, activo`,
       [nombre, sector_id, tipo, estado, ubicacion, observaciones]
     );
@@ -98,22 +100,31 @@ maquinasApp.post('/', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
     return c.json(rows[0], 201);
   } catch (error: any) {
     console.error('Error creando máquina:', error);
-    if (error.code === '23503') { // foreign_key_violation
-      return c.json({ error: 'El sector especificado no existe' }, 400);
-    }
-    if (error.code === '23514') { // check_violation (ej. para estado inválido)
-      return c.json({ error: 'Estado de máquina inválido' }, 400);
-    }
+    if (error.code === '23514') return badRequest(c, 'Estado de máquina inválido');
     return c.json({ error: 'Error interno del servidor' }, 500);
   }
 });
 
-// Actualizar una máquina (Requiere permiso MAQUINAS_GESTIONAR)
 maquinasApp.put('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
   try {
-    const id = c.req.param('id');
-    const { nombre, sector_id, tipo, estado, ubicacion, observaciones, activo } = await c.req.json();
+    const id = parseId(c.req.param('id'));
+    if (!id) return badRequest(c, 'ID inválido');
+
+    const body = await c.req.json();
+    const nombre = parseString(body.nombre);
+    const sector_id = body.sector_id ? parseId(body.sector_id) : null;
+    const tipo = parseString(body.tipo);
+    const estado = parseString(body.estado);
+    const ubicacion = parseString(body.ubicacion);
+    const observaciones = parseString(body.observaciones);
+    const activo = typeof body.activo === 'boolean' ? body.activo : null;
     
+    if (body.sector_id && !sector_id) return badRequest(c, 'El sector_id provisto es inválido');
+    
+    if (sector_id && !(await validateSector(sector_id))) {
+      return badRequest(c, 'El nuevo sector especificado no existe o está inactivo');
+    }
+
     const { rows } = await pool.query(
       `UPDATE maquinas 
        SET nombre = COALESCE($1, nombre), 
@@ -129,37 +140,26 @@ maquinasApp.put('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
       [nombre, sector_id, tipo, estado, ubicacion, observaciones, activo, id]
     );
 
-    if (rows.length === 0) {
-      return c.json({ error: 'Máquina no encontrada' }, 404);
-    }
-    
+    if (rows.length === 0) return c.json({ error: 'Máquina no encontrada' }, 404);
     return c.json(rows[0]);
   } catch (error: any) {
     console.error('Error actualizando máquina:', error);
-    if (error.code === '23503') { 
-      return c.json({ error: 'El sector especificado no existe' }, 400);
-    }
-    if (error.code === '23514') {
-      return c.json({ error: 'Estado de máquina inválido' }, 400);
-    }
+    if (error.code === '23514') return badRequest(c, 'Estado de máquina inválido');
     return c.json({ error: 'Error interno del servidor' }, 500);
   }
 });
 
-// Desactivar una máquina (Borrado lógico - Requiere permiso MAQUINAS_GESTIONAR)
 maquinasApp.delete('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
   try {
-    const id = c.req.param('id');
+    const id = parseId(c.req.param('id'));
+    if (!id) return badRequest(c, 'ID inválido');
     
     const { rows } = await pool.query(
       'UPDATE maquinas SET activo = FALSE, actualizado_en = NOW() WHERE id = $1 RETURNING id',
       [id]
     );
 
-    if (rows.length === 0) {
-      return c.json({ error: 'Máquina no encontrada' }, 404);
-    }
-    
+    if (rows.length === 0) return c.json({ error: 'Máquina no encontrada' }, 404);
     return c.json({ message: 'Máquina desactivada correctamente' });
   } catch (error) {
     console.error('Error desactivando máquina:', error);
