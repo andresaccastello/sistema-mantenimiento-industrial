@@ -10,6 +10,7 @@
     "frontend"
   ],
   "scripts": {
+    "dev:backend": "tsx watch --env-file=.env backend/server.ts",
     "dev:frontend": "npm run dev --workspace frontend",
     "typecheck:backend": "tsc --noEmit -p backend/tsconfig.json",
     "typecheck": "npm run typecheck:backend && npm run typecheck --workspace frontend",
@@ -21,8 +22,10 @@
     "pg": "latest"
   },
   "devDependencies": {
+    "@hono/node-server": "^2.1.4",
     "@types/node": "latest",
     "@types/pg": "latest",
+    "tsx": "^4.23.15",
     "typescript": "latest"
   }
 }
