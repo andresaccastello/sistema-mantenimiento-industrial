@@ -18,11 +18,13 @@
   },
   "dependencies": {
     "@neon/config": "latest",
+    "bcryptjs": "^3.0.3",
     "hono": "latest",
     "pg": "latest"
   },
   "devDependencies": {
     "@hono/node-server": "^2.1.4",
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "latest",
     "@types/pg": "latest",
     "tsx": "^4.23.15",

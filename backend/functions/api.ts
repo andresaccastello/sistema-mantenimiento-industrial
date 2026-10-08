@@ -1,15 +1,14 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { Pool } from 'pg';
+import { pool } from './db.ts';
+import authApp from './auth.ts';
 
 const app = new Hono();
 
 app.use('*', cors());
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: 5,
-});
+// Montar endpoints de autenticación
+app.route('/api/auth', authApp);
 
 app.get('/health', (c) => {
   return c.json({
