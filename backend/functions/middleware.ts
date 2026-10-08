@@ -5,13 +5,14 @@ const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_key_change_in_prod';
 
 // Middleware que verifica que el token es válido
 export const authMiddleware = jwt({
-  secret: JWT_SECRET
+  secret: JWT_SECRET,
+  alg: 'HS256'
 });
 
 // Middleware que exige un permiso específico
 export const requirePermission = (requiredPermission: string) => {
   return createMiddleware(async (c, next) => {
-    const payload = c.get('jwtPayload'); // extraído por authMiddleware
+    const payload = c.get('jwtPayload') as { permisos?: string[] }; 
     
     if (!payload || !payload.permisos) {
       return c.json({ error: 'No autorizado' }, 401);
