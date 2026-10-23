@@ -97,8 +97,8 @@ test('Migración 003 — Intervenciones y Máquinas', async (t) => {
       // FINALIZADA sin fechas debe fallar
       await assert.rejects(
         client.query(
-          `INSERT INTO intervenciones (maquina_id, tipo_intervencion_id, creado_por_usuario_id, descripcion, estado)
-           VALUES ($1, $2, $3, $4, 'FINALIZADA')`,
+          `INSERT INTO intervenciones (maquina_id, tipo_intervencion_id, creado_por_usuario_id, descripcion, estado, trabajo_realizado, ejecucion)
+           VALUES ($1, $2, $3, $4, 'FINALIZADA', 'Trabajo test', 'INTERNA')`,
           [maquinaId, tipoCorrectivoId, userId, 'Finalizada sin fechas']
         ),
         /ck_intervenciones_finalizada_fechas/i

@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import { pool } from '../functions/db.ts';
 import app from '../functions/api.ts';
 import { recalcularEstadoMaquina } from '../functions/intervenciones/recalculoMaquina.ts';
+import { transicionesDeAccion } from '../functions/intervenciones/transiciones.ts';
 
 // Configurar timeout de bloqueo para pruebas de concurrencia (3s para absorber latencia de red en Neon)
 process.env.LOCK_TIMEOUT = '3s';
@@ -647,7 +648,7 @@ test('Etapa 4A — Motor de estados: núcleo, asignación e inicio del trabajo',
       assert.strictEqual(rER_rean.status, 200);
 
       // 4. FINALIZADA (setup SQL)
-      await client.query("UPDATE intervenciones SET estado = 'FINALIZADA', fecha_finalizacion = NOW() WHERE id = $1", [idP]);
+      await client.query("UPDATE intervenciones SET estado = 'FINALIZADA', fecha_finalizacion = NOW(), ejecucion = 'INTERNA', trabajo_realizado = 'Trabajo de prueba' WHERE id = $1", [idP]);
       for (const endpoint of ['iniciar', 'espera-repuestos', 'reanudar']) {
         const res = await app.request(`/api/intervenciones/${idP}/${endpoint}`, {
           method: 'POST',
@@ -1393,8 +1394,11 @@ test('Etapa 4A — Motor de estados: núcleo, asignación e inicio del trabajo',
       assert.strictEqual((await rSinZona.json()).codigo, 'DATOS_INVALIDOS');
 
       // 3. Fecha válida con -03:00 -> 200 y guarda el instante correcto
+      // Ajustar fecha_creacion por SQL a 1 hora atrás para no depender de latencia de red
+      await client.query("UPDATE intervenciones SET fecha_creacion = NOW() - INTERVAL '1 hour' WHERE id = $1", [intId]);
+
       const now = new Date();
-      const dateValida = new Date(now.getTime() - 5000);
+      const dateValida = new Date(now.getTime() - 30 * 60 * 1000); // 30 minutos atrás
       const tzOffsetHours = 3;
       const localTime = new Date(dateValida.getTime() - tzOffsetHours * 3600000);
       const lY = localTime.getUTCFullYear();
@@ -1417,6 +1421,51 @@ test('Etapa 4A — Motor de estados: núcleo, asignación e inicio del trabajo',
       const storedInstant = new Date(checkI.rows[0].fecha_inicio).getTime();
       const expectedInstant = new Date(fechaConOffset).getTime();
       assert.strictEqual(Math.floor(storedInstant / 1000), Math.floor(expectedInstant / 1000));
+    });
+
+    // P-33: transicionesDeAccion devuelve todas las filas y el permiso es uniforme por acción
+    await t.test('P-33: transicionesDeAccion devuelve todas las filas y el permiso es uniforme', async () => {
+      const acciones: Array<'INICIAR' | 'ESPERAR_REPUESTOS' | 'REANUDAR' | 'CANCELAR' | 'FINALIZAR' | 'RESOLVER_AHORA'> = [
+        'INICIAR',
+        'ESPERAR_REPUESTOS',
+        'REANUDAR',
+        'CANCELAR',
+        'FINALIZAR',
+        'RESOLVER_AHORA',
+      ];
+
+      for (const acc of acciones) {
+        const filas = transicionesDeAccion(acc);
+        assert.ok(filas.length >= 1, `Debe haber al menos una transición para ${acc}`);
+        const primerPermiso = filas[0].permiso;
+        for (const f of filas) {
+          assert.strictEqual(f.permiso, primerPermiso, `Permiso no uniforme en acción ${acc}`);
+        }
+      }
+
+      const cancelaciones = transicionesDeAccion('CANCELAR');
+      assert.strictEqual(cancelaciones.length, 3);
+      const estadosDesde = cancelaciones.map(c => c.desde).sort();
+      assert.deepStrictEqual(estadosDesde, ['EN_ESPERA_REPUESTOS', 'EN_PROCESO', 'PENDIENTE']);
+    });
+
+    // P-34: Fecha calendario imposible (2026-02-30T10:00:00Z) da 422 DATOS_INVALIDOS
+    await t.test('P-34: Fecha calendario imposible da 422 DATOS_INVALIDOS', async () => {
+      const resPost = await app.request('/api/intervenciones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+        body: JSON.stringify({ maquina_id: maquinaId, descripcion: 'Intervencion P-34' })
+      });
+      const intId = (await resPost.json()).id;
+
+      const rFeb30 = await app.request(`/api/intervenciones/${intId}/iniciar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resp1Token}` },
+        body: JSON.stringify({ estado_esperado: 'PENDIENTE', fecha_inicio: '2026-02-30T10:00:00Z' })
+      });
+      assert.strictEqual(rFeb30.status, 422);
+      const dataFeb30 = await rFeb30.json();
+      assert.strictEqual(dataFeb30.codigo, 'DATOS_INVALIDOS');
     });
 
   } finally {

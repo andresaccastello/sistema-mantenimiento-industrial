@@ -776,6 +776,11 @@ Las decisiones `[APROBADO]` (sección 0.3 y las marcadas en el texto) están cer
 | D-24 | **Quitar el responsable en `EN_PROCESO` o `EN_ESPERA_REPUESTOS`**. | No se permite; en esos estados solo se reasigna. Quitarlo solo es posible en `PENDIENTE`. | **Aprobada**. |
 | D-25 | **Permiso para liberar la máquina al finalizar o cancelar**. | Responder "la máquina ya funciona" requiere además `INTERVENCIONES_CONFIRMAR_RECUPERACION`. Sin ese permiso, el período queda abierto y se notifica a quien puede confirmar. (Se implementa en 4B.) | **Aprobada**. |
 | D-26 | **División de la Etapa 4**. | 4A (núcleo, asignación, T1/T4/T5) y 4B (cierres, confirmación de recuperación, "Resolver ahora"). La Etapa 5 se integra en 4A. Motivo: la Etapa 4 original no era verificable sin funciones planificadas en las Etapas 5 y 6. | **Aprobada**. |
+| D-27 | **Registrar que una intervención abierta pasó a detener la máquina** (RN-18, sección 4.5). | Acción "Registrar detención" | **Aprobada:** acción "Registrar detención" en 4B. Abre un período nuevo y recalcula la máquina. |
+| D-28 | **Regla de actor en finalizar y cancelar**. | Regla D-23 vs administrativa | **Aprobada:** finalizar (T6) y "Resolver ahora" (T2) aplican la regla de D-23 (responsable o `INTERVENCIONES_ASIGNAR`). Cancelar (T3, T7, T8) es una decisión administrativa: alcanza con `INTERVENCIONES_CANCELAR`. |
+| D-29 | **Fecha de recuperación por defecto al finalizar con "la máquina funciona"**. | Fecha fin vs NOW | **Aprobada:** si no se informa, es la `fecha_finalizacion` (el trabajo terminó con la prueba de funcionamiento, proceso 3.2). En cancelar y en "Confirmar recuperación", por defecto `NOW()`. |
+| D-30 | **Reactivar una máquina**. | Salida manual de fuera de servicio | **Aprobada:** "Reactivar" saca una máquina de `FUERA_DE_SERVICIO` y su estado pasa a ser el derivado de sus períodos abiertos. También se permite sobre una máquina en cualquier estado **sin** períodos abiertos (normaliza datos previos a 4A); vale como confirmación humana de que funciona. |
+| D-31 | **Confirmar recuperación con la intervención todavía abierta**. | Permitir o bloquear | **Aprobada:** se permite. La máquina puede volver a funcionar mientras el trabajo sigue (ej.: se terminan ajustes con la máquina operando). Al finalizar después, no hay período abierto y no se pregunta nada. |
 
 ---
 

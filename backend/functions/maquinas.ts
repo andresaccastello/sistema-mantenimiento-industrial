@@ -2,9 +2,25 @@ import { Hono } from 'hono';
 import { pool } from './db.ts';
 import { jwtVerify, dbVerify, requirePermission } from './middleware.ts';
 import { parseId, parseString, badRequest } from './validations.ts';
+import { responderError, ErrorNegocio } from './intervenciones/errores.ts';
+import { conTransaccion } from './intervenciones/transaccion.ts';
+import { UsuarioVisibilidad } from './intervenciones/visibilidad.ts';
+import {
+  obtenerDetencionesAbiertasMaquina,
+  confirmarRecuperacionMaquina,
+  cambiarEstadoManualMaquina,
+} from './intervenciones/detenciones.ts';
 
 const maquinasApp = new Hono();
 maquinasApp.use('*', jwtVerify, dbVerify);
+
+function getUsuarioContext(c: any): UsuarioVisibilidad {
+  return {
+    id: (c.get as any)('userId') as number,
+    permisos: ((c.get as any)('userPermissionsMap') as Record<string, any>) || {},
+    sectores: ((c.get as any)('userSectores') as number[]) || [],
+  };
+}
 
 maquinasApp.get('/', async (c) => {
   try {
@@ -194,6 +210,75 @@ maquinasApp.delete('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) =>
   } catch (error) {
     console.error('Error desactivando máquina:', error);
     return c.json({ error: 'Error interno del servidor' }, 500);
+  }
+});
+
+/**
+ * 7.1 GET /api/maquinas/:id/detenciones-abiertas
+ */
+maquinasApp.get('/:id/detenciones-abiertas', async (c) => {
+  const id = parseId(c.req.param('id'));
+  if (!id) return badRequest(c, 'ID inválido');
+
+  const usuario = getUsuarioContext(c);
+
+  try {
+    const res = await obtenerDetencionesAbiertasMaquina(pool, id, usuario);
+    return c.json(res);
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+/**
+ * 7.2 POST /api/maquinas/:id/confirmar-recuperacion
+ */
+maquinasApp.post('/:id/confirmar-recuperacion', async (c) => {
+  const id = parseId(c.req.param('id'));
+  if (!id) return badRequest(c, 'ID inválido');
+
+  const usuario = getUsuarioContext(c);
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return badRequest(c, 'El cuerpo debe ser un JSON válido');
+  }
+
+  try {
+    const res = await conTransaccion(async (client) => {
+      return confirmarRecuperacionMaquina(client, id, usuario, body);
+    });
+    return c.json(res);
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+/**
+ * 7.3 POST /api/maquinas/:id/estado (cambio manual)
+ */
+maquinasApp.post('/:id/estado', async (c) => {
+  const id = parseId(c.req.param('id'));
+  if (!id) return badRequest(c, 'ID inválido');
+
+  const usuario = getUsuarioContext(c);
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return badRequest(c, 'El cuerpo debe ser un JSON válido');
+  }
+
+  try {
+    const res = await conTransaccion(async (client) => {
+      return cambiarEstadoManualMaquina(client, id, usuario, body);
+    });
+    return c.json(res);
+  } catch (error) {
+    return responderError(c, error);
   }
 });
 

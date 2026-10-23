@@ -13,7 +13,11 @@ import {
   desasignarResponsableServicio,
   ejecutarTransicionServicio,
   validarResponsableHabilitado,
+  finalizarIntervencionServicio,
+  resolverAhoraIntervencionServicio,
+  cancelarIntervencionServicio,
 } from './intervenciones/motor.ts';
+import { registrarDetencionIntervencion } from './intervenciones/detenciones.ts';
 
 const intervencionesApp = new Hono();
 
@@ -666,7 +670,7 @@ intervencionesApp.post('/:id/espera-repuestos', async (c) => {
     return badRequest(c, 'El cuerpo debe ser un JSON válido');
   }
 
-  const observacion = parseString(body.observacion);
+  const observacion = parseString(body.observacion) || parseString(body.motivo);
 
   try {
     const estadoEsperado = parseString(body.estado_esperado);
@@ -715,6 +719,150 @@ intervencionesApp.post('/:id/reanudar', async (c) => {
         estadoEsperado,
         observacion,
       });
+    });
+    return c.json(res);
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+/**
+ * 6.1 POST /api/intervenciones/:id/finalizar (T6)
+ */
+intervencionesApp.post('/:id/finalizar', async (c) => {
+  const id = parseId(c.req.param('id'));
+  if (!id) return badRequest(c, 'ID inválido');
+
+  const usuario = getUsuarioContext(c);
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return badRequest(c, 'El cuerpo debe ser un JSON válido');
+  }
+
+  try {
+    const estadoEsperado = parseString(body.estado_esperado);
+    if (!estadoEsperado) {
+      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
+    }
+
+    const res = await conTransaccion(async (client) => {
+      return finalizarIntervencionServicio(client, id, usuario, {
+        estado_esperado: estadoEsperado,
+        fecha_finalizacion: body.fecha_finalizacion,
+        trabajo_realizado: body.trabajo_realizado,
+        ejecucion: body.ejecucion,
+        observacion: body.observacion,
+        maquina_recuperada: body.maquina_recuperada,
+        fecha_recuperacion: body.fecha_recuperacion,
+        observacion_recuperacion: body.observacion_recuperacion,
+      });
+    });
+    return c.json(res);
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+/**
+ * 6.2 POST /api/intervenciones/:id/resolver-ahora (T2)
+ */
+intervencionesApp.post('/:id/resolver-ahora', async (c) => {
+  const id = parseId(c.req.param('id'));
+  if (!id) return badRequest(c, 'ID inválido');
+
+  const usuario = getUsuarioContext(c);
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return badRequest(c, 'El cuerpo debe ser un JSON válido');
+  }
+
+  try {
+    const estadoEsperado = parseString(body.estado_esperado);
+    if (!estadoEsperado) {
+      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
+    }
+
+    const res = await conTransaccion(async (client) => {
+      return resolverAhoraIntervencionServicio(client, id, usuario, {
+        estado_esperado: estadoEsperado,
+        fecha_inicio: body.fecha_inicio,
+        fecha_finalizacion: body.fecha_finalizacion,
+        trabajo_realizado: body.trabajo_realizado,
+        ejecucion: body.ejecucion,
+        observacion: body.observacion,
+        maquina_recuperada: body.maquina_recuperada,
+        fecha_recuperacion: body.fecha_recuperacion,
+        observacion_recuperacion: body.observacion_recuperacion,
+      });
+    });
+    return c.json(res);
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+/**
+ * 6.3 POST /api/intervenciones/:id/cancelar (T3, T7, T8)
+ */
+intervencionesApp.post('/:id/cancelar', async (c) => {
+  const id = parseId(c.req.param('id'));
+  if (!id) return badRequest(c, 'ID inválido');
+
+  const usuario = getUsuarioContext(c);
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return badRequest(c, 'El cuerpo debe ser un JSON válido');
+  }
+
+  try {
+    const estadoEsperado = parseString(body.estado_esperado);
+    if (!estadoEsperado) {
+      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
+    }
+
+    const res = await conTransaccion(async (client) => {
+      return cancelarIntervencionServicio(client, id, usuario, {
+        estado_esperado: estadoEsperado,
+        motivo: body.motivo,
+        maquina_recuperada: body.maquina_recuperada,
+        fecha_recuperacion: body.fecha_recuperacion,
+        observacion_recuperacion: body.observacion_recuperacion,
+      });
+    });
+    return c.json(res);
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+/**
+ * 6.4 POST /api/intervenciones/:id/registrar-detencion (D-27, RN-18)
+ */
+intervencionesApp.post('/:id/registrar-detencion', async (c) => {
+  const id = parseId(c.req.param('id'));
+  if (!id) return badRequest(c, 'ID inválido');
+
+  const usuario = getUsuarioContext(c);
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return badRequest(c, 'El cuerpo debe ser un JSON válido');
+  }
+
+  try {
+    const res = await conTransaccion(async (client) => {
+      return registrarDetencionIntervencion(client, id, usuario, body);
     });
     return c.json(res);
   } catch (error) {

@@ -16,9 +16,11 @@
     "typecheck": "npm run typecheck:backend && npm run typecheck --workspace frontend",
     "test:migration": "tsx --env-file=.env --test backend/tests/migration_003.test.ts",
     "test:migration-005": "tsx --env-file=.env --test backend/tests/migration_005.test.ts",
+    "test:migration-006": "tsx --env-file=.env --test backend/tests/migration_006.test.ts",
     "test:permisos": "tsx --env-file=.env --test backend/tests/permisos_granulares.test.ts",
     "test:intervenciones": "tsx --env-file=.env --test backend/tests/intervenciones.test.ts",
     "test:motor": "tsx --env-file=.env --test backend/tests/motor_estados.test.ts",
+    "test:cierres": "tsx --env-file=.env --test backend/tests/motor_cierres.test.ts",
     "test:e2e": "tsx --env-file=.env --test backend/tests/crud.test.ts",
     "build:frontend": "npm run build --workspace frontend"
   },

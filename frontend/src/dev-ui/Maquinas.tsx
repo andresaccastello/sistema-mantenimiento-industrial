@@ -102,6 +102,85 @@ export function Maquinas() {
     }
   };
 
+  const [selectedMaquina, setSelectedMaquina] = useState<Maquina | null>(null);
+  const [showDetencionesModal, setShowDetencionesModal] = useState(false);
+  const [detenciones, setDetenciones] = useState<any[]>([]);
+  const [selectedPeriodos, setSelectedPeriodos] = useState<string[]>([]);
+  const [fechaRecuperacion, setFechaRecuperacion] = useState('');
+  const [loadingDetenciones, setLoadingDetenciones] = useState(false);
+
+  const [showEstadoModal, setShowEstadoModal] = useState(false);
+  const [estadoAccion, setEstadoAccion] = useState<'FUERA_DE_SERVICIO' | 'REACTIVAR'>('FUERA_DE_SERVICIO');
+  const [estadoMotivo, setEstadoMotivo] = useState('');
+
+  const handleOpenDetenciones = async (maquina: Maquina) => {
+    setSelectedMaquina(maquina);
+    setSelectedPeriodos([]);
+    setFechaRecuperacion('');
+    setShowDetencionesModal(true);
+    setLoadingDetenciones(true);
+    try {
+      const data = await fetchApi(`/api/maquinas/${maquina.id}/detenciones-abiertas`);
+      setDetenciones(data);
+    } catch (err: any) {
+      alert(`Error al cargar detenciones: ${err.message}`);
+    } finally {
+      setLoadingDetenciones(false);
+    }
+  };
+
+  const handleConfirmarRecuperacion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedMaquina) return;
+    if (selectedPeriodos.length === 0) {
+      alert('Seleccione al menos un período');
+      return;
+    }
+    try {
+      await fetchApi(`/api/maquinas/${selectedMaquina.id}/confirmar-recuperacion`, {
+        method: 'POST',
+        body: JSON.stringify({
+          periodo_ids: selectedPeriodos,
+          fecha_recuperacion: fechaRecuperacion ? new Date(fechaRecuperacion).toISOString() : undefined
+        })
+      });
+      alert('Recuperación confirmada');
+      setShowDetencionesModal(false);
+      loadData();
+    } catch (err: any) {
+      alert(`Error: ${err.message}`);
+    }
+  };
+
+  const handleOpenEstado = (maquina: Maquina, accion: 'FUERA_DE_SERVICIO' | 'REACTIVAR') => {
+    setSelectedMaquina(maquina);
+    setEstadoAccion(accion);
+    setEstadoMotivo('');
+    setShowEstadoModal(true);
+  };
+
+  const handleGuardarEstado = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedMaquina) return;
+    if (!estadoMotivo.trim()) {
+      alert('El motivo es obligatorio');
+      return;
+    }
+    try {
+      await fetchApi(`/api/maquinas/${selectedMaquina.id}/estado`, {
+        method: 'POST',
+        body: JSON.stringify({
+          accion: estadoAccion,
+          motivo: estadoMotivo
+        })
+      });
+      setShowEstadoModal(false);
+      loadData();
+    } catch (err: any) {
+      alert(`Error: ${err.message}`);
+    }
+  };
+
   const getSectorNombre = (id: string) => {
     return sectores.find(s => s.id === id)?.nombre || 'Desconocido';
   };
@@ -148,20 +227,59 @@ export function Maquinas() {
                 <td style={{ fontWeight: 500 }}>{m.nombre}</td>
                 <td>{getSectorNombre(m.sector_id)}</td>
                 <td>{m.tipo}</td>
-                <td>{m.estado}</td>
+                <td>
+                  <span style={{ 
+                    padding: '2px 6px', 
+                    borderRadius: '4px', 
+                    fontSize: '0.8rem',
+                    fontWeight: 'bold',
+                    background: m.estado === 'OPERATIVA' ? '#d4edda' : m.estado === 'DETENIDA' ? '#f8d7da' : m.estado === 'EN_MANTENIMIENTO' ? '#fff3cd' : '#e2e3e5',
+                    color: m.estado === 'OPERATIVA' ? '#155724' : m.estado === 'DETENIDA' ? '#721c24' : m.estado === 'EN_MANTENIMIENTO' ? '#856404' : '#383d41'
+                  }}>
+                    {m.estado}
+                  </span>
+                </td>
                 <td>
                   <span className={`dev-badge ${m.activo ? 'dev-badge-active' : 'dev-badge-inactive'}`}>
                     {m.activo ? 'Activa' : 'Inactiva'}
                   </span>
                 </td>
                 <td>
-                  <button 
-                    className="dev-action-btn" 
-                    onClick={() => handleEdit(m)}
-                    disabled={isReadOnly}
-                  >
-                    Editar
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    <button 
+                      className="dev-action-btn" 
+                      onClick={() => handleEdit(m)}
+                      disabled={isReadOnly}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      className="dev-action-btn"
+                      style={{ background: '#17a2b8', color: 'white', borderColor: '#17a2b8' }}
+                      onClick={() => handleOpenDetenciones(m)}
+                    >
+                      Detenciones
+                    </button>
+                    {m.estado === 'FUERA_DE_SERVICIO' || m.estado === 'DETENIDA' ? (
+                      <button
+                        className="dev-action-btn"
+                        style={{ background: '#28a745', color: 'white', borderColor: '#28a745' }}
+                        onClick={() => handleOpenEstado(m, 'REACTIVAR')}
+                        disabled={isReadOnly}
+                      >
+                        Reactivar
+                      </button>
+                    ) : (
+                      <button
+                        className="dev-action-btn"
+                        style={{ background: '#6c757d', color: 'white', borderColor: '#6c757d' }}
+                        onClick={() => handleOpenEstado(m, 'FUERA_DE_SERVICIO')}
+                        disabled={isReadOnly}
+                      >
+                        Fuera Serv.
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -250,6 +368,116 @@ export function Maquinas() {
                 </button>
                 <button type="submit" className="dev-btn">
                   Guardar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showDetencionesModal && selectedMaquina && (
+        <div className="dev-modal">
+          <div className="dev-modal-content" style={{ maxWidth: '650px' }}>
+            <h3>Detenciones Abiertas - {selectedMaquina.nombre}</h3>
+            {loadingDetenciones ? (
+              <p>Cargando detenciones...</p>
+            ) : detenciones.length === 0 ? (
+              <p>No hay detenciones abiertas para esta máquina.</p>
+            ) : (
+              <form onSubmit={handleConfirmarRecuperacion}>
+                <p style={{ fontSize: '0.9rem', color: '#666', marginBottom: '1rem' }}>
+                  Seleccione las detenciones que desea marcar como recuperadas:
+                </p>
+                <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid #dee2e6', borderRadius: '4px', padding: '0.5rem', marginBottom: '1rem' }}>
+                  {detenciones.map(d => (
+                    <div key={d.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', padding: '0.4rem 0', borderBottom: '1px solid #f1f3f5' }}>
+                      <input 
+                        type="checkbox"
+                        checked={selectedPeriodos.includes(d.id)}
+                        onChange={e => {
+                          if (e.target.checked) {
+                            setSelectedPeriodos([...selectedPeriodos, d.id]);
+                          } else {
+                            setSelectedPeriodos(selectedPeriodos.filter(id => id !== d.id));
+                          }
+                        }}
+                        style={{ marginTop: '0.2rem' }}
+                      />
+                      <div>
+                        <strong>Intervención #{d.intervencion_numero}</strong> ({d.intervencion_estado})<br />
+                        <span style={{ fontSize: '0.85rem', color: '#555' }}>
+                          Desde: {new Date(d.desde).toLocaleString()}
+                          {d.motivo_inicio && ` - Motivo: ${d.motivo_inicio}`}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="dev-form-group">
+                  <label>Fecha de Recuperación (opcional, por defecto ahora)</label>
+                  <input 
+                    type="datetime-local" 
+                    value={fechaRecuperacion} 
+                    onChange={e => setFechaRecuperacion(e.target.value)} 
+                  />
+                </div>
+
+                <div className="dev-modal-actions">
+                  <button type="button" className="dev-btn dev-btn-secondary" onClick={() => setShowDetencionesModal(false)}>
+                    Cerrar
+                  </button>
+                  <button type="submit" className="dev-btn" disabled={selectedPeriodos.length === 0}>
+                    Confirmar Recuperación
+                  </button>
+                </div>
+              </form>
+            )}
+            {detenciones.length === 0 && (
+              <div className="dev-modal-actions">
+                <button type="button" className="dev-btn dev-btn-secondary" onClick={() => setShowDetencionesModal(false)}>
+                  Cerrar
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showEstadoModal && selectedMaquina && (
+        <div className="dev-modal">
+          <div className="dev-modal-content">
+            <h3>Cambiar Estado: {selectedMaquina.nombre}</h3>
+            <form onSubmit={handleGuardarEstado}>
+              <div className="dev-form-group">
+                <label>Acción</label>
+                <select 
+                  value={estadoAccion} 
+                  onChange={e => setEstadoAccion(e.target.value as any)}
+                >
+                  <option value="FUERA_DE_SERVICIO">FUERA_DE_SERVICIO (Poner fuera de servicio)</option>
+                  <option value="REACTIVAR">REACTIVAR (Volver a cálculo automático)</option>
+                </select>
+              </div>
+
+              <div className="dev-form-group">
+                <label>Motivo (obligatorio)</label>
+                <textarea 
+                  value={estadoMotivo} 
+                  onChange={e => setEstadoMotivo(e.target.value)}
+                  required
+                  rows={3}
+                  style={{ width: '100%', borderRadius: '4px', border: '1px solid #ccc', padding: '0.5rem' }}
+                  placeholder="Explique el motivo del cambio..."
+                />
+              </div>
+
+              <div className="dev-modal-actions">
+                <button type="button" className="dev-btn dev-btn-secondary" onClick={() => setShowEstadoModal(false)}>
+                  Cancelar
+                </button>
+                <button type="submit" className="dev-btn">
+                  Guardar Estado
                 </button>
               </div>
             </form>

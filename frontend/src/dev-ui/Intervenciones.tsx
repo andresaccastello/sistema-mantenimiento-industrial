@@ -63,6 +63,10 @@ interface Intervencion {
   descripcion: string;
   estado: string;
   ejecucion: string | null;
+  trabajo_realizado?: string | null;
+  tiempo_inactividad_minutos?: number | null;
+  fecha_inicio?: string | null;
+  fecha_finalizacion?: string | null;
   fecha_creacion: string;
   detiene_maquina_actualmente: boolean;
   maquina: Maquina;
@@ -123,6 +127,35 @@ export function Intervenciones() {
   // Sub-modal Pasar a Espera de Repuestos
   const [showEsperaModal, setShowEsperaModal] = useState(false);
   const [esperaObservacion, setEsperaObservacion] = useState('');
+
+  // Modales Etapa 4B
+  // 1. Finalizar
+  const [showFinalizarModal, setShowFinalizarModal] = useState(false);
+  const [trabajoFinalizar, setTrabajoFinalizar] = useState('');
+  const [ejecucionFinalizar, setEjecucionFinalizar] = useState<'INTERNA' | 'EXTERNA'>('INTERNA');
+  const [fechaFinFinalizar, setFechaFinFinalizar] = useState('');
+  const [recupFinalizar, setRecupFinalizar] = useState(false);
+  const [recupObsFinalizar, setRecupObsFinalizar] = useState('');
+
+  // 2. Resolver ahora
+  const [showResolverModal, setShowResolverModal] = useState(false);
+  const [fechaInicioResolver, setFechaInicioResolver] = useState('');
+  const [trabajoResolver, setTrabajoResolver] = useState('');
+  const [ejecucionResolver, setEjecucionResolver] = useState<'INTERNA' | 'EXTERNA'>('INTERNA');
+  const [fechaFinResolver, setFechaFinResolver] = useState('');
+  const [recupResolver, setRecupResolver] = useState(false);
+  const [recupObsResolver, setRecupObsResolver] = useState('');
+
+  // 3. Cancelar
+  const [showCancelarModal, setShowCancelarModal] = useState(false);
+  const [motivoCancelar, setMotivoCancelar] = useState('');
+  const [recupCancelar, setRecupCancelar] = useState(false);
+  const [recupObsCancelar, setRecupObsCancelar] = useState('');
+
+  // 4. Registrar detención
+  const [showDetencionModal, setShowDetencionModal] = useState(false);
+  const [detencionObs, setDetencionObs] = useState('');
+  const [detencionDesde, setDetencionDesde] = useState('');
 
   const loadIntervenciones = async () => {
     setLoading(true);
@@ -220,6 +253,10 @@ export function Intervenciones() {
       setShowAsignarModal(false);
       setShowQuitarModal(false);
       setShowEsperaModal(false);
+      setShowFinalizarModal(false);
+      setShowResolverModal(false);
+      setShowCancelarModal(false);
+      setShowDetencionModal(false);
     } catch (err: any) {
       setActionError({
         codigo: err.codigo || 'ERROR_OPERACION',
@@ -284,6 +321,77 @@ export function Intervenciones() {
     await ejecutarAccion(`/api/intervenciones/${selectedIntervencion.id}/espera-repuestos`, 'POST', {
       observacion: esperaObservacion.trim(),
       estado_esperado: selectedIntervencion.estado,
+    });
+  };
+
+  const submitFinalizar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedIntervencion) return;
+    if (trabajoFinalizar.trim().length < 5) {
+      alert('El trabajo realizado debe tener al menos 5 caracteres');
+      return;
+    }
+    const tienePeriodo = selectedIntervencion.periodos_detencion.some((p) => p.esta_abierto);
+    await ejecutarAccion(`/api/intervenciones/${selectedIntervencion.id}/finalizar`, 'POST', {
+      estado_esperado: selectedIntervencion.estado,
+      trabajo_realizado: trabajoFinalizar.trim(),
+      ejecucion: ejecucionFinalizar,
+      fecha_finalizacion: fechaFinFinalizar ? new Date(fechaFinFinalizar).toISOString() : undefined,
+      maquina_recuperada: tienePeriodo ? recupFinalizar : undefined,
+      observacion_recuperacion: tienePeriodo && recupObsFinalizar.trim() ? recupObsFinalizar.trim() : undefined,
+    });
+  };
+
+  const submitResolver = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedIntervencion) return;
+    if (!fechaInicioResolver) {
+      alert('La fecha de inicio es obligatoria');
+      return;
+    }
+    if (trabajoResolver.trim().length < 5) {
+      alert('El trabajo realizado debe tener al menos 5 caracteres');
+      return;
+    }
+    const tienePeriodo = selectedIntervencion.periodos_detencion.some((p) => p.esta_abierto);
+    await ejecutarAccion(`/api/intervenciones/${selectedIntervencion.id}/resolver-ahora`, 'POST', {
+      estado_esperado: selectedIntervencion.estado,
+      fecha_inicio: new Date(fechaInicioResolver).toISOString(),
+      trabajo_realizado: trabajoResolver.trim(),
+      ejecucion: ejecucionResolver,
+      fecha_finalizacion: fechaFinResolver ? new Date(fechaFinResolver).toISOString() : undefined,
+      maquina_recuperada: tienePeriodo ? recupResolver : undefined,
+      observacion_recuperacion: tienePeriodo && recupObsResolver.trim() ? recupObsResolver.trim() : undefined,
+    });
+  };
+
+  const submitCancelar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedIntervencion) return;
+    if (motivoCancelar.trim().length < 5) {
+      alert('El motivo debe tener al menos 5 caracteres');
+      return;
+    }
+    const tienePeriodo = selectedIntervencion.periodos_detencion.some((p) => p.esta_abierto);
+    await ejecutarAccion(`/api/intervenciones/${selectedIntervencion.id}/cancelar`, 'POST', {
+      estado_esperado: selectedIntervencion.estado,
+      motivo: motivoCancelar.trim(),
+      maquina_recuperada: tienePeriodo ? recupCancelar : undefined,
+      observacion_recuperacion: tienePeriodo && recupObsCancelar.trim() ? recupObsCancelar.trim() : undefined,
+    });
+  };
+
+  const submitDetencion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedIntervencion) return;
+    if (detencionObs.trim().length < 5) {
+      alert('La observación debe tener al menos 5 caracteres');
+      return;
+    }
+    await ejecutarAccion(`/api/intervenciones/${selectedIntervencion.id}/registrar-detencion`, 'POST', {
+      estado_esperado: selectedIntervencion.estado,
+      observacion: detencionObs.trim(),
+      desde: detencionDesde ? new Date(detencionDesde).toISOString() : undefined,
     });
   };
 
@@ -617,6 +725,37 @@ export function Intervenciones() {
                         </button>
                       </>
                     )}
+                    <button
+                      className="btn btn-primary"
+                      style={{ backgroundColor: '#1565c0', borderColor: '#1565c0' }}
+                      disabled={actionLoading}
+                      onClick={() => {
+                        setActionError(null);
+                        setFechaInicioResolver('');
+                        setTrabajoResolver('');
+                        setEjecucionResolver('INTERNA');
+                        setFechaFinResolver('');
+                        setRecupResolver(false);
+                        setRecupObsResolver('');
+                        setShowResolverModal(true);
+                      }}
+                    >
+                      ⚡ Resolver ahora (T2)
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ color: '#c62828', borderColor: '#ef9a9a' }}
+                      disabled={actionLoading}
+                      onClick={() => {
+                        setActionError(null);
+                        setMotivoCancelar('');
+                        setRecupCancelar(false);
+                        setRecupObsCancelar('');
+                        setShowCancelarModal(true);
+                      }}
+                    >
+                      🚫 Cancelar (T3)
+                    </button>
                   </>
                 )}
 
@@ -642,6 +781,36 @@ export function Intervenciones() {
                     >
                       ⏳ Pasar a espera de repuestos (T4)
                     </button>
+                    <button
+                      className="btn btn-primary"
+                      style={{ backgroundColor: '#2e7d32', borderColor: '#2e7d32' }}
+                      disabled={actionLoading}
+                      onClick={() => {
+                        setActionError(null);
+                        setTrabajoFinalizar('');
+                        setEjecucionFinalizar('INTERNA');
+                        setFechaFinFinalizar('');
+                        setRecupFinalizar(false);
+                        setRecupObsFinalizar('');
+                        setShowFinalizarModal(true);
+                      }}
+                    >
+                      ✅ Finalizar trabajo (T6)
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ color: '#c62828', borderColor: '#ef9a9a' }}
+                      disabled={actionLoading}
+                      onClick={() => {
+                        setActionError(null);
+                        setMotivoCancelar('');
+                        setRecupCancelar(false);
+                        setRecupObsCancelar('');
+                        setShowCancelarModal(true);
+                      }}
+                    >
+                      🚫 Cancelar (T7)
+                    </button>
                   </>
                 )}
 
@@ -665,8 +834,40 @@ export function Intervenciones() {
                     >
                       ▶️ Reanudar trabajo (T5)
                     </button>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ color: '#c62828', borderColor: '#ef9a9a' }}
+                      disabled={actionLoading}
+                      onClick={() => {
+                        setActionError(null);
+                        setMotivoCancelar('');
+                        setRecupCancelar(false);
+                        setRecupObsCancelar('');
+                        setShowCancelarModal(true);
+                      }}
+                    >
+                      🚫 Cancelar (T8)
+                    </button>
                   </>
                 )}
+
+                {/* Registrar detención si está abierta y sin período abierto */}
+                {['PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS'].includes(selectedIntervencion.estado) &&
+                  !selectedIntervencion.periodos_detencion.some((p) => p.esta_abierto) && (
+                    <button
+                      className="btn btn-secondary"
+                      style={{ color: '#d32f2f', borderColor: '#ef9a9a' }}
+                      disabled={actionLoading}
+                      onClick={() => {
+                        setActionError(null);
+                        setDetencionObs('');
+                        setDetencionDesde('');
+                        setShowDetencionModal(true);
+                      }}
+                    >
+                      ⚠️ Registrar detención de máquina (RN-18)
+                    </button>
+                  )}
               </div>
             </div>
 
@@ -678,6 +879,15 @@ export function Intervenciones() {
               <p><strong>Responsable Asignado:</strong> {selectedIntervencion.responsable ? `${selectedIntervencion.responsable.nombre} (${selectedIntervencion.responsable.legajo})` : <span style={{ color: '#c62828' }}>Sin asignar</span>}</p>
               <p><strong>Descripción:</strong> {selectedIntervencion.descripcion}</p>
               {selectedIntervencion.observaciones && <p><strong>Observaciones:</strong> {selectedIntervencion.observaciones}</p>}
+              {selectedIntervencion.trabajo_realizado && (
+                <p><strong>Trabajo Realizado:</strong> {selectedIntervencion.trabajo_realizado}</p>
+              )}
+              {selectedIntervencion.ejecucion && (
+                <p><strong>Tipo de Ejecución:</strong> {selectedIntervencion.ejecucion}</p>
+              )}
+              {selectedIntervencion.tiempo_inactividad_minutos != null && (
+                <p><strong>Tiempo de Inactividad Acumulado:</strong> {selectedIntervencion.tiempo_inactividad_minutos} minutos</p>
+              )}
             </div>
 
             <h4>Períodos de Detención</h4>
@@ -888,6 +1098,391 @@ export function Intervenciones() {
                   disabled={actionLoading}
                 >
                   {actionLoading ? 'Guardando...' : 'Confirmar Pausa'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-modal: Finalizar Trabajo (T6) */}
+      {showFinalizarModal && selectedIntervencion && (
+        <div className="dev-modal-overlay" style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100
+        }}>
+          <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '8px', width: '520px', maxWidth: '90%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h4>Finalizar Intervención (T6)</h4>
+            <form onSubmit={submitFinalizar}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.3rem' }}>
+                  Trabajo realizado (mínimo 5 caracteres) *
+                </label>
+                <textarea
+                  value={trabajoFinalizar}
+                  onChange={(e) => setTrabajoFinalizar(e.target.value)}
+                  placeholder="Detalle de tareas ejecutadas, calibraciones, reparaciones..."
+                  rows={3}
+                  required
+                  minLength={5}
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.3rem' }}>
+                  Tipo de ejecución *
+                </label>
+                <select
+                  value={ejecucionFinalizar}
+                  onChange={(e) => setEjecucionFinalizar(e.target.value as 'INTERNA' | 'EXTERNA')}
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                >
+                  <option value="INTERNA">INTERNA (personal propio)</option>
+                  <option value="EXTERNA">EXTERNA (tercerizado / proveedor)</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.3rem' }}>
+                  Fecha y hora de finalización (opcional, por defecto ahora)
+                </label>
+                <input
+                  type="datetime-local"
+                  value={fechaFinFinalizar}
+                  onChange={(e) => setFechaFinFinalizar(e.target.value)}
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                />
+              </div>
+
+              {selectedIntervencion.periodos_detencion.some((p) => p.esta_abierto) && (
+                <div style={{ marginBottom: '1rem', background: '#e8f5e9', padding: '0.8rem', borderRadius: '6px' }}>
+                  <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem', color: '#2e7d32' }}>
+                    ¿La máquina ya puede funcionar? *
+                  </label>
+                  <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.5rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name="recupFinalizar"
+                        checked={recupFinalizar}
+                        onChange={() => setRecupFinalizar(true)}
+                      />
+                      Sí (Confirmar recuperación)
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name="recupFinalizar"
+                        checked={!recupFinalizar}
+                        onChange={() => setRecupFinalizar(false)}
+                      />
+                      No (Permanece detenida)
+                    </label>
+                  </div>
+                  {recupFinalizar && (
+                    <input
+                      type="text"
+                      value={recupObsFinalizar}
+                      onChange={(e) => setRecupObsFinalizar(e.target.value)}
+                      placeholder="Observación de la recuperación (opcional)"
+                      style={{ width: '100%', padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '0.85rem' }}
+                    />
+                  )}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowFinalizarModal(false)}
+                  disabled={actionLoading}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ backgroundColor: '#2e7d32', borderColor: '#2e7d32' }}
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? 'Guardando...' : 'Confirmar Finalización'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-modal: Resolver Ahora (T2) */}
+      {showResolverModal && selectedIntervencion && (
+        <div className="dev-modal-overlay" style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100
+        }}>
+          <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '8px', width: '520px', maxWidth: '90%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h4>Resolución Inmediata (T2)</h4>
+            <p style={{ fontSize: '0.85rem', color: '#666' }}>
+              Registra inicio y fin inmediatos en una sola operación sin estado intermedio.
+            </p>
+            <form onSubmit={submitResolver}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.3rem' }}>
+                  Fecha y hora de inicio de trabajo *
+                </label>
+                <input
+                  type="datetime-local"
+                  value={fechaInicioResolver}
+                  onChange={(e) => setFechaInicioResolver(e.target.value)}
+                  required
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.3rem' }}>
+                  Trabajo realizado (mínimo 5 caracteres) *
+                </label>
+                <textarea
+                  value={trabajoResolver}
+                  onChange={(e) => setTrabajoResolver(e.target.value)}
+                  placeholder="Detalle de tareas ejecutadas..."
+                  rows={3}
+                  required
+                  minLength={5}
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.3rem' }}>
+                  Tipo de ejecución *
+                </label>
+                <select
+                  value={ejecucionResolver}
+                  onChange={(e) => setEjecucionResolver(e.target.value as 'INTERNA' | 'EXTERNA')}
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                >
+                  <option value="INTERNA">INTERNA (personal propio)</option>
+                  <option value="EXTERNA">EXTERNA (tercerizado / proveedor)</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.3rem' }}>
+                  Fecha y hora de finalización (opcional, por defecto ahora)
+                </label>
+                <input
+                  type="datetime-local"
+                  value={fechaFinResolver}
+                  onChange={(e) => setFechaFinResolver(e.target.value)}
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                />
+              </div>
+
+              {selectedIntervencion.periodos_detencion.some((p) => p.esta_abierto) && (
+                <div style={{ marginBottom: '1rem', background: '#e8f5e9', padding: '0.8rem', borderRadius: '6px' }}>
+                  <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem', color: '#2e7d32' }}>
+                    ¿La máquina ya puede funcionar? *
+                  </label>
+                  <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.5rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name="recupResolver"
+                        checked={recupResolver}
+                        onChange={() => setRecupResolver(true)}
+                      />
+                      Sí (Confirmar recuperación)
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name="recupResolver"
+                        checked={!recupResolver}
+                        onChange={() => setRecupResolver(false)}
+                      />
+                      No (Permanece detenida)
+                    </label>
+                  </div>
+                  {recupResolver && (
+                    <input
+                      type="text"
+                      value={recupObsResolver}
+                      onChange={(e) => setRecupObsResolver(e.target.value)}
+                      placeholder="Observación de la recuperación (opcional)"
+                      style={{ width: '100%', padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '0.85rem' }}
+                    />
+                  )}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowResolverModal(false)}
+                  disabled={actionLoading}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ backgroundColor: '#1565c0', borderColor: '#1565c0' }}
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? 'Guardando...' : 'Resolver Ahora'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-modal: Cancelar Intervención (T3, T7, T8) */}
+      {showCancelarModal && selectedIntervencion && (
+        <div className="dev-modal-overlay" style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100
+        }}>
+          <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '8px', width: '480px', maxWidth: '90%' }}>
+            <h4>Cancelar Intervención</h4>
+            <p style={{ fontSize: '0.85rem', color: '#666' }}>
+              La intervención pasará a <strong>CANCELADA</strong> conservando todos los datos previos.
+            </p>
+            <form onSubmit={submitCancelar}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.3rem' }}>
+                  Motivo de la cancelación (mínimo 5 caracteres) *
+                </label>
+                <textarea
+                  value={motivoCancelar}
+                  onChange={(e) => setMotivoCancelar(e.target.value)}
+                  placeholder="Explique por qué se cancela la intervención..."
+                  rows={3}
+                  required
+                  minLength={5}
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                />
+              </div>
+
+              {selectedIntervencion.periodos_detencion.some((p) => p.esta_abierto) && (
+                <div style={{ marginBottom: '1rem', background: '#fff3e0', padding: '0.8rem', borderRadius: '6px' }}>
+                  <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem', color: '#b78103' }}>
+                    ¿La máquina ya puede funcionar? *
+                  </label>
+                  <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.5rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name="recupCancelar"
+                        checked={recupCancelar}
+                        onChange={() => setRecupCancelar(true)}
+                      />
+                      Sí (Confirmar recuperación)
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name="recupCancelar"
+                        checked={!recupCancelar}
+                        onChange={() => setRecupCancelar(false)}
+                      />
+                      No (Permanece detenida)
+                    </label>
+                  </div>
+                  {recupCancelar && (
+                    <input
+                      type="text"
+                      value={recupObsCancelar}
+                      onChange={(e) => setRecupObsCancelar(e.target.value)}
+                      placeholder="Observación de la recuperación (opcional)"
+                      style={{ width: '100%', padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '0.85rem' }}
+                    />
+                  )}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowCancelarModal(false)}
+                  disabled={actionLoading}
+                >
+                  Cerrar
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ backgroundColor: '#c62828', borderColor: '#c62828' }}
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? 'Guardando...' : 'Confirmar Cancelación'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-modal: Registrar Detención (RN-18) */}
+      {showDetencionModal && selectedIntervencion && (
+        <div className="dev-modal-overlay" style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100
+        }}>
+          <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '8px', width: '480px', maxWidth: '90%' }}>
+            <h4>Registrar Detención de Máquina (RN-18)</h4>
+            <p style={{ fontSize: '0.85rem', color: '#666' }}>
+              Abre un nuevo período de detención para esta intervención y recalcula el estado de la máquina.
+            </p>
+            <form onSubmit={submitDetencion}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.3rem' }}>
+                  Observación / Motivo de detención (mínimo 5 caracteres) *
+                </label>
+                <textarea
+                  value={detencionObs}
+                  onChange={(e) => setDetencionObs(e.target.value)}
+                  placeholder="Detalle la causa de la parada de la máquina..."
+                  rows={3}
+                  required
+                  minLength={5}
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.3rem' }}>
+                  Fecha y hora de inicio de parada (opcional, por defecto ahora)
+                </label>
+                <input
+                  type="datetime-local"
+                  value={detencionDesde}
+                  onChange={(e) => setDetencionDesde(e.target.value)}
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowDetencionModal(false)}
+                  disabled={actionLoading}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ backgroundColor: '#d32f2f', borderColor: '#d32f2f' }}
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? 'Guardando...' : 'Registrar Detención'}
                 </button>
               </div>
             </form>

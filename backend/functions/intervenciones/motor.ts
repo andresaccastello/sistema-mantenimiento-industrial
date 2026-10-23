@@ -6,7 +6,9 @@ import { bloquearIntervencion } from './bloqueos.ts';
 import { recalcularEstadoMaquina } from './recalculoMaquina.ts';
 import { registrarCambioEstado } from './cambioEstado.ts';
 import { registrarAuditoria, registrarNotificaciones } from './auditoria.ts';
-import { AccionTransicion, buscarTransicion, buscarTransicionPorAccion } from './transiciones.ts';
+import { AccionTransicion, buscarTransicion, transicionesDeAccion } from './transiciones.ts';
+import { validarFechaISO } from './fechas.ts';
+import { validarDecisionRecuperacion, aplicarDecisionRecuperacion } from './recuperacion.ts';
 
 /**
  * Verifica si un usuario es "responsable habilitado" para una intervención concreta:
@@ -347,9 +349,9 @@ export async function ejecutarTransicionServicio(
     fechaInicio?: string | null;
   }
 ) {
-  // 1. Obtener la definición de la transición por acción
-  const transicion = buscarTransicionPorAccion(accion);
-  if (!transicion) {
+  // 1. Obtener las definiciones de transición para la acción
+  const transiciones = transicionesDeAccion(accion);
+  if (transiciones.length === 0) {
     throw new ErrorNegocio(
       409,
       'TRANSICION_NO_PERMITIDA',
@@ -357,8 +359,9 @@ export async function ejecutarTransicionServicio(
     );
   }
 
-  // 2. Validar permiso tomado directamente de transicion.permiso
-  if (!(transicion.permiso in usuario.permisos)) {
+  // 2. Validar permiso tomado de las filas de la acción (todas comparten el mismo permiso)
+  const permisoRequerido = transiciones[0].permiso;
+  if (!(permisoRequerido in usuario.permisos)) {
     throw new ErrorNegocio(
       403,
       'PERMISO_INSUFICIENTE',
@@ -381,8 +384,9 @@ export async function ejecutarTransicionServicio(
     );
   }
 
-  // 4. Validar que la acción admite el estado actual
-  if (intervencion.estado !== transicion.desde) {
+  // 4. Seleccionar la fila de transición cuyo 'desde' coincide con el estado actual
+  const transicion = transiciones.find((t) => t.desde === intervencion.estado);
+  if (!transicion) {
     throw new ErrorNegocio(
       409,
       'TRANSICION_NO_PERMITIDA',
@@ -450,24 +454,12 @@ export async function ejecutarTransicionServicio(
 
     // fecha_inicio: validar formato y coherencia si viene en el body
     if (params.fechaInicio !== undefined && params.fechaInicio !== null) {
-      // Validar formato ISO 8601 con zona horaria explícita (Z o ±hh:mm / ±hhmm)
-      const ISO_TZ_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/;
-      if (
-        typeof params.fechaInicio !== 'string' ||
-        !ISO_TZ_REGEX.test(params.fechaInicio) ||
-        isNaN(Date.parse(params.fechaInicio))
-      ) {
-        throw new ErrorNegocio(
-          422,
-          'DATOS_INVALIDOS',
-          'La fecha_inicio debe tener formato ISO 8601 con zona horaria explícita (Z o ±hh:mm)'
-        );
-      }
+      await validarFechaISO(client, params.fechaInicio, 'fecha_inicio');
 
       const resValida = await client.query(
         `SELECT (
            $1::timestamptz >= fecha_creacion 
-           AND $1::timestamptz <= NOW()
+           AND $1::timestamptz <= NOW() + INTERVAL '10 seconds'
          ) AS fecha_valida
          FROM intervenciones
          WHERE id = $2`,
@@ -595,8 +587,560 @@ export async function ejecutarTransicionServicio(
     maquina: {
       id: Number(maquina.id),
       estado_anterior: recalculo.estadoAnterior,
+      estadoNuevo: recalculo.estadoNuevo,
+      cambio: recalculo.cambio,
+    },
+  };
+}
+
+/**
+ * 6.1 POST /api/intervenciones/:id/finalizar (T6)
+ */
+export async function finalizarIntervencionServicio(
+  client: pg.PoolClient,
+  intervencionId: number,
+  usuario: UsuarioVisibilidad,
+  body: {
+    estado_esperado: string;
+    fecha_finalizacion?: unknown;
+    trabajo_realizado?: unknown;
+    ejecucion?: unknown;
+    observacion?: unknown;
+    maquina_recuperada?: unknown;
+    fecha_recuperacion?: unknown;
+    observacion_recuperacion?: unknown;
+  }
+) {
+  if (!('INTERVENCIONES_FINALIZAR' in usuario.permisos)) {
+    throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No posees permiso para finalizar intervenciones');
+  }
+
+  const { intervencion, maquina } = await bloquearIntervencion(client, intervencionId, usuario);
+
+  if (body.estado_esperado !== intervencion.estado) {
+    throw new ErrorNegocio(409, 'ESTADO_DESACTUALIZADO', 'El estado de la intervención ha cambiado concurrentemente');
+  }
+
+  if (intervencion.estado !== 'EN_PROCESO') {
+    throw new ErrorNegocio(
+      409,
+      'TRANSICION_NO_PERMITIDA',
+      `No se puede finalizar una intervención en estado ${intervencion.estado}`
+    );
+  }
+
+  // Regla de actor (D-23 / D-28)
+  const responsableId = intervencion.responsable_usuario_id ? Number(intervencion.responsable_usuario_id) : null;
+  const esResponsable = responsableId === usuario.id;
+  const tieneAsignar = 'INTERVENCIONES_ASIGNAR' in usuario.permisos;
+  if (!esResponsable && !tieneAsignar) {
+    throw new ErrorNegocio(
+      403,
+      'NO_ES_RESPONSABLE',
+      'Solo el responsable asignado o un usuario con permiso de asignación puede finalizar esta intervención'
+    );
+  }
+
+  // Validaciones de datos
+  const trabajoRealizado = typeof body.trabajo_realizado === 'string' ? body.trabajo_realizado.trim() : '';
+  if (trabajoRealizado.length < 5) {
+    throw new ErrorNegocio(
+      422,
+      'TRABAJO_REALIZADO_REQUERIDO',
+      'El trabajo realizado es obligatorio y debe tener al menos 5 caracteres'
+    );
+  }
+
+  if (body.ejecucion !== 'INTERNA' && body.ejecucion !== 'EXTERNA') {
+    throw new ErrorNegocio(
+      422,
+      'EJECUCION_REQUERIDA',
+      'Debe indicar si la ejecución fue INTERNA o EXTERNA'
+    );
+  }
+
+  let fechaFinalizacion: string;
+  if (body.fecha_finalizacion !== undefined && body.fecha_finalizacion !== null && String(body.fecha_finalizacion).trim() !== '') {
+    fechaFinalizacion = await validarFechaISO(client, body.fecha_finalizacion, 'fecha_finalizacion');
+  } else {
+    const resNow = await client.query('SELECT NOW() AS ahora');
+    fechaFinalizacion = new Date(resNow.rows[0].ahora).toISOString();
+  }
+
+  // Coherencia: fecha_inicio <= fecha_finalizacion <= NOW()
+  const resCoherente = await client.query(
+    `SELECT (
+       $1::timestamptz >= $2::timestamptz
+       AND $1::timestamptz <= NOW() + INTERVAL '10 seconds'
+     ) AS coherente`,
+    [fechaFinalizacion, intervencion.fecha_inicio]
+  );
+  if (!resCoherente.rows[0] || !resCoherente.rows[0].coherente) {
+    throw new ErrorNegocio(
+      422,
+      'FECHA_INCOHERENTE',
+      'La fecha de finalización debe ser mayor o igual a la de inicio y menor o igual al instante actual'
+    );
+  }
+
+  // Decisión de recuperación (validación antes de mutar)
+  const validacionRecup = await validarDecisionRecuperacion(client, {
+    intervencionId,
+    maquinaId: maquina.id,
+    usuario,
+    maquinaRecuperada: body.maquina_recuperada,
+    fechaRecuperacion: body.fecha_recuperacion,
+    fechaPorDefecto: fechaFinalizacion,
+    observacionRecuperacion: body.observacion_recuperacion,
+  });
+
+  // Mutaciones:
+  await registrarCambioEstado(client, {
+    intervencionId,
+    estadoActual: 'EN_PROCESO',
+    estadoNuevo: 'FINALIZADA',
+    usuarioId: usuario.id,
+    observacion: typeof body.observacion === 'string' ? body.observacion.trim() : null,
+    camposExtra: {
+      fecha_finalizacion: fechaFinalizacion,
+      trabajo_realizado: trabajoRealizado,
+      ejecucion: body.ejecucion,
+    },
+  });
+
+  const eventos: Array<{ tipo: string; payload: any }> = [
+    { tipo: 'INTERVENCION_FINALIZADA', payload: { intervencionId } },
+  ];
+
+  const periodo = await aplicarDecisionRecuperacion(client, {
+    intervencionId,
+    maquinaId: maquina.id,
+    usuarioId: usuario.id,
+    validacion: validacionRecup,
+    eventos,
+  });
+
+  const recalculo = await recalcularEstadoMaquina(client, maquina.id, {
+    usuarioId: usuario.id,
+    intervencionId,
+    motivo: 'Intervención finalizada',
+    confirmacion: validacionRecup.maquinaRecuperada === true,
+  });
+
+  if (recalculo.cambio) {
+    eventos.push({
+      tipo: 'MAQUINA_CAMBIO_ESTADO',
+      payload: {
+        maquinaId: maquina.id,
+        estadoAnterior: recalculo.estadoAnterior,
+        estadoNuevo: recalculo.estadoNuevo,
+      },
+    });
+  }
+
+  await registrarNotificaciones(client, eventos);
+
+  // Consultar intervención actualizada
+  const resAct = await client.query(
+    `SELECT i.id, i.estado, i.fecha_inicio, i.fecha_finalizacion, i.trabajo_realizado, i.ejecucion, i.tiempo_inactividad_minutos,
+            u.id AS resp_id, u.legajo AS resp_legajo, u.nombre AS resp_nombre
+     FROM intervenciones i
+     LEFT JOIN usuarios u ON i.responsable_usuario_id = u.id
+     WHERE i.id = $1`,
+    [intervencionId]
+  );
+  const row = resAct.rows[0];
+
+  return {
+    intervencion: {
+      id: Number(row.id),
+      estado: row.estado,
+      fecha_inicio: row.fecha_inicio,
+      fecha_finalizacion: row.fecha_finalizacion,
+      trabajo_realizado: row.trabajo_realizado,
+      ejecucion: row.ejecucion,
+      tiempo_inactividad_minutos: row.tiempo_inactividad_minutos != null ? Number(row.tiempo_inactividad_minutos) : null,
+      responsable: row.resp_id
+        ? { id: Number(row.resp_id), legajo: row.resp_legajo, nombre: row.resp_nombre }
+        : null,
+    },
+    maquina: {
+      id: Number(maquina.id),
+      estado_anterior: recalculo.estadoAnterior,
       estado_nuevo: recalculo.estadoNuevo,
       cambio: recalculo.cambio,
     },
+    periodo,
+  };
+}
+
+/**
+ * 6.2 POST /api/intervenciones/:id/resolver-ahora (T2)
+ */
+export async function resolverAhoraIntervencionServicio(
+  client: pg.PoolClient,
+  intervencionId: number,
+  usuario: UsuarioVisibilidad,
+  body: {
+    estado_esperado: string;
+    fecha_inicio?: unknown;
+    fecha_finalizacion?: unknown;
+    trabajo_realizado?: unknown;
+    ejecucion?: unknown;
+    observacion?: unknown;
+    maquina_recuperada?: unknown;
+    fecha_recuperacion?: unknown;
+    observacion_recuperacion?: unknown;
+  }
+) {
+  if (!('INTERVENCIONES_FINALIZAR' in usuario.permisos)) {
+    throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No posees permiso para finalizar intervenciones');
+  }
+
+  const { intervencion, maquina } = await bloquearIntervencion(client, intervencionId, usuario);
+
+  if (body.estado_esperado !== intervencion.estado) {
+    throw new ErrorNegocio(409, 'ESTADO_DESACTUALIZADO', 'El estado de la intervención ha cambiado concurrentemente');
+  }
+
+  if (intervencion.estado !== 'PENDIENTE') {
+    throw new ErrorNegocio(
+      409,
+      'TRANSICION_NO_PERMITIDA',
+      `No se puede resolver inmediatamente una intervención en estado ${intervencion.estado}`
+    );
+  }
+
+  // Regla de actor y asignación (como en T1)
+  let responsableId = intervencion.responsable_usuario_id ? Number(intervencion.responsable_usuario_id) : null;
+  let autoAsignado = false;
+  if (responsableId === null) {
+    const tieneAsignarse = 'INTERVENCIONES_ASIGNARSE' in usuario.permisos;
+    if (!tieneAsignarse) {
+      throw new ErrorNegocio(
+        422,
+        'RESPONSABLE_REQUERIDO',
+        'La intervención no tiene responsable asignado y no posees permiso para asignártela'
+      );
+    }
+    await validarResponsableHabilitado(client, usuario.id, maquina.sector_id);
+    responsableId = usuario.id;
+    autoAsignado = true;
+  } else {
+    const esResponsable = responsableId === usuario.id;
+    const tieneAsignar = 'INTERVENCIONES_ASIGNAR' in usuario.permisos;
+    if (!esResponsable && !tieneAsignar) {
+      throw new ErrorNegocio(
+        403,
+        'NO_ES_RESPONSABLE',
+        'Solo el responsable asignado o un usuario con permiso de asignación puede resolver esta intervención'
+      );
+    }
+    await validarResponsableHabilitado(client, responsableId, maquina.sector_id);
+  }
+
+  // fecha_inicio es obligatoria
+  if (body.fecha_inicio === undefined || body.fecha_inicio === null || String(body.fecha_inicio).trim() === '') {
+    throw new ErrorNegocio(
+      422,
+      'DATOS_INVALIDOS',
+      'La fecha_inicio es obligatoria para resolver inmediatamente'
+    );
+  }
+  const fechaInicio = await validarFechaISO(client, body.fecha_inicio, 'fecha_inicio');
+
+  let fechaFinalizacion: string;
+  if (body.fecha_finalizacion !== undefined && body.fecha_finalizacion !== null && String(body.fecha_finalizacion).trim() !== '') {
+    fechaFinalizacion = await validarFechaISO(client, body.fecha_finalizacion, 'fecha_finalizacion');
+  } else {
+    const resNow = await client.query('SELECT NOW() AS ahora');
+    fechaFinalizacion = new Date(resNow.rows[0].ahora).toISOString();
+  }
+
+  // Coherencia: fecha_creacion <= fecha_inicio <= fecha_finalizacion <= NOW()
+  const resCoherente = await client.query(
+    `SELECT (
+       $1::timestamptz >= fecha_creacion
+       AND $2::timestamptz >= $1::timestamptz
+       AND $2::timestamptz <= NOW() + INTERVAL '10 seconds'
+     ) AS coherente
+     FROM intervenciones WHERE id = $3`,
+    [fechaInicio, fechaFinalizacion, intervencionId]
+  );
+  if (!resCoherente.rows[0] || !resCoherente.rows[0].coherente) {
+    throw new ErrorNegocio(
+      422,
+      'FECHA_INCOHERENTE',
+      'Las fechas deben cumplir: fecha_creacion <= fecha_inicio <= fecha_finalizacion <= fecha actual'
+    );
+  }
+
+  // Validaciones de datos
+  const trabajoRealizado = typeof body.trabajo_realizado === 'string' ? body.trabajo_realizado.trim() : '';
+  if (trabajoRealizado.length < 5) {
+    throw new ErrorNegocio(
+      422,
+      'TRABAJO_REALIZADO_REQUERIDO',
+      'El trabajo realizado es obligatorio y debe tener al menos 5 caracteres'
+    );
+  }
+
+  if (body.ejecucion !== 'INTERNA' && body.ejecucion !== 'EXTERNA') {
+    throw new ErrorNegocio(
+      422,
+      'EJECUCION_REQUERIDA',
+      'Debe indicar si la ejecución fue INTERNA o EXTERNA'
+    );
+  }
+
+  // Decisión de recuperación (validación antes de mutar)
+  const validacionRecup = await validarDecisionRecuperacion(client, {
+    intervencionId,
+    maquinaId: maquina.id,
+    usuario,
+    maquinaRecuperada: body.maquina_recuperada,
+    fechaRecuperacion: body.fecha_recuperacion,
+    fechaPorDefecto: fechaFinalizacion,
+    observacionRecuperacion: body.observacion_recuperacion,
+  });
+
+  // Mutaciones:
+  if (autoAsignado) {
+    await client.query('UPDATE intervenciones SET responsable_usuario_id = $1 WHERE id = $2', [
+      responsableId,
+      intervencionId,
+    ]);
+    await registrarAuditoria(client, {
+      intervencionId,
+      tipoEvento: 'ASIGNACION',
+      campo: 'responsable_usuario_id',
+      valorAnterior: null,
+      valorNuevo: String(responsableId),
+      motivo: 'Asignación automática por resolución inmediata',
+      usuarioId: usuario.id,
+    });
+  }
+
+  // EXACTAMENTE DOS FILAS EN HISTORIAL:
+  // 1. PENDIENTE -> EN_PROCESO
+  await registrarCambioEstado(client, {
+    intervencionId,
+    estadoActual: 'PENDIENTE',
+    estadoNuevo: 'EN_PROCESO',
+    usuarioId: usuario.id,
+    observacion: 'Resolución inmediata',
+    camposExtra: {
+      fecha_inicio: fechaInicio,
+    },
+  });
+
+  // 2. EN_PROCESO -> FINALIZADA
+  await registrarCambioEstado(client, {
+    intervencionId,
+    estadoActual: 'EN_PROCESO',
+    estadoNuevo: 'FINALIZADA',
+    usuarioId: usuario.id,
+    observacion: typeof body.observacion === 'string' ? body.observacion.trim() : null,
+    camposExtra: {
+      fecha_finalizacion: fechaFinalizacion,
+      trabajo_realizado: trabajoRealizado,
+      ejecucion: body.ejecucion,
+    },
+  });
+
+  const eventos: Array<{ tipo: string; payload: any }> = [
+    { tipo: 'INTERVENCION_INICIADA', payload: { intervencionId, responsableId } },
+    { tipo: 'INTERVENCION_FINALIZADA', payload: { intervencionId } },
+  ];
+
+  const periodo = await aplicarDecisionRecuperacion(client, {
+    intervencionId,
+    maquinaId: maquina.id,
+    usuarioId: usuario.id,
+    validacion: validacionRecup,
+    eventos,
+  });
+
+  // Recálculo de máquina UNA SOLA VEZ AL FINAL
+  const recalculo = await recalcularEstadoMaquina(client, maquina.id, {
+    usuarioId: usuario.id,
+    intervencionId,
+    motivo: 'Resolución inmediata',
+    confirmacion: validacionRecup.maquinaRecuperada === true,
+  });
+
+  if (recalculo.cambio) {
+    eventos.push({
+      tipo: 'MAQUINA_CAMBIO_ESTADO',
+      payload: {
+        maquinaId: maquina.id,
+        estadoAnterior: recalculo.estadoAnterior,
+        estadoNuevo: recalculo.estadoNuevo,
+      },
+    });
+  }
+
+  await registrarNotificaciones(client, eventos);
+
+  // Consultar intervención actualizada
+  const resAct = await client.query(
+    `SELECT i.id, i.estado, i.fecha_inicio, i.fecha_finalizacion, i.trabajo_realizado, i.ejecucion, i.tiempo_inactividad_minutos,
+            u.id AS resp_id, u.legajo AS resp_legajo, u.nombre AS resp_nombre
+     FROM intervenciones i
+     LEFT JOIN usuarios u ON i.responsable_usuario_id = u.id
+     WHERE i.id = $1`,
+    [intervencionId]
+  );
+  const row = resAct.rows[0];
+
+  return {
+    intervencion: {
+      id: Number(row.id),
+      estado: row.estado,
+      fecha_inicio: row.fecha_inicio,
+      fecha_finalizacion: row.fecha_finalizacion,
+      trabajo_realizado: row.trabajo_realizado,
+      ejecucion: row.ejecucion,
+      tiempo_inactividad_minutos: row.tiempo_inactividad_minutos != null ? Number(row.tiempo_inactividad_minutos) : null,
+      responsable: row.resp_id
+        ? { id: Number(row.resp_id), legajo: row.resp_legajo, nombre: row.resp_nombre }
+        : null,
+    },
+    maquina: {
+      id: Number(maquina.id),
+      estado_anterior: recalculo.estadoAnterior,
+      estado_nuevo: recalculo.estadoNuevo,
+      cambio: recalculo.cambio,
+    },
+    periodo,
+  };
+}
+
+/**
+ * 6.3 POST /api/intervenciones/:id/cancelar (T3, T7, T8)
+ */
+export async function cancelarIntervencionServicio(
+  client: pg.PoolClient,
+  intervencionId: number,
+  usuario: UsuarioVisibilidad,
+  body: {
+    estado_esperado: string;
+    motivo?: unknown;
+    maquina_recuperada?: unknown;
+    fecha_recuperacion?: unknown;
+    observacion_recuperacion?: unknown;
+  }
+) {
+  if (!('INTERVENCIONES_CANCELAR' in usuario.permisos)) {
+    throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No posees permiso para cancelar intervenciones');
+  }
+
+  const { intervencion, maquina } = await bloquearIntervencion(client, intervencionId, usuario);
+
+  if (body.estado_esperado !== intervencion.estado) {
+    throw new ErrorNegocio(409, 'ESTADO_DESACTUALIZADO', 'El estado de la intervención ha cambiado concurrentemente');
+  }
+
+  const estadosPermitidos = ['PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS'];
+  if (!estadosPermitidos.includes(intervencion.estado)) {
+    throw new ErrorNegocio(
+      409,
+      'TRANSICION_NO_PERMITIDA',
+      `No se puede cancelar una intervención en estado ${intervencion.estado}`
+    );
+  }
+
+  // Regla de actor: NO (D-28)
+  const motivo = typeof body.motivo === 'string' ? body.motivo.trim() : '';
+  if (motivo.length < 5) {
+    throw new ErrorNegocio(422, 'MOTIVO_REQUERIDO', 'Debe indicar un motivo de cancelación de al menos 5 caracteres');
+  }
+
+  // Decisión de recuperación (validación antes de mutar)
+  const resNow = await client.query('SELECT NOW() AS ahora');
+  const nowISO = new Date(resNow.rows[0].ahora).toISOString();
+
+  const validacionRecup = await validarDecisionRecuperacion(client, {
+    intervencionId,
+    maquinaId: maquina.id,
+    usuario,
+    maquinaRecuperada: body.maquina_recuperada,
+    fechaRecuperacion: body.fecha_recuperacion,
+    fechaPorDefecto: nowISO,
+    observacionRecuperacion: body.observacion_recuperacion,
+  });
+
+  // Mutaciones:
+  await registrarCambioEstado(client, {
+    intervencionId,
+    estadoActual: intervencion.estado,
+    estadoNuevo: 'CANCELADA',
+    usuarioId: usuario.id,
+    observacion: motivo,
+  });
+
+  const eventos: Array<{ tipo: string; payload: any }> = [
+    { tipo: 'INTERVENCION_CANCELADA', payload: { intervencionId } },
+  ];
+
+  const periodo = await aplicarDecisionRecuperacion(client, {
+    intervencionId,
+    maquinaId: maquina.id,
+    usuarioId: usuario.id,
+    validacion: validacionRecup,
+    eventos,
+  });
+
+  const recalculo = await recalcularEstadoMaquina(client, maquina.id, {
+    usuarioId: usuario.id,
+    intervencionId,
+    motivo: `Intervención cancelada: ${motivo}`,
+    confirmacion: validacionRecup.maquinaRecuperada === true,
+  });
+
+  if (recalculo.cambio) {
+    eventos.push({
+      tipo: 'MAQUINA_CAMBIO_ESTADO',
+      payload: {
+        maquinaId: maquina.id,
+        estadoAnterior: recalculo.estadoAnterior,
+        estadoNuevo: recalculo.estadoNuevo,
+      },
+    });
+  }
+
+  await registrarNotificaciones(client, eventos);
+
+  // Consultar intervención actualizada
+  const resAct = await client.query(
+    `SELECT i.id, i.estado, i.fecha_inicio, i.fecha_finalizacion, i.trabajo_realizado, i.ejecucion, i.tiempo_inactividad_minutos,
+            u.id AS resp_id, u.legajo AS resp_legajo, u.nombre AS resp_nombre
+     FROM intervenciones i
+     LEFT JOIN usuarios u ON i.responsable_usuario_id = u.id
+     WHERE i.id = $1`,
+    [intervencionId]
+  );
+  const row = resAct.rows[0];
+
+  return {
+    intervencion: {
+      id: Number(row.id),
+      estado: row.estado,
+      fecha_inicio: row.fecha_inicio,
+      fecha_finalizacion: row.fecha_finalizacion,
+      trabajo_realizado: row.trabajo_realizado,
+      ejecucion: row.ejecucion,
+      tiempo_inactividad_minutos: row.tiempo_inactividad_minutos != null ? Number(row.tiempo_inactividad_minutos) : null,
+      responsable: row.resp_id
+        ? { id: Number(row.resp_id), legajo: row.resp_legajo, nombre: row.resp_nombre }
+        : null,
+    },
+    maquina: {
+      id: Number(maquina.id),
+      estado_anterior: recalculo.estadoAnterior,
+      estado_nuevo: recalculo.estadoNuevo,
+      cambio: recalculo.cambio,
+    },
+    periodo,
   };
 }

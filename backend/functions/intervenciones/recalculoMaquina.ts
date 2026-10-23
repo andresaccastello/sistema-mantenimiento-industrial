@@ -5,6 +5,7 @@ export interface RecalculoOpciones {
   intervencionId?: number | null;
   motivo?: string;
   confirmacion?: boolean;
+  salidaFueraDeServicio?: boolean;
 }
 
 export interface RecalculoResultado {
@@ -24,7 +25,13 @@ export async function recalcularEstadoMaquina(
   maquinaId: number,
   opts: RecalculoOpciones
 ): Promise<RecalculoResultado> {
-  const { usuarioId, intervencionId = null, motivo = 'Recálculo automático de estado', confirmacion = false } = opts;
+  const {
+    usuarioId,
+    intervencionId = null,
+    motivo = 'Recálculo automático de estado',
+    confirmacion = false,
+    salidaFueraDeServicio = false,
+  } = opts;
 
   // 1. Obtener estado actual
   const resM = await client.query(
@@ -36,8 +43,9 @@ export async function recalcularEstadoMaquina(
   }
   const estadoActual = resM.rows[0].estado;
 
-  // Regla 1: Si la máquina está FUERA_DE_SERVICIO, el recálculo automático no altera su estado
-  if (estadoActual === 'FUERA_DE_SERVICIO') {
+  // Regla 1: Si la máquina está FUERA_DE_SERVICIO, el recálculo automático no altera su estado,
+  // salvo que se solicite explícitamente la reactivación (salidaFueraDeServicio = true)
+  if (estadoActual === 'FUERA_DE_SERVICIO' && !salidaFueraDeServicio) {
     return {
       estadoAnterior: estadoActual,
       estadoNuevo: estadoActual,

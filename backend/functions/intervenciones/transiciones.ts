@@ -1,11 +1,20 @@
-export type AccionTransicion = 'INICIAR' | 'ESPERAR_REPUESTOS' | 'REANUDAR';
+export type AccionTransicion =
+  | 'INICIAR'
+  | 'ESPERAR_REPUESTOS'
+  | 'REANUDAR'
+  | 'RESOLVER_AHORA'
+  | 'FINALIZAR'
+  | 'CANCELAR';
+
+export type CodigoTransicion = 'T1' | 'T2' | 'T3' | 'T4' | 'T5' | 'T6' | 'T7' | 'T8';
 
 export interface TransicionDef {
   accion: AccionTransicion;
-  codigo: 'T1' | 'T4' | 'T5';
+  codigo: CodigoTransicion;
   desde: string;
   hacia: string;
   permiso: string;
+  requiereActor: boolean;
 }
 
 export const TRANSICIONES: TransicionDef[] = [
@@ -15,6 +24,23 @@ export const TRANSICIONES: TransicionDef[] = [
     desde: 'PENDIENTE',
     hacia: 'EN_PROCESO',
     permiso: 'INTERVENCIONES_CAMBIAR_ESTADO',
+    requiereActor: true,
+  },
+  {
+    accion: 'RESOLVER_AHORA',
+    codigo: 'T2',
+    desde: 'PENDIENTE',
+    hacia: 'FINALIZADA',
+    permiso: 'INTERVENCIONES_FINALIZAR',
+    requiereActor: true,
+  },
+  {
+    accion: 'CANCELAR',
+    codigo: 'T3',
+    desde: 'PENDIENTE',
+    hacia: 'CANCELADA',
+    permiso: 'INTERVENCIONES_CANCELAR',
+    requiereActor: false,
   },
   {
     accion: 'ESPERAR_REPUESTOS',
@@ -22,6 +48,7 @@ export const TRANSICIONES: TransicionDef[] = [
     desde: 'EN_PROCESO',
     hacia: 'EN_ESPERA_REPUESTOS',
     permiso: 'INTERVENCIONES_CAMBIAR_ESTADO',
+    requiereActor: true,
   },
   {
     accion: 'REANUDAR',
@@ -29,14 +56,38 @@ export const TRANSICIONES: TransicionDef[] = [
     desde: 'EN_ESPERA_REPUESTOS',
     hacia: 'EN_PROCESO',
     permiso: 'INTERVENCIONES_CAMBIAR_ESTADO',
+    requiereActor: true,
+  },
+  {
+    accion: 'FINALIZAR',
+    codigo: 'T6',
+    desde: 'EN_PROCESO',
+    hacia: 'FINALIZADA',
+    permiso: 'INTERVENCIONES_FINALIZAR',
+    requiereActor: true,
+  },
+  {
+    accion: 'CANCELAR',
+    codigo: 'T7',
+    desde: 'EN_PROCESO',
+    hacia: 'CANCELADA',
+    permiso: 'INTERVENCIONES_CANCELAR',
+    requiereActor: false,
+  },
+  {
+    accion: 'CANCELAR',
+    codigo: 'T8',
+    desde: 'EN_ESPERA_REPUESTOS',
+    hacia: 'CANCELADA',
+    permiso: 'INTERVENCIONES_CANCELAR',
+    requiereActor: false,
   },
 ];
+
+export function transicionesDeAccion(accion: AccionTransicion): TransicionDef[] {
+  return TRANSICIONES.filter((t) => t.accion === accion);
+}
 
 export function buscarTransicion(accion: AccionTransicion, estadoActual: string): TransicionDef | null {
   return TRANSICIONES.find((t) => t.accion === accion && t.desde === estadoActual) || null;
 }
-
-export function buscarTransicionPorAccion(accion: AccionTransicion): TransicionDef | null {
-  return TRANSICIONES.find((t) => t.accion === accion) || null;
-}
-

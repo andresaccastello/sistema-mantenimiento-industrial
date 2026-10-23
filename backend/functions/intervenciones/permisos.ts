@@ -19,25 +19,34 @@ export async function resolverPermisosEfectivos(
   db: pg.Pool | pg.PoolClient,
   usuarioId: number
 ): Promise<PermisosEfectivosUsuario> {
-  const [resUser, resProfilePerms, resUserPerms, resSectores] = await Promise.all([
-    db.query('SELECT id, activo, perfil_id FROM usuarios WHERE id = $1', [usuarioId]),
-    db.query(
-      `SELECT pe.codigo, pp.alcance
-       FROM perfil_permiso pp
-       JOIN permisos pe ON pp.permiso_id = pe.id
-       JOIN usuarios u ON u.perfil_id = pp.perfil_id
-       WHERE u.id = $1`,
-      [usuarioId]
-    ),
-    db.query(
-      `SELECT pe.codigo, up.efecto, up.alcance
-       FROM usuario_permiso up
-       JOIN permisos pe ON up.permiso_id = pe.id
-       WHERE up.usuario_id = $1`,
-      [usuarioId]
-    ),
-    db.query('SELECT sector_id FROM usuario_sector WHERE usuario_id = $1', [usuarioId]),
-  ]);
+  const resUser = await db.query('SELECT id, activo, perfil_id FROM usuarios WHERE id = $1', [usuarioId]);
+  if (resUser.rows.length === 0) {
+    return {
+      activo: false,
+      perfil_id: null,
+      permisos: {},
+      sectores: [],
+    };
+  }
+
+  const resProfilePerms = await db.query(
+    `SELECT pe.codigo, pp.alcance
+     FROM perfil_permiso pp
+     JOIN permisos pe ON pp.permiso_id = pe.id
+     JOIN usuarios u ON u.perfil_id = pp.perfil_id
+     WHERE u.id = $1`,
+    [usuarioId]
+  );
+
+  const resUserPerms = await db.query(
+    `SELECT pe.codigo, up.efecto, up.alcance
+     FROM usuario_permiso up
+     JOIN permisos pe ON up.permiso_id = pe.id
+     WHERE up.usuario_id = $1`,
+    [usuarioId]
+  );
+
+  const resSectores = await db.query('SELECT sector_id FROM usuario_sector WHERE usuario_id = $1', [usuarioId]);
 
   if (resUser.rows.length === 0) {
     return {
