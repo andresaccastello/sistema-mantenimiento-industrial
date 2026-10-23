@@ -87,9 +87,20 @@ maquinasApp.post('/', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
     const nombre = parseString(body.nombre);
     const sector_id = parseId(body.sector_id);
     const tipo = parseString(body.tipo);
-    const estado = parseString(body.estado) || 'OPERATIVA';
+    const estado = parseString(body.estado);
     const ubicacion = parseString(body.ubicacion);
     const observaciones = parseString(body.observaciones);
+    const codigo = parseString(body.codigo);
+    
+    if (estado && estado !== 'OPERATIVA') {
+      return c.json(
+        {
+          error: 'El estado inicial de una máquina es siempre OPERATIVA. El estado se gestiona desde las intervenciones o el cambio manual de estado.',
+          codigo: 'ESTADO_NO_EDITABLE',
+        },
+        422
+      );
+    }
     
     if (!nombre || !sector_id) return badRequest(c, 'El nombre y el sector_id son requeridos y válidos');
     
@@ -98,16 +109,17 @@ maquinasApp.post('/', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
     }
 
     const { rows } = await pool.query(
-      `INSERT INTO maquinas (nombre, sector_id, tipo, estado, ubicacion, observaciones) 
-       VALUES ($1, $2, $3, $4, $5, $6) 
-       RETURNING id, nombre, tipo, estado, ubicacion, observaciones, activo`,
-      [nombre, sector_id, tipo, estado, ubicacion, observaciones]
+      `INSERT INTO maquinas (nombre, sector_id, tipo, estado, ubicacion, observaciones, codigo) 
+       VALUES ($1, $2, $3, 'OPERATIVA', $4, $5, $6) 
+       RETURNING id, nombre, tipo, estado, ubicacion, observaciones, codigo, activo`,
+      [nombre, sector_id, tipo, ubicacion, observaciones, codigo]
     );
     
     return c.json(rows[0], 201);
   } catch (error: any) {
     console.error('Error creando máquina:', error);
     if (error.code === '23514') return badRequest(c, 'Estado de máquina inválido');
+    if (error.code === '23505') return badRequest(c, 'El código de máquina ya se encuentra registrado');
     return c.json({ error: 'Error interno del servidor' }, 500);
   }
 });
@@ -118,12 +130,23 @@ maquinasApp.put('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
     if (!id) return badRequest(c, 'ID inválido');
 
     const body = await c.req.json();
+    
+    if (body.estado !== undefined) {
+      return c.json(
+        {
+          error: 'El estado no es editable desde el ABM de máquinas. Se gestiona desde las intervenciones o el cambio manual de estado.',
+          codigo: 'ESTADO_NO_EDITABLE',
+        },
+        422
+      );
+    }
+
     const nombre = parseString(body.nombre);
     const sector_id = body.sector_id ? parseId(body.sector_id) : null;
     const tipo = parseString(body.tipo);
-    const estado = parseString(body.estado);
     const ubicacion = parseString(body.ubicacion);
     const observaciones = parseString(body.observaciones);
+    const codigo = body.codigo !== undefined ? parseString(body.codigo) : undefined;
     const activo = typeof body.activo === 'boolean' ? body.activo : null;
     
     if (body.sector_id && !sector_id) return badRequest(c, 'El sector_id provisto es inválido');
@@ -137,14 +160,14 @@ maquinasApp.put('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
        SET nombre = COALESCE($1, nombre), 
            sector_id = COALESCE($2, sector_id), 
            tipo = COALESCE($3, tipo), 
-           estado = COALESCE($4, estado), 
-           ubicacion = COALESCE($5, ubicacion), 
-           observaciones = COALESCE($6, observaciones), 
+           ubicacion = COALESCE($4, ubicacion), 
+           observaciones = COALESCE($5, observaciones), 
+           codigo = COALESCE($6, codigo),
            activo = COALESCE($7, activo),
            actualizado_en = NOW()
        WHERE id = $8 
-       RETURNING id, nombre, tipo, estado`,
-      [nombre, sector_id, tipo, estado, ubicacion, observaciones, activo, id]
+       RETURNING id, nombre, tipo, estado, codigo, activo`,
+      [nombre, sector_id, tipo, ubicacion, observaciones, codigo, activo, id]
     );
 
     if (rows.length === 0) return c.json({ error: 'Máquina no encontrada' }, 404);

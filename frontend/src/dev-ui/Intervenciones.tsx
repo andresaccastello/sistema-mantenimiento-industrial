@@ -37,6 +37,27 @@ interface PeriodoDetencion {
   confirmado_por: { id: number; nombre: string } | null;
 }
 
+interface AuditoriaItem {
+  id: number;
+  tipo_evento: string;
+  campo_modificado: string | null;
+  valor_anterior: string | null;
+  valor_nuevo: string | null;
+  motivo: string | null;
+  creado_en: string;
+  realizado_por: {
+    id: number;
+    legajo: string;
+    nombre: string;
+  };
+}
+
+interface ResponsableHabilitado {
+  id: number;
+  legajo: string;
+  nombre: string;
+}
+
 interface Intervencion {
   id: number;
   descripcion: string;
@@ -61,6 +82,7 @@ interface IntervencionDetalle extends Intervencion {
   observaciones: string | null;
   historial_estados: HistorialItem[];
   periodos_detencion: PeriodoDetencion[];
+  auditoria: AuditoriaItem[];
 }
 
 export function Intervenciones() {
@@ -82,7 +104,25 @@ export function Intervenciones() {
 
   // Modal de detalle
   const [selectedIntervencion, setSelectedIntervencion] = useState<IntervencionDetalle | null>(null);
-  const [loadingDetalle, setLoadingDetalle] = useState(false);
+  const [_loadingDetalle, setLoadingDetalle] = useState(false);
+
+  // Operaciones de motor de estados
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<{ codigo: string; mensaje: string } | null>(null);
+
+  // Sub-modal Asignar / Reasignar
+  const [showAsignarModal, setShowAsignarModal] = useState(false);
+  const [responsablesHabilitados, setResponsablesHabilitados] = useState<ResponsableHabilitado[]>([]);
+  const [selectedResponsableId, setSelectedResponsableId] = useState<number | ''>('');
+  const [asignarMotivo, setAsignarMotivo] = useState('');
+
+  // Sub-modal Quitar Responsable
+  const [showQuitarModal, setShowQuitarModal] = useState(false);
+  const [quitarMotivo, setQuitarMotivo] = useState('');
+
+  // Sub-modal Pasar a Espera de Repuestos
+  const [showEsperaModal, setShowEsperaModal] = useState(false);
+  const [esperaObservacion, setEsperaObservacion] = useState('');
 
   const loadIntervenciones = async () => {
     setLoading(true);
@@ -152,6 +192,7 @@ export function Intervenciones() {
 
   const handleVerDetalle = async (id: number) => {
     setLoadingDetalle(true);
+    setActionError(null);
     try {
       const data = await fetchApi(`/api/intervenciones/${id}`);
       setSelectedIntervencion(data);
@@ -162,13 +203,97 @@ export function Intervenciones() {
     }
   };
 
+  const ejecutarAccion = async (url: string, method: string, body?: any) => {
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      await fetchApi(url, {
+        method,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      // Recargar detalle y lista
+      if (selectedIntervencion) {
+        await handleVerDetalle(selectedIntervencion.id);
+      }
+      await loadIntervenciones();
+      // Cerrar submodales
+      setShowAsignarModal(false);
+      setShowQuitarModal(false);
+      setShowEsperaModal(false);
+    } catch (err: any) {
+      setActionError({
+        codigo: err.codigo || 'ERROR_OPERACION',
+        mensaje: err.message || 'Error al ejecutar la acción',
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Abrir modal Asignar / Reasignar
+  const handleOpenAsignar = async () => {
+    if (!selectedIntervencion) return;
+    setActionError(null);
+    setSelectedResponsableId('');
+    setAsignarMotivo('');
+    try {
+      const resp = await fetchApi(`/api/intervenciones/${selectedIntervencion.id}/responsables-habilitados`);
+      setResponsablesHabilitados(resp);
+      setShowAsignarModal(true);
+    } catch (err: any) {
+      setActionError({
+        codigo: err.codigo || 'ERROR_PERMISO',
+        mensaje: err.message || 'No se pudieron cargar los responsables habilitados',
+      });
+    }
+  };
+
+  const submitAsignar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedIntervencion || !selectedResponsableId) return;
+    const esReasignacion = Boolean(selectedIntervencion.responsable);
+    if (esReasignacion && !asignarMotivo.trim()) {
+      alert('El motivo es obligatorio al reasignar');
+      return;
+    }
+    await ejecutarAccion(`/api/intervenciones/${selectedIntervencion.id}/responsable`, 'PUT', {
+      usuario_id: Number(selectedResponsableId),
+      motivo: asignarMotivo.trim() || undefined,
+      estado_esperado: selectedIntervencion.estado,
+    });
+  };
+
+  const submitQuitar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedIntervencion || !quitarMotivo.trim()) {
+      alert('El motivo es obligatorio para desasignar');
+      return;
+    }
+    await ejecutarAccion(`/api/intervenciones/${selectedIntervencion.id}/responsable`, 'DELETE', {
+      motivo: quitarMotivo.trim(),
+      estado_esperado: selectedIntervencion.estado,
+    });
+  };
+
+  const submitEspera = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedIntervencion || esperaObservacion.trim().length < 5) {
+      alert('La observación debe tener al menos 5 caracteres');
+      return;
+    }
+    await ejecutarAccion(`/api/intervenciones/${selectedIntervencion.id}/espera-repuestos`, 'POST', {
+      observacion: esperaObservacion.trim(),
+      estado_esperado: selectedIntervencion.estado,
+    });
+  };
+
   return (
     <div className="dev-content">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
           <h2>Módulo de Intervenciones</h2>
           <p style={{ color: '#666', fontSize: '0.9rem' }}>
-            Registro unificado de fallas correctivas y control de detenciones de máquinas.
+            Registro unificado de fallas correctivas, motor de estados y control de detenciones.
           </p>
         </div>
         <button
@@ -274,7 +399,7 @@ export function Intervenciones() {
                     style={{ fontSize: '0.8rem', padding: '3px 8px' }}
                     onClick={() => handleVerDetalle(i.id)}
                   >
-                    Ver detalle
+                    Ver detalle / Gestionar
                   </button>
                 </td>
               </tr>
@@ -381,15 +506,15 @@ export function Intervenciones() {
         </div>
       )}
 
-      {/* Modal: Ver Detalle de Intervención */}
+      {/* Modal: Ver Detalle y Gestión de Intervención */}
       {selectedIntervencion && (
         <div className="dev-modal-overlay" style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
           backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
         }}>
-          <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '8px', width: '650px', maxWidth: '95%', maxHeight: '85vh', overflowY: 'auto' }}>
+          <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '8px', width: '700px', maxWidth: '95%', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3>Detalle Intervención #{selectedIntervencion.id}</h3>
+              <h3>Detalle y Motor de Estados — Intervención #{selectedIntervencion.id}</h3>
               <button
                 className="btn btn-secondary"
                 onClick={() => setSelectedIntervencion(null)}
@@ -399,11 +524,158 @@ export function Intervenciones() {
               </button>
             </div>
 
+            {/* Mensajes de error de la API */}
+            {actionError && (
+              <div style={{
+                marginTop: '1rem',
+                padding: '0.8rem 1rem',
+                backgroundColor: '#ffebee',
+                color: '#c62828',
+                borderRadius: '6px',
+                border: '1px solid #ef9a9a',
+                fontSize: '0.9rem'
+              }}>
+                <strong>Error [{actionError.codigo}]:</strong> {actionError.mensaje}
+              </div>
+            )}
+
+            {/* Acciones permitidas según el estado actual */}
+            <div style={{
+              margin: '1rem 0',
+              padding: '1rem',
+              backgroundColor: '#e8f0fe',
+              borderRadius: '6px',
+              border: '1px solid #bbdefb'
+            }}>
+              <div style={{ fontWeight: 600, marginBottom: '0.6rem', color: '#1a73e8' }}>
+                Acciones del Motor de Estados (Estado actual: {selectedIntervencion.estado})
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                {/* ESTADO PENDIENTE */}
+                {selectedIntervencion.estado === 'PENDIENTE' && (
+                  <>
+                    {!selectedIntervencion.responsable ? (
+                      <>
+                        <button
+                          className="btn btn-primary"
+                          disabled={actionLoading}
+                          onClick={() => ejecutarAccion(`/api/intervenciones/${selectedIntervencion.id}/tomar`, 'POST', {
+                            estado_esperado: 'PENDIENTE'
+                          })}
+                        >
+                          👤 Tomar Intervención
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          disabled={actionLoading}
+                          onClick={handleOpenAsignar}
+                        >
+                          📋 Asignar a...
+                        </button>
+                        <button
+                          className="btn btn-primary"
+                          style={{ backgroundColor: '#2e7d32', borderColor: '#2e7d32' }}
+                          disabled={actionLoading}
+                          onClick={() => ejecutarAccion(`/api/intervenciones/${selectedIntervencion.id}/iniciar`, 'POST', {
+                            estado_esperado: 'PENDIENTE'
+                          })}
+                        >
+                          ▶️ Iniciar Trabajo
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          className="btn btn-secondary"
+                          disabled={actionLoading}
+                          onClick={handleOpenAsignar}
+                        >
+                          🔄 Reasignar a otro
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          style={{ color: '#c62828', borderColor: '#ef9a9a' }}
+                          disabled={actionLoading}
+                          onClick={() => {
+                            setActionError(null);
+                            setQuitarMotivo('');
+                            setShowQuitarModal(true);
+                          }}
+                        >
+                          ❌ Quitar responsable
+                        </button>
+                        <button
+                          className="btn btn-primary"
+                          style={{ backgroundColor: '#2e7d32', borderColor: '#2e7d32' }}
+                          disabled={actionLoading}
+                          onClick={() => ejecutarAccion(`/api/intervenciones/${selectedIntervencion.id}/iniciar`, 'POST', {
+                            estado_esperado: 'PENDIENTE'
+                          })}
+                        >
+                          ▶️ Iniciar Trabajo (T1)
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
+
+                {/* ESTADO EN_PROCESO */}
+                {selectedIntervencion.estado === 'EN_PROCESO' && (
+                  <>
+                    <button
+                      className="btn btn-secondary"
+                      disabled={actionLoading}
+                      onClick={handleOpenAsignar}
+                    >
+                      🔄 Reasignar a otro
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ backgroundColor: '#fff3e0', borderColor: '#ffe0b2', color: '#b78103' }}
+                      disabled={actionLoading}
+                      onClick={() => {
+                        setActionError(null);
+                        setEsperaObservacion('');
+                        setShowEsperaModal(true);
+                      }}
+                    >
+                      ⏳ Pasar a espera de repuestos (T4)
+                    </button>
+                  </>
+                )}
+
+                {/* ESTADO EN_ESPERA_REPUESTOS */}
+                {selectedIntervencion.estado === 'EN_ESPERA_REPUESTOS' && (
+                  <>
+                    <button
+                      className="btn btn-secondary"
+                      disabled={actionLoading}
+                      onClick={handleOpenAsignar}
+                    >
+                      🔄 Reasignar a otro
+                    </button>
+                    <button
+                      className="btn btn-primary"
+                      style={{ backgroundColor: '#2e7d32', borderColor: '#2e7d32' }}
+                      disabled={actionLoading}
+                      onClick={() => ejecutarAccion(`/api/intervenciones/${selectedIntervencion.id}/reanudar`, 'POST', {
+                        estado_esperado: 'EN_ESPERA_REPUESTOS'
+                      })}
+                    >
+                      ▶️ Reanudar trabajo (T5)
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Datos principales */}
             <div style={{ margin: '1rem 0', background: '#f5f5f5', padding: '1rem', borderRadius: '6px' }}>
               <p><strong>Máquina:</strong> {selectedIntervencion.maquina.nombre} ({selectedIntervencion.maquina.sector.nombre})</p>
-              <p><strong>Estado Actual:</strong> <span className={`badge badge-${selectedIntervencion.estado.toLowerCase()}`}>{selectedIntervencion.estado}</span></p>
+              <p><strong>Estado Actual de Intervención:</strong> <span className={`badge badge-${selectedIntervencion.estado.toLowerCase()}`}>{selectedIntervencion.estado}</span></p>
               <p><strong>Reportado por:</strong> {selectedIntervencion.creado_por.nombre} ({selectedIntervencion.creado_por.legajo})</p>
-              <p><strong>Responsable:</strong> {selectedIntervencion.responsable ? selectedIntervencion.responsable.nombre : 'Sin asignar aún'}</p>
+              <p><strong>Responsable Asignado:</strong> {selectedIntervencion.responsable ? `${selectedIntervencion.responsable.nombre} (${selectedIntervencion.responsable.legajo})` : <span style={{ color: '#c62828' }}>Sin asignar</span>}</p>
               <p><strong>Descripción:</strong> {selectedIntervencion.descripcion}</p>
               {selectedIntervencion.observaciones && <p><strong>Observaciones:</strong> {selectedIntervencion.observaciones}</p>}
             </div>
@@ -423,7 +695,7 @@ export function Intervenciones() {
               </ul>
             )}
 
-            <h4 style={{ marginTop: '1rem' }}>Trazabilidad de Estados</h4>
+            <h4 style={{ marginTop: '1rem' }}>Trazabilidad de Estados (Historial)</h4>
             <ul style={{ fontSize: '0.85rem', paddingLeft: '1.2rem' }}>
               {selectedIntervencion.historial_estados.map((h) => (
                 <li key={h.id} style={{ marginBottom: '0.3rem' }}>
@@ -433,11 +705,192 @@ export function Intervenciones() {
               ))}
             </ul>
 
+            <h4 style={{ marginTop: '1rem' }}>Auditoría y Trazabilidad Operativa</h4>
+            {(!selectedIntervencion.auditoria || selectedIntervencion.auditoria.length === 0) ? (
+              <p style={{ fontSize: '0.85rem', color: '#666' }}>Sin registros de auditoría.</p>
+            ) : (
+              <ul style={{ fontSize: '0.85rem', paddingLeft: '1.2rem' }}>
+                {selectedIntervencion.auditoria.map((a) => (
+                  <li key={a.id} style={{ marginBottom: '0.3rem' }}>
+                    <strong>[{a.tipo_evento}]</strong> por {a.realizado_por.nombre} ({new Date(a.creado_en).toLocaleString()}):{' '}
+                    {a.campo_modificado ? `${a.campo_modificado}: ${a.valor_anterior || 'null'} ➔ ${a.valor_nuevo || 'null'}` : ''}
+                    {a.motivo && <span style={{ color: '#555' }}> — Motivo: "{a.motivo}"</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+
             <div style={{ textAlign: 'right', marginTop: '1.5rem' }}>
               <button className="btn btn-secondary" onClick={() => setSelectedIntervencion(null)}>
                 Cerrar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-modal: Asignar / Reasignar Responsable */}
+      {showAsignarModal && selectedIntervencion && (
+        <div className="dev-modal-overlay" style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100
+        }}>
+          <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '8px', width: '450px', maxWidth: '90%' }}>
+            <h4>{selectedIntervencion.responsable ? 'Reasignar Responsable' : 'Asignar Responsable'}</h4>
+            
+            <form onSubmit={submitAsignar}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.3rem' }}>
+                  Seleccionar Técnico Habilitado *
+                </label>
+                <select
+                  value={selectedResponsableId}
+                  onChange={(e) => setSelectedResponsableId(e.target.value ? Number(e.target.value) : '')}
+                  required
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                >
+                  <option value="">-- Seleccionar usuario habilitado --</option>
+                  {responsablesHabilitados.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.nombre} ({u.legajo})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.3rem' }}>
+                  Motivo {selectedIntervencion.responsable ? '(Obligatorio para reasignación) *' : '(Opcional)'}
+                </label>
+                <input
+                  type="text"
+                  value={asignarMotivo}
+                  onChange={(e) => setAsignarMotivo(e.target.value)}
+                  placeholder="Ej: Cambio de guardia / Especialidad técnica requerida"
+                  required={Boolean(selectedIntervencion.responsable)}
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowAsignarModal(false)}
+                  disabled={actionLoading}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? 'Guardando...' : 'Confirmar Asignación'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-modal: Quitar Responsable */}
+      {showQuitarModal && selectedIntervencion && (
+        <div className="dev-modal-overlay" style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100
+        }}>
+          <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '8px', width: '450px', maxWidth: '90%' }}>
+            <h4>Quitar Responsable Asignado</h4>
+            <p style={{ fontSize: '0.85rem', color: '#666' }}>
+              Solo permitido en intervenciones <strong>PENDIENTE</strong>. El responsable actual volverá a estar sin asignar.
+            </p>
+
+            <form onSubmit={submitQuitar}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.3rem' }}>
+                  Motivo de la desasignación *
+                </label>
+                <input
+                  type="text"
+                  value={quitarMotivo}
+                  onChange={(e) => setQuitarMotivo(e.target.value)}
+                  placeholder="Ej: Asignado por error / Reevaluación de prioridad"
+                  required
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowQuitarModal(false)}
+                  disabled={actionLoading}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ backgroundColor: '#c62828', borderColor: '#c62828' }}
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? 'Guardando...' : 'Quitar Responsable'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-modal: Pasar a espera de repuestos */}
+      {showEsperaModal && selectedIntervencion && (
+        <div className="dev-modal-overlay" style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100
+        }}>
+          <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '8px', width: '450px', maxWidth: '90%' }}>
+            <h4>Pausar por Espera de Repuestos (T4)</h4>
+            <p style={{ fontSize: '0.85rem', color: '#666' }}>
+              La intervención pasará a <strong>EN_ESPERA_REPUESTOS</strong>. Si detiene máquina, la máquina pasará a <strong>DETENIDA</strong>.
+            </p>
+
+            <form onSubmit={submitEspera}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.3rem' }}>
+                  Observación / Detalle de repuesto faltante (Mínimo 5 caracteres) *
+                </label>
+                <textarea
+                  value={esperaObservacion}
+                  onChange={(e) => setEsperaObservacion(e.target.value)}
+                  placeholder="Detalle qué pieza o insumo falta para continuar el trabajo..."
+                  rows={3}
+                  required
+                  minLength={5}
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowEsperaModal(false)}
+                  disabled={actionLoading}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ backgroundColor: '#b78103', borderColor: '#b78103' }}
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? 'Guardando...' : 'Confirmar Pausa'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

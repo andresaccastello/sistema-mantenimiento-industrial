@@ -79,7 +79,6 @@ export function Maquinas() {
         nombre: formData.nombre,
         sector_id: formData.sector_id,
         tipo: formData.tipo,
-        estado: formData.estado,
         descripcion: formData.descripcion,
         ubicacion: formData.ubicacion,
         activo: formData.activo
@@ -206,19 +205,14 @@ export function Maquinas() {
                   required 
                 />
               </div>
-              <div className="dev-form-group">
-                <label>Estado Operativo</label>
-                <select 
-                  value={formData.estado || 'OPERATIVA'} 
-                  onChange={e => setFormData({...formData, estado: e.target.value})}
-                  required
-                >
-                  <option value="OPERATIVA">Operativa</option>
-                  <option value="DETENIDA">Detenida</option>
-                  <option value="EN_MANTENIMIENTO">En Mantenimiento</option>
-                  <option value="FUERA_DE_SERVICIO">Fuera de Servicio</option>
-                </select>
-              </div>
+              {formData.id && (
+                <div className="dev-form-group">
+                  <label>Estado Operativo</label>
+                  <div style={{ padding: '0.4rem 0.6rem', background: '#e9ecef', borderRadius: '4px', fontWeight: 600, color: '#333' }}>
+                    {formData.estado || 'OPERATIVA'} <span style={{ fontSize: '0.8rem', color: '#666', fontWeight: 'normal' }}>(Gestionado automáticamente por Intervenciones)</span>
+                  </div>
+                </div>
+              )}
               <div className="dev-form-group">
                 <label>Descripción / Observaciones</label>
                 <input 

@@ -28,7 +28,10 @@ export async function fetchApi(path: string, options: RequestInit = {}) {
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || errorData.message || `Error HTTP ${response.status}: ${response.statusText}`);
+    const err: any = new Error(errorData.error || errorData.message || `Error HTTP ${response.status}: ${response.statusText}`);
+    err.codigo = errorData.codigo;
+    err.status = response.status;
+    throw err;
   }
 
   // Si es 204 No Content, no intentamos parsear JSON

@@ -751,7 +751,7 @@ Las decisiones `[APROBADO]` (sección 0.3 y las marcadas en el texto) están cer
 | ID | Decisión | Opciones | Recomendación |
 | :-: | :--- | :--- | :--- |
 | D-01 | **Cómo se confirma la recuperación**: pregunta al finalizar/cancelar/eliminar y acción posterior "Confirmar recuperación" (4.4). Aprobado |
-| D-02 | **`DETENIDA` / `EN_MANTENIMIENTO` automático** (en proceso → `EN_MANTENIMIENTO`). | A) automático 
+| D-02 | **`DETENIDA` / `EN_MANTENIMIENTO` automático** (en proceso → `EN_MANTENIMIENTO`). | A) automático · B) manual | **A — automático**. Aprobada. |
 | D-03 | **Definición de "propias"**. | A) creadas o asignadas · B) solo creadas | **A**. |
 | D-04 | **Operario sin acceso a costos** por defecto (`COSTOS_VER`). | Sí / No | **Sí**. |
 | D-05 | **Fechas obligatorias para finalizar**. | Sí / No | **Sí**. |
@@ -772,6 +772,10 @@ Las decisiones `[APROBADO]` (sección 0.3 y las marcadas en el texto) están cer
 | D-20 | **Stock al cancelar, reabrir o corregir** una intervención con repuestos. | Definir en la etapa de repuestos | Diferir. |
 | D-21 | **Actualización de la tesis**: corregir los puntos de 0.4 (necesidad unificada, estados fijos, login, infraestructura, interno/externo, transiciones). | Aprobar la lista | Aprobar. |
 | D-22 | **Pruebas**: todas las migraciones se prueban solo en rama temporal de Neon. | Aprobar | **Aprobar**. |
+| D-23 | **Quién puede iniciar una intervención asignada a otro usuario**. | Solo el responsable asignado o un usuario con `INTERVENCIONES_ASIGNAR`. La misma regla aplica a pasar a espera de repuestos y a reanudar. | **Aprobada**. |
+| D-24 | **Quitar el responsable en `EN_PROCESO` o `EN_ESPERA_REPUESTOS`**. | No se permite; en esos estados solo se reasigna. Quitarlo solo es posible en `PENDIENTE`. | **Aprobada**. |
+| D-25 | **Permiso para liberar la máquina al finalizar o cancelar**. | Responder "la máquina ya funciona" requiere además `INTERVENCIONES_CONFIRMAR_RECUPERACION`. Sin ese permiso, el período queda abierto y se notifica a quien puede confirmar. (Se implementa en 4B.) | **Aprobada**. |
+| D-26 | **División de la Etapa 4**. | 4A (núcleo, asignación, T1/T4/T5) y 4B (cierres, confirmación de recuperación, "Resolver ahora"). La Etapa 5 se integra en 4A. Motivo: la Etapa 4 original no era verificable sin funciones planificadas en las Etapas 5 y 6. | **Aprobada**. |
 
 ---
 
@@ -785,9 +789,10 @@ Las decisiones `[APROBADO]` (sección 0.3 y las marcadas en el texto) están cer
 | **1** | **Migración de intervenciones**: C1–C6, N1–N4 (ejecución, eliminación lógica, restricciones, historial de máquina, períodos de detención, auditoría, costos). | Migración probada en rama temporal. |
 | **2** | **Permisos granulares**: C7, N5–N7; catálogo ampliado, alcance, excepciones, sectores autorizados; permisos efectivos en el middleware; equivalencia de los actuales. | Pruebas por perfil, por usuario, denegación, alcance y auto-otorgamiento bloqueado. |
 | **3** | **Registrar falla y consultar**: crear `CORRECTIVO`/`PENDIENTE` con indicación de detención; listar y ver según alcance; vista "Sin asignar". | Un operario registra y solo ve lo autorizado; la máquina pasa a `DETENIDA` si corresponde. |
-| **4** | **Motor de estados atómico**: transiciones T1 a T8, historial, períodos y recálculo de máquina en una transacción, con bloqueos. | Pruebas de ejemplos 1 a 3 y 5 (A/B, dos que detienen, sin recuperación, concurrencia). |
-| **5** | **Asignación** con auditoría. | Asignar no inicia el trabajo. |
-| **6** | **Finalizar, cancelar, eliminar lógicamente, confirmar recuperación, "Resolver ahora" y reabrir** (T9). | Reglas RN-14, RN-21 a RN-30 y ejemplo 4 verificadas. |
+| **4A** | **Núcleo del motor, asignación e inicio**: migración 005; servicio único de transición con bloqueos; recálculo del estado de la máquina; tomar / asignar / reasignar / desasignar con auditoría; T1, T4, T5; el alta (T0) pasa por el recálculo; se bloquea el cambio libre de estado desde el ABM de máquinas. | Pruebas P-01 a P-30 de `docs/etapas/etapa-4a-motor-estados.md`. |
+| **4B** | **Cierres**: T3, T6, T7, T8 con decisión explícita de liberar la máquina; "Confirmar recuperación"; T2 "Resolver ahora"; `tiempo_inactividad_minutos` al cerrar períodos; cambio manual de estado de máquina (`FUERA_DE_SERVICIO` y su salida). | Ejemplos 1, 2, 3 y 5 de la sección 4.6. |
+| **5** | *(Integrada en 4A.)* | — |
+| **6** | **Reabrir (T9) y eliminación lógica.** | RN-21 a RN-30 y ejemplo 4. |
 | **7** | **Notificaciones internas**: migración N8, eventos de 8.6 creados en la misma transacción, bandeja. | Cada evento notifica a los destinatarios correctos y a nadie más. |
 | **8** | **Tiempos e inactividad**: espera, duración, total, neta; unión de períodos por máquina; agrupación interna/externa. | Casos con solapamientos, reaperturas y sin detención. |
 | **9** | **Costos**: renglones, anulaciones, total automático. | Total correcto; importes calculados nunca pisados. |

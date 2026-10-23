@@ -2,21 +2,43 @@ import { Hono } from 'hono';
 import { pool } from './db.ts';
 import { jwtVerify, dbVerify, requirePermission, getUserScope } from './middleware.ts';
 import { parseId, parseString, badRequest } from './validations.ts';
+import { ErrorNegocio, responderError } from './intervenciones/errores.ts';
+import { conTransaccion } from './intervenciones/transaccion.ts';
+import { puedeVerIntervencion, UsuarioVisibilidad } from './intervenciones/visibilidad.ts';
+import { recalcularEstadoMaquina } from './intervenciones/recalculoMaquina.ts';
+import { registrarAuditoria, registrarNotificaciones } from './intervenciones/auditoria.ts';
+import {
+  tomarIntervencionServicio,
+  asignarResponsableServicio,
+  desasignarResponsableServicio,
+  ejecutarTransicionServicio,
+  validarResponsableHabilitado,
+} from './intervenciones/motor.ts';
 
 const intervencionesApp = new Hono();
 
-// Todos los endpoints de intervenciones requieren autenticación y verificación de usuario activo
+// Todos los endpoints de intervenciones requieren autenticación y usuario activo
 intervencionesApp.use('*', jwtVerify, dbVerify);
 
 /**
- * POST /api/intervenciones
- * Registra una nueva falla / intervención de tipo CORRECTIVO.
- * Unifica el aviso de falla y la intervención en un solo registro atómico.
+ * Helper para armar el objeto UsuarioVisibilidad desde el contexto de Hono
+ */
+function getUsuarioContext(c: any): UsuarioVisibilidad {
+  return {
+    id: (c.get as any)('userId') as number,
+    permisos: ((c.get as any)('userPermissionsMap') as Record<string, any>) || {},
+    sectores: ((c.get as any)('userSectores') as number[]) || [],
+  };
+}
+
+/**
+ * 7.1 POST /api/intervenciones (Alta de falla / Intervención)
+ * Refactorizado: usa conTransaccion, bloqueo FOR UPDATE sobre la máquina,
+ * y recálculo determinista de estado (eliminando el UPDATE directo).
  */
 intervencionesApp.post('/', requirePermission('INTERVENCIONES_CREAR'), async (c) => {
-  const userId = (c.get as any)('userId') as number;
+  const usuario = getUsuarioContext(c);
   const userScope = getUserScope(c, 'INTERVENCIONES_CREAR') || 'TODAS';
-  const userSectores = ((c.get as any)('userSectores') as number[]) || [];
 
   let body: any;
   try {
@@ -44,109 +66,103 @@ intervencionesApp.post('/', requirePermission('INTERVENCIONES_CREAR'), async (c)
     return badRequest(c, 'Las observaciones no pueden superar los 2000 caracteres');
   }
 
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-
-    // 1. Validar existencia, estado y sector de la máquina
-    const resM = await client.query(
-      `SELECT m.id, m.nombre, m.estado, m.activo, m.sector_id, s.nombre as sector_nombre
-       FROM maquinas m
-       JOIN sectores s ON m.sector_id = s.id
-       WHERE m.id = $1`,
-      [maquinaId]
-    );
-
-    if (resM.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return c.json({ error: 'La máquina especificada no existe' }, 404);
-    }
-
-    const maquina = resM.rows[0];
-    if (!maquina.activo) {
-      await client.query('ROLLBACK');
-      return badRequest(c, 'No se pueden registrar fallas sobre máquinas inactivas');
-    }
-
-    // Validación de alcance si el usuario tiene restricción de sectores para crear
-    if (userScope === 'SECTORES' && !userSectores.includes(Number(maquina.sector_id))) {
-      await client.query('ROLLBACK');
-      return c.json(
-        { error: 'No tienes autorización para registrar intervenciones en el sector de esta máquina' },
-        403
+    const resultado = await conTransaccion(async (client) => {
+      // 1. Bloquear y validar la máquina con FOR UPDATE
+      const resM = await client.query(
+        `SELECT m.id, m.nombre, m.estado, m.activo, m.sector_id, s.nombre AS sector_nombre
+         FROM maquinas m
+         JOIN sectores s ON m.sector_id = s.id
+         WHERE m.id = $1
+         FOR UPDATE OF m`,
+        [maquinaId]
       );
-    }
 
-    // 2. Obtener el ID del tipo de intervención CORRECTIVO
-    const resTipo = await client.query(
-      "SELECT id FROM tipos_intervencion WHERE codigo = 'CORRECTIVO' LIMIT 1"
-    );
-    if (resTipo.rows.length === 0) {
-      await client.query('ROLLBACK');
-      console.error('Error de configuración: no existe el tipo CORRECTIVO en tipos_intervencion');
-      return c.json({ error: 'Error de configuración del sistema' }, 500);
-    }
-    const tipoCorrectivoId = resTipo.rows[0].id;
+      if (resM.rows.length === 0) {
+        throw new ErrorNegocio(404, 'MAQUINA_NO_ENCONTRADA', 'La máquina especificada no existe');
+      }
 
-    // 3. Crear la intervención en estado PENDIENTE
-    const resIntervencion = await client.query(
-      `INSERT INTO intervenciones (
-         maquina_id, tipo_intervencion_id, creado_por_usuario_id,
-         descripcion, estado, observaciones, fecha_creacion, actualizado_en
-       )
-       VALUES ($1, $2, $3, $4, 'PENDIENTE', $5, NOW(), NOW())
-       RETURNING id, maquina_id, estado, fecha_creacion, descripcion, observaciones`,
-      [maquinaId, tipoCorrectivoId, userId, descripcion, observaciones]
-    );
-    const intervencion = resIntervencion.rows[0];
+      const maquina = resM.rows[0];
+      if (!maquina.activo) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'No se pueden registrar fallas sobre máquinas inactivas');
+      }
 
-    // 4. Registrar en historial_estados_intervencion el estado inicial (NULL -> PENDIENTE)
-    await client.query(
-      `INSERT INTO historial_estados_intervencion (
-         intervencion_id, estado_anterior, estado_nuevo, cambiado_por_usuario_id, observacion, cambiado_en
-       )
-       VALUES ($1, NULL, 'PENDIENTE', $2, 'Registro inicial de falla', NOW())`,
-      [intervencion.id, userId]
-    );
-
-    let periodoDetencionId: number | null = null;
-
-    // 5. Si la falla detuvo la máquina, actualizar estado y abrir período de inactividad
-    if (detieneMaquina) {
-      // 5.1 Abrir período en intervencion_periodos_detencion
-      const resPeriodo = await client.query(
-        `INSERT INTO intervencion_periodos_detencion (
-           intervencion_id, maquina_id, desde, abierto_por_usuario_id, observacion
-         )
-         VALUES ($1, $2, NOW(), $3, 'Detención reportada al registrar la falla')
-         RETURNING id`,
-        [intervencion.id, maquinaId, userId]
-      );
-      periodoDetencionId = resPeriodo.rows[0].id;
-
-      // 5.2 Si la máquina no estaba ya detenida o fuera de servicio, actualizarla a DETENIDA
-      const estadoAnterior = maquina.estado;
-      if (estadoAnterior !== 'DETENIDA' && estadoAnterior !== 'FUERA_DE_SERVICIO') {
-        await client.query(
-          'UPDATE maquinas SET estado = $1, actualizado_en = NOW() WHERE id = $2',
-          ['DETENIDA', maquinaId]
-        );
-
-        // 5.3 Registrar trazabilidad en historial_estados_maquina
-        await client.query(
-          `INSERT INTO historial_estados_maquina (
-             maquina_id, estado_anterior, estado_nuevo, intervencion_id, motivo, cambiado_por_usuario_id, cambiado_en
-           )
-           VALUES ($1, $2, 'DETENIDA', $3, 'Máquina detenida por reporte de falla', $4, NOW())`,
-          [maquinaId, estadoAnterior, intervencion.id, userId]
+      // Validación de alcance sobre el sector de la máquina al crear
+      if (userScope === 'SECTORES' && !usuario.sectores.includes(Number(maquina.sector_id))) {
+        throw new ErrorNegocio(
+          403,
+          'PERMISO_INSUFICIENTE',
+          'No tienes autorización para registrar intervenciones en el sector de esta máquina'
         );
       }
-    }
 
-    await client.query('COMMIT');
+      // 2. Obtener tipo CORRECTIVO
+      const resTipo = await client.query(
+        "SELECT id FROM tipos_intervencion WHERE codigo = 'CORRECTIVO' LIMIT 1"
+      );
+      if (resTipo.rows.length === 0) {
+        throw new Error('Tipo CORRECTIVO no configurado');
+      }
+      const tipoCorrectivoId = resTipo.rows[0].id;
 
-    return c.json(
-      {
+      // 3. Insertar intervención en estado PENDIENTE
+      const resIntervencion = await client.query(
+        `INSERT INTO intervenciones (
+           maquina_id, tipo_intervencion_id, creado_por_usuario_id,
+           descripcion, estado, observaciones, fecha_creacion, actualizado_en
+         )
+         VALUES ($1, $2, $3, $4, 'PENDIENTE', $5, NOW(), NOW())
+         RETURNING id, maquina_id, estado, fecha_creacion, descripcion, observaciones`,
+        [maquinaId, tipoCorrectivoId, usuario.id, descripcion, observaciones]
+      );
+      const intervencion = resIntervencion.rows[0];
+
+      // 4. Registrar estado inicial en historial_estados_intervencion (NULL -> PENDIENTE)
+      await client.query(
+        `INSERT INTO historial_estados_intervencion (
+           intervencion_id, estado_anterior, estado_nuevo, cambiado_por_usuario_id, observacion, cambiado_en
+         )
+         VALUES ($1, NULL, 'PENDIENTE', $2, 'Registro inicial de falla', NOW())`,
+        [intervencion.id, usuario.id]
+      );
+
+      let periodoDetencionId: number | null = null;
+      let estadoMaquinaFinal = maquina.estado;
+
+      // 5. Si la falla detuvo la máquina, abrir período y recalcular estado
+      if (detieneMaquina) {
+        const resPeriodo = await client.query(
+          `INSERT INTO intervencion_periodos_detencion (
+             intervencion_id, maquina_id, desde, abierto_por_usuario_id, observacion
+           )
+           VALUES ($1, $2, NOW(), $3, 'Detención reportada al registrar la falla')
+           RETURNING id`,
+          [intervencion.id, maquinaId, usuario.id]
+        );
+        periodoDetencionId = Number(resPeriodo.rows[0].id);
+
+        const recalculo = await recalcularEstadoMaquina(client, maquinaId, {
+          usuarioId: usuario.id,
+          intervencionId: Number(intervencion.id),
+          motivo: 'Máquina detenida por reporte de falla',
+        });
+
+        estadoMaquinaFinal = recalculo.estadoNuevo;
+      }
+
+      // 6. Emitir eventos
+      const eventos: Array<{ tipo: string; payload: any }> = [
+        { tipo: 'FALLA_REGISTRADA', payload: { intervencionId: Number(intervencion.id) } },
+      ];
+      if (estadoMaquinaFinal !== maquina.estado) {
+        eventos.push({
+          tipo: 'MAQUINA_CAMBIO_ESTADO',
+          payload: { maquinaId, estadoAnterior: maquina.estado, estadoNuevo: estadoMaquinaFinal },
+        });
+      }
+      await registrarNotificaciones(client, eventos);
+
+      return {
         id: Number(intervencion.id),
         estado: intervencion.estado,
         descripcion: intervencion.descripcion,
@@ -157,54 +173,45 @@ intervencionesApp.post('/', requirePermission('INTERVENCIONES_CREAR'), async (c)
         maquina: {
           id: Number(maquina.id),
           nombre: maquina.nombre,
-          estado_actual: detieneMaquina ? 'DETENIDA' : maquina.estado,
+          estado_actual: estadoMaquinaFinal,
           sector: {
             id: Number(maquina.sector_id),
             nombre: maquina.sector_nombre,
           },
         },
-      },
-      201
-    );
+      };
+    });
+
+    return c.json(resultado, 201);
   } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('Error al registrar intervención:', error);
-    return c.json({ error: 'Error interno al registrar la intervención' }, 500);
-  } finally {
-    client.release();
+    return responderError(c, error);
   }
 });
 
 /**
  * GET /api/intervenciones
- * Lista intervenciones filtrando automáticamente según el alcance de visibilidad del usuario.
- * Soporta ?sin_asignar=true para la vista priorizada de fallas pendientes.
+ * Listado de intervenciones según alcance.
  */
 intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) => {
-  const userId = (c.get as any)('userId') as number;
+  const usuario = getUsuarioContext(c);
   const userScope = getUserScope(c, 'INTERVENCIONES_VER') || 'TODAS';
-  const userSectores = ((c.get as any)('userSectores') as number[]) || [];
   const sinAsignar = c.req.query('sin_asignar') === 'true';
 
   try {
     const conditions: string[] = ['i.eliminado_en IS NULL'];
     const params: any[] = [];
 
-    // 1. Aplicación estricta de alcance
     if (userScope === 'PROPIAS') {
-      params.push(userId);
+      params.push(usuario.id);
       conditions.push(`(i.creado_por_usuario_id = $${params.length} OR i.responsable_usuario_id = $${params.length})`);
     } else if (userScope === 'SECTORES') {
-      if (userSectores.length === 0) {
-        // Usuario sin sectores asignados no ve nada
+      if (usuario.sectores.length === 0) {
         return c.json([]);
       }
-      params.push(userSectores);
+      params.push(usuario.sectores);
       conditions.push(`m.sector_id = ANY($${params.length})`);
     }
-    // Si userScope === 'TODAS', no se agregan restricciones de alcance
 
-    // 2. Filtro opcional: Vista "Sin asignar"
     if (sinAsignar) {
       conditions.push("i.responsable_usuario_id IS NULL AND i.estado = 'PENDIENTE'");
     }
@@ -258,7 +265,7 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
       fecha_inicio: r.fecha_inicio,
       fecha_finalizacion: r.fecha_finalizacion,
       tiempo_inactividad_minutos: r.tiempo_inactividad_minutos,
-      detiene_maquina_actualmente: r.detiene_maquina_actualmente,
+      detiene_maquina_actualmente: Boolean(r.detiene_maquina_actualmente),
       maquina: {
         id: Number(r.maquina_id),
         nombre: r.maquina_nombre,
@@ -285,22 +292,21 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
 
     return c.json(result);
   } catch (error) {
-    console.error('Error listando intervenciones:', error);
-    return c.json({ error: 'Error interno del servidor al consultar intervenciones' }, 500);
+    return responderError(c, error);
   }
 });
 
 /**
- * GET /api/intervenciones/:id
- * Consulta el detalle completo de una intervención con verificación de alcance y auditoría de estados.
+ * 7.3 GET /api/intervenciones/:id
+ * Consulta de detalle: fuera de alcance devuelve 404 INTERVENCION_NO_ENCONTRADA.
+ * Historial ordenado por cambiado_en ASC, id ASC.
+ * Incluye lista de intervencion_auditoria.
  */
 intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c) => {
   const id = parseId(c.req.param('id'));
   if (!id) return badRequest(c, 'ID de intervención inválido');
 
-  const userId = (c.get as any)('userId') as number;
-  const userScope = getUserScope(c, 'INTERVENCIONES_VER') || 'TODAS';
-  const userSectores = ((c.get as any)('userSectores') as number[]) || [];
+  const usuario = getUsuarioContext(c);
 
   try {
     const resI = await pool.query(
@@ -308,11 +314,11 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
          i.id, i.descripcion, i.estado, i.ejecucion, i.observaciones,
          i.fecha_creacion, i.fecha_inicio, i.fecha_finalizacion,
          i.tiempo_inactividad_minutos, i.costo_mano_obra, i.costo_repuestos, i.costo_total_estimado,
-         i.eliminado_en,
+         i.eliminado_en, i.creado_por_usuario_id, i.responsable_usuario_id,
          m.id AS maquina_id, m.nombre AS maquina_nombre, m.codigo AS maquina_codigo, m.estado AS maquina_estado,
-         s.id AS sector_id, s.nombre AS sector_nombre,
-         uc.id AS creador_id, uc.legajo AS creador_legajo, uc.nombre AS creador_nombre,
-         ur.id AS responsable_id, ur.legajo AS responsable_legajo, ur.nombre AS responsable_nombre
+         m.sector_id, s.nombre AS sector_nombre,
+         uc.legajo AS creador_legajo, uc.nombre AS creador_nombre,
+         ur.legajo AS responsable_legajo, ur.nombre AS responsable_nombre
        FROM intervenciones i
        JOIN maquinas m ON i.maquina_id = m.id
        JOIN sectores s ON m.sector_id = s.id
@@ -323,33 +329,34 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
     );
 
     if (resI.rows.length === 0 || resI.rows[0].eliminado_en !== null) {
-      return c.json({ error: 'Intervención no encontrada' }, 404);
+      throw new ErrorNegocio(404, 'INTERVENCION_NO_ENCONTRADA', 'Intervención no encontrada');
     }
 
     const r = resI.rows[0];
-    const creadorId = Number(r.creador_id);
-    const responsableId = r.responsable_id ? Number(r.responsable_id) : null;
 
-    // Verificación de alcance
-    if (userScope === 'PROPIAS' && creadorId !== userId && responsableId !== userId) {
-      return c.json({ error: 'No tienes permiso para consultar esta intervención' }, 403);
-    }
-    if (userScope === 'SECTORES' && !userSectores.includes(Number(r.sector_id))) {
-      return c.json({ error: 'No tienes permiso para consultar intervenciones de este sector' }, 403);
+    // Verificación de alcance: si no puede verla, devolver 404 (no revelar que existe)
+    const visible = puedeVerIntervencion(usuario, {
+      creado_por_usuario_id: Number(r.creado_por_usuario_id),
+      responsable_usuario_id: r.responsable_usuario_id ? Number(r.responsable_usuario_id) : null,
+      sector_id: Number(r.sector_id),
+    });
+
+    if (!visible) {
+      throw new ErrorNegocio(404, 'INTERVENCION_NO_ENCONTRADA', 'Intervención no encontrada');
     }
 
-    // Historial de cambios de estado
+    // Historial de cambios de estado ordenado por cambiado_en ASC, id ASC
     const resHistorial = await pool.query(
       `SELECT h.id, h.estado_anterior, h.estado_nuevo, h.observacion, h.cambiado_en,
               u.id AS usuario_id, u.legajo AS usuario_legajo, u.nombre AS usuario_nombre
        FROM historial_estados_intervencion h
        JOIN usuarios u ON h.cambiado_por_usuario_id = u.id
        WHERE h.intervencion_id = $1
-       ORDER BY h.cambiado_en ASC`,
+       ORDER BY h.cambiado_en ASC, h.id ASC`,
       [id]
     );
 
-    // Períodos de detención asociados
+    // Períodos de detención
     const resPeriodos = await pool.query(
       `SELECT pd.id, pd.desde, pd.hasta, pd.observacion,
               ua.id AS abierto_id, ua.nombre AS abierto_nombre,
@@ -358,7 +365,18 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
        JOIN usuarios ua ON pd.abierto_por_usuario_id = ua.id
        LEFT JOIN usuarios uc ON pd.confirmado_por_usuario_id = uc.id
        WHERE pd.intervencion_id = $1
-       ORDER BY pd.desde ASC`,
+       ORDER BY pd.desde ASC, pd.id ASC`,
+      [id]
+    );
+
+    // Auditoría de intervenciones
+    const resAuditoria = await pool.query(
+      `SELECT a.id, a.tipo_evento, a.campo_modificado, a.valor_anterior, a.valor_nuevo, a.motivo, a.creado_en,
+              u.id AS usuario_id, u.legajo AS usuario_legajo, u.nombre AS usuario_nombre
+       FROM intervencion_auditoria a
+       JOIN usuarios u ON a.realizado_por_usuario_id = u.id
+       WHERE a.intervencion_id = $1
+       ORDER BY a.creado_en ASC, a.id ASC`,
       [id]
     );
 
@@ -383,13 +401,13 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
         },
       },
       creado_por: {
-        id: Number(r.creador_id),
+        id: Number(r.creado_por_usuario_id),
         legajo: r.creador_legajo,
         nombre: r.creador_nombre,
       },
-      responsable: r.responsable_id
+      responsable: r.responsable_usuario_id
         ? {
-            id: Number(r.responsable_id),
+            id: Number(r.responsable_usuario_id),
             legajo: r.responsable_legajo,
             nombre: r.responsable_nombre,
           }
@@ -415,10 +433,287 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
         abierto_por: { id: Number(p.abierto_id), nombre: p.abierto_nombre },
         confirmado_por: p.confirmado_id ? { id: Number(p.confirmado_id), nombre: p.confirmado_nombre } : null,
       })),
+      auditoria: resAuditoria.rows.map((a) => ({
+        id: Number(a.id),
+        tipo_evento: a.tipo_evento,
+        campo_modificado: a.campo_modificado,
+        valor_anterior: a.valor_anterior,
+        valor_nuevo: a.valor_nuevo,
+        motivo: a.motivo,
+        creado_en: a.creado_en,
+        realizado_por: {
+          id: Number(a.usuario_id),
+          legajo: a.usuario_legajo,
+          nombre: a.usuario_nombre,
+        },
+      })),
     });
   } catch (error) {
-    console.error('Error obteniendo detalle de intervención:', error);
-    return c.json({ error: 'Error interno del servidor al consultar detalle' }, 500);
+    return responderError(c, error);
+  }
+});
+
+/**
+ * 8. GET /api/intervenciones/:id/responsables-habilitados
+ * Lista usuarios activos con INTERVENCIONES_RECIBIR_ASIGNACION y visibilidad sobre la intervención
+ */
+intervencionesApp.get('/:id/responsables-habilitados', requirePermission('INTERVENCIONES_ASIGNAR'), async (c) => {
+  const id = parseId(c.req.param('id'));
+  if (!id) return badRequest(c, 'ID inválido');
+
+  const usuario = getUsuarioContext(c);
+
+  try {
+    // 1. Obtener la intervención y validar visibilidad del usuario actual
+    const resI = await pool.query(
+      `SELECT i.id, i.creado_por_usuario_id, i.responsable_usuario_id, i.eliminado_en, m.sector_id
+       FROM intervenciones i
+       JOIN maquinas m ON i.maquina_id = m.id
+       WHERE i.id = $1`,
+      [id]
+    );
+
+    if (resI.rows.length === 0 || resI.rows[0].eliminado_en !== null) {
+      throw new ErrorNegocio(404, 'INTERVENCION_NO_ENCONTRADA', 'Intervención no encontrada');
+    }
+
+    const rowI = resI.rows[0];
+    if (
+      !puedeVerIntervencion(usuario, {
+        creado_por_usuario_id: Number(rowI.creado_por_usuario_id),
+        responsable_usuario_id: rowI.responsable_usuario_id ? Number(rowI.responsable_usuario_id) : null,
+        sector_id: Number(rowI.sector_id),
+      })
+    ) {
+      throw new ErrorNegocio(404, 'INTERVENCION_NO_ENCONTRADA', 'Intervención no encontrada');
+    }
+
+    // 2. Consultar todos los usuarios activos
+    const resUsers = await pool.query(
+      'SELECT id, legajo, nombre FROM usuarios WHERE activo = TRUE ORDER BY nombre ASC'
+    );
+
+    const habilitados: Array<{ id: number; legajo: string; nombre: string }> = [];
+
+    for (const u of resUsers.rows) {
+      try {
+        const uHabilitado = await validarResponsableHabilitado(pool, Number(u.id), Number(rowI.sector_id));
+        habilitados.push(uHabilitado);
+      } catch {
+        // No es responsable habilitado para esta intervención
+      }
+    }
+
+    return c.json(habilitados);
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+/**
+ * 5.1 POST /api/intervenciones/:id/tomar
+ */
+intervencionesApp.post('/:id/tomar', async (c) => {
+  const id = parseId(c.req.param('id'));
+  if (!id) return badRequest(c, 'ID inválido');
+
+  const usuario = getUsuarioContext(c);
+
+  let body: any = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    // body opcional o vacío
+  }
+
+  const estadoEsperado = parseString(body.estado_esperado) || 'PENDIENTE';
+
+  try {
+    const res = await conTransaccion(async (client) => {
+      return tomarIntervencionServicio(client, id, usuario, estadoEsperado);
+    });
+    return c.json(res);
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+/**
+ * 5.2 PUT /api/intervenciones/:id/responsable
+ */
+intervencionesApp.put('/:id/responsable', async (c) => {
+  const id = parseId(c.req.param('id'));
+  if (!id) return badRequest(c, 'ID inválido');
+
+  const usuario = getUsuarioContext(c);
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return badRequest(c, 'El cuerpo debe ser un JSON válido');
+  }
+
+  const destinatarioId = parseId(body.usuario_id);
+  if (!destinatarioId) {
+    return badRequest(c, 'El usuario_id a asignar es requerido y debe ser un número entero');
+  }
+
+  const motivo = parseString(body.motivo);
+  const estadoEsperado = parseString(body.estado_esperado);
+  if (!estadoEsperado) {
+    throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
+  }
+
+  try {
+    const res = await conTransaccion(async (client) => {
+      return asignarResponsableServicio(client, id, usuario, destinatarioId, motivo, estadoEsperado);
+    });
+    return c.json(res);
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+/**
+ * 5.3 DELETE /api/intervenciones/:id/responsable
+ */
+intervencionesApp.delete('/:id/responsable', async (c) => {
+  const id = parseId(c.req.param('id'));
+  if (!id) return badRequest(c, 'ID inválido');
+
+  const usuario = getUsuarioContext(c);
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return badRequest(c, 'El cuerpo debe ser un JSON válido');
+  }
+
+  const motivo = parseString(body.motivo);
+  const estadoEsperado = parseString(body.estado_esperado);
+  if (!estadoEsperado) {
+    throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
+  }
+
+  try {
+    const res = await conTransaccion(async (client) => {
+      return desasignarResponsableServicio(client, id, usuario, motivo, estadoEsperado);
+    });
+    return c.json(res);
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+/**
+ * 6.1 POST /api/intervenciones/:id/iniciar (T1)
+ */
+intervencionesApp.post('/:id/iniciar', async (c) => {
+  const id = parseId(c.req.param('id'));
+  if (!id) return badRequest(c, 'ID inválido');
+
+  const usuario = getUsuarioContext(c);
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return badRequest(c, 'El cuerpo debe ser un JSON válido');
+  }
+
+  const estadoEsperado = parseString(body.estado_esperado);
+  if (!estadoEsperado) {
+    throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
+  }
+
+  const fechaInicio = parseString(body.fecha_inicio);
+  const observacion = parseString(body.observacion);
+
+  try {
+    const res = await conTransaccion(async (client) => {
+      return ejecutarTransicionServicio(client, id, usuario, 'INICIAR', {
+        estadoEsperado,
+        observacion,
+        fechaInicio,
+      });
+    });
+    return c.json(res);
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+/**
+ * 6.2 POST /api/intervenciones/:id/espera-repuestos (T4)
+ */
+intervencionesApp.post('/:id/espera-repuestos', async (c) => {
+  const id = parseId(c.req.param('id'));
+  if (!id) return badRequest(c, 'ID inválido');
+
+  const usuario = getUsuarioContext(c);
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return badRequest(c, 'El cuerpo debe ser un JSON válido');
+  }
+
+  const estadoEsperado = parseString(body.estado_esperado);
+  if (!estadoEsperado) {
+    throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
+  }
+
+  const observacion = parseString(body.observacion);
+
+  try {
+    const res = await conTransaccion(async (client) => {
+      return ejecutarTransicionServicio(client, id, usuario, 'ESPERAR_REPUESTOS', {
+        estadoEsperado,
+        observacion,
+      });
+    });
+    return c.json(res);
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+/**
+ * 6.3 POST /api/intervenciones/:id/reanudar (T5)
+ */
+intervencionesApp.post('/:id/reanudar', async (c) => {
+  const id = parseId(c.req.param('id'));
+  if (!id) return badRequest(c, 'ID inválido');
+
+  const usuario = getUsuarioContext(c);
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return badRequest(c, 'El cuerpo debe ser un JSON válido');
+  }
+
+  const estadoEsperado = parseString(body.estado_esperado);
+  if (!estadoEsperado) {
+    throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
+  }
+
+  const observacion = parseString(body.observacion);
+
+  try {
+    const res = await conTransaccion(async (client) => {
+      return ejecutarTransicionServicio(client, id, usuario, 'REANUDAR', {
+        estadoEsperado,
+        observacion,
+      });
+    });
+    return c.json(res);
+  } catch (error) {
+    return responderError(c, error);
   }
 });
 

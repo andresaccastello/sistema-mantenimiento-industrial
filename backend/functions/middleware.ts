@@ -2,8 +2,9 @@ import { createMiddleware } from 'hono/factory';
 import { jwt } from 'hono/jwt';
 import { pool } from './db.ts';
 import { JWT_SECRET } from './config.ts';
+import { resolverPermisosEfectivos, AlcancePermiso } from './intervenciones/permisos.ts';
 
-export type AlcancePermiso = 'PROPIAS' | 'SECTORES' | 'TODAS';
+export type { AlcancePermiso };
 
 const SCOPE_HIERARCHY: Record<AlcancePermiso, number> = {
   PROPIAS: 1,
@@ -29,53 +30,18 @@ export const dbVerify = createMiddleware(async (c, next) => {
   }
 
   try {
-    const [resUser, resProfilePerms, resUserPerms, resSectores] = await Promise.all([
-      pool.query('SELECT id, activo, perfil_id FROM usuarios WHERE id = $1', [userId]),
-      pool.query(
-        `SELECT pe.codigo, pp.alcance
-         FROM perfil_permiso pp
-         JOIN permisos pe ON pp.permiso_id = pe.id
-         JOIN usuarios u ON u.perfil_id = pp.perfil_id
-         WHERE u.id = $1`,
-        [userId]
-      ),
-      pool.query(
-        `SELECT pe.codigo, up.efecto, up.alcance
-         FROM usuario_permiso up
-         JOIN permisos pe ON up.permiso_id = pe.id
-         WHERE up.usuario_id = $1`,
-        [userId]
-      ),
-      pool.query('SELECT sector_id FROM usuario_sector WHERE usuario_id = $1', [userId]),
-    ]);
+    const info = await resolverPermisosEfectivos(pool, userId);
 
-    if (resUser.rows.length === 0 || !resUser.rows[0].activo) {
+    if (!info.activo) {
       return c.json({ error: 'Usuario inactivo o no existe' }, 401);
     }
 
-    // 1. Permisos base por perfil
-    const permissionsMap = new Map<string, AlcancePermiso>();
-    for (const row of resProfilePerms.rows) {
-      permissionsMap.set(row.codigo, (row.alcance as AlcancePermiso) || 'TODAS');
-    }
-
-    // 2. Excepciones por usuario (DENEGAR prevalece sobre cualquier concesión previa)
-    for (const row of resUserPerms.rows) {
-      if (row.efecto === 'DENEGAR') {
-        permissionsMap.delete(row.codigo);
-      } else if (row.efecto === 'CONCEDER') {
-        permissionsMap.set(row.codigo, (row.alcance as AlcancePermiso) || 'TODAS');
-      }
-    }
-
-    const userSectores = resSectores.rows.map((r: { sector_id: string | number }) => Number(r.sector_id));
-    const permissionsObj = Object.fromEntries(permissionsMap);
-    const permissionsList = Array.from(permissionsMap.keys());
+    const permissionsList = Object.keys(info.permisos);
 
     (c.set as any)('userId', userId);
     (c.set as any)('userPermissions', permissionsList);
-    (c.set as any)('userPermissionsMap', permissionsObj);
-    (c.set as any)('userSectores', userSectores);
+    (c.set as any)('userPermissionsMap', info.permisos);
+    (c.set as any)('userSectores', info.sectores);
 
   } catch (dbError) {
     console.error('Error validando usuario y permisos en DB:', dbError);
