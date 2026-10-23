@@ -1,0 +1,2916 @@
+
+
+
+
+SISTEMA DE MANTENIMIENTO INDUSTRIAL
+
+
+
+
+
+
+
+
+
+
+
+
+Alumno: Andrés Accastello - 46770759
+
+
+
+
+
+
+
+
+
+ÍNDICE
+
+
+ TOC \o "1-3" \h \z \u 1.Relevamiento del negocio PAGEREF _Toc241876767 \h 7
+
+
+1.1 Datos de la empresa PAGEREF _Toc241876768 \h 7
+
+
+1.2 Historia de la empresa PAGEREF _Toc241876769 \h 8
+
+
+1.3 Mercado PAGEREF _Toc241876770 \h 8
+
+
+1.4 Dimensionamiento PAGEREF _Toc241876771 \h 9
+
+
+2.Relevamiento estructural PAGEREF _Toc241876772 \h 9
+
+
+2.1 Organigrama funcional de GI-RE PAGEREF _Toc241876773 \h 10
+
+
+2.2 Descripción de áreas PAGEREF _Toc241876774 \h 10
+
+
+3. Relevamiento funcional PAGEREF _Toc241876775 \h 11
+
+
+3.1 Referencias de simbología PAGEREF _Toc241876776 \h 11
+
+
+3.2 Proceso 1: Mantenimiento correctivo PAGEREF _Toc241876777 \h 12
+
+
+3.3 Proceso 2: Mantenimiento preventivo PAGEREF _Toc241876778 \h 14
+
+
+3.4 Proceso 3: Gestión de repuestos PAGEREF _Toc241876779 \h 15
+
+
+4.Relevamiento funcional - Segunda Parte PAGEREF _Toc241876780 \h 16
+
+
+4.1 Usuarios principales del sistema PAGEREF _Toc241876781 \h 16
+
+
+4.2 Tabla de usuarios y permisos PAGEREF _Toc241876782 \h 17
+
+
+4.3 Funcionamiento general del sistema PAGEREF _Toc241876783 \h 17
+
+
+4.4 Información a registrar en una intervención PAGEREF _Toc241876784 \h 18
+
+
+4.5 Estados de una intervención PAGEREF _Toc241876785 \h 18
+
+
+4.6 Planificación de mantenimientos PAGEREF _Toc241876786 \h 19
+
+
+4.7 Gestión de repuestos y stock PAGEREF _Toc241876787 \h 19
+
+
+4.8 Consultas y reportes necesarios PAGEREF _Toc241876788 \h 20
+
+
+4.9 Documentación respaldatoria PAGEREF _Toc241876789 \h 20
+
+
+4.10 Relación con el sistema SAE PAGEREF _Toc241876790 \h 21
+
+
+4.11 Beneficios esperados PAGEREF _Toc241876791 \h 21
+
+
+5.Requerimientos del sistema PAGEREF _Toc241876792 \h 22
+
+
+5.1Requerimientos funcionales PAGEREF _Toc241876793 \h 22
+
+
+5.2Requerimientos no funcionales PAGEREF _Toc241876794 \h 25
+
+
+6.Relevamiento tecnológico PAGEREF _Toc241876795 \h 27
+
+
+6.1 Topología interna PAGEREF _Toc241876796 \h 27
+
+
+7.Diagnóstico y propuesta PAGEREF _Toc241876797 \h 29
+
+
+8.Propuesta general PAGEREF _Toc241876798 \h 30
+
+
+9.Modelo de Requerimientos y Ambiental PAGEREF _Toc241876799 \h 31
+
+
+9.1Definición de Objetivos, Límites y Alcance PAGEREF _Toc241876800 \h 31
+
+
+9.2Lista de Requerimientos PAGEREF _Toc241876801 \h 33
+
+
+9.3 Modelo de Caso de Uso Ambiental y descripción de actores PAGEREF _Toc241876802 \h 38
+
+
+9.4 Modelo de Paquetes PAGEREF _Toc241876803 \h 41
+
+
+9.5 Diagrama de Árbol de Casos de Uso PAGEREF _Toc241876804 \h 42
+
+
+10.Documentación del paquete Mantenimiento PAGEREF _Toc241876805 \h 44
+
+
+10.1 Definición y alcance del paquete PAGEREF _Toc241876806 \h 44
+
+
+10.2 Diagrama de Casos de Uso del paquete Mantenimiento PAGEREF _Toc241876807 \h 44
+
+
+ PAGEREF _Toc241876808 \h 45
+
+
+10.3 Diagrama de Clases del paquete Mantenimiento PAGEREF _Toc241876809 \h 45
+
+
+10.4 Diagrama de Estados de la clase IntervencionMantenimiento PAGEREF _Toc241876810 \h 46
+
+
+ PAGEREF _Toc241876811 \h 47
+
+
+10.5 Registrar necesidad de mantenimiento PAGEREF _Toc241876812 \h 47
+
+
+10.5.1 Lista de requerimientos PAGEREF _Toc241876813 \h 47
+
+
+10.5.2 Prototipo de interfaz PAGEREF _Toc241876814 \h 47
+
+
+10.5.3 Ficha del caso de uso PAGEREF _Toc241876815 \h 48
+
+
+10.5.4 Diagrama de asociaciones PAGEREF _Toc241876816 \h 48
+
+
+10.5.5 Diagrama de interacciones PAGEREF _Toc241876817 \h 49
+
+
+ PAGEREF _Toc241876818 \h 50
+
+
+10.6 Gestionar intervenciones PAGEREF _Toc241876819 \h 50
+
+
+10.6.1 Lista de requerimientos PAGEREF _Toc241876820 \h 50
+
+
+10.6.2 Prototipo de interfaz PAGEREF _Toc241876821 \h 51
+
+
+10.6.3 Ficha del caso de uso PAGEREF _Toc241876822 \h 51
+
+
+10.6.4 Diagrama de asociaciones PAGEREF _Toc241876823 \h 51
+
+
+ PAGEREF _Toc241876824 \h 52
+
+
+10.6.5 Diagrama de interacciones PAGEREF _Toc241876825 \h 52
+
+
+ PAGEREF _Toc241876826 \h 53
+
+
+10.7 Planificar mantenimientos PAGEREF _Toc241876827 \h 53
+
+
+10.7.1 Lista de requerimientos PAGEREF _Toc241876828 \h 53
+
+
+10.7.2 Prototipo de interfaz PAGEREF _Toc241876829 \h 54
+
+
+10.7.3 Ficha del caso de uso PAGEREF _Toc241876830 \h 54
+
+
+10.7.4 Diagrama de asociaciones PAGEREF _Toc241876831 \h 54
+
+
+10.7.5 Diagrama de interacciones PAGEREF _Toc241876832 \h 55
+
+
+10.8 Correspondencia y consistencia del modelo PAGEREF _Toc241876833 \h 55
+
+
+11.Glosario PAGEREF _Toc241876834 \h 56
+
+
+12.Anexos PAGEREF _Toc241876835 \h 57
+
+
+
+
+
+Relevamiento del negocio
+
+
+1.1 Datos de la empresa
+
+
+La empresa relevada es GI-RE S.A., su nombre de fantasía es el mismo que su razón social. La organización pertenece al rubro de la industria metalmecánica, desarrollando actividades vinculadas principalmente a la fabricación de partes, piezas y conjuntos para maquinaria agrícola.
+
+
+La empresa cuenta con una estructura física distribuida en oficinas administrativas y dos plantas productivas. En la Planta I se ubican sectores vinculados a logística interna, despacho, pañol, almacén de materias primas, almacén de despacho, mantenimiento y distintos sectores de maquinarias, entre ellos soldadura, soldadura robótica, plegado, corte láser de planos, corte láser de tubos, roscado, 
+balancinado
+, corte, laminado, plegado en caliente y perforado.
+
+
+Por su parte, la Planta II cuenta con oficina de programación de tornos CNC, pañol herramental para tornos CNC y sectores de maquinarias como tornos CNC, torno paralelo, corte, roscadora, laminadora, forja, 
+electroforjas
+ y prensas. Ambas plantas se encuentran separadas físicamente por una calle. 
+
+
+Ubicación: https://maps.app.goo.gl/M1z9tv9s29UZjYfq8
+
+
+Foto:
+
+
+
+
+
+1.2 Historia de la empresa
+
+
+GI-RE S.A. fue fundada en el año 1975 por José Luis Rena y Juan Luis Girardo. Sus comienzos se dieron en un contexto económico complejo para el país.
+
+
+La empresa inició sus actividades fabricando arandelas en el garaje de la casa de los padres de José Luis Rena, utilizando un balancín prestado. Con el paso del tiempo, la organización fue incorporando nuevas maquinarias, ampliando sus procesos productivos y diversificando su gama de productos.
+
+
+A partir de ese crecimiento, GI-RE S.A. logró contar con instalaciones propias y consolidarse como proveedora de partes, piezas y conjuntos para maquinaria agrícola. Actualmente, se encuentra afianzada dentro del sector metalmecánico, siendo una empresa proveedora de fábricas vinculadas principalmente a la producción de implementos agrícolas.
+
+
+La evolución de la empresa estuvo marcada por la incorporación progresiva de tecnología, nuevos procesos productivos y una mayor capacidad de respuesta frente a las necesidades de sus clientes.
+
+
+
+
+
+
+
+
+1.3 Mercado
+
+
+GI-RE S.A. desarrolla sus actividades dentro del mercado metalmecánico, orientado principalmente a la fabricación de partes, piezas y conjuntos destinados a maquinaria agrícola. Su producción se caracteriza por una amplia variedad de productos, muchos de ellos realizados a pedido del cliente, ya sea sobre plano o muestra.
+
+
+Entre sus productos estándar se destacan la línea de pies de apoyo de lanza, también conocidos como gatos, criques, varillas y tuercas roscadas por laminación.
+
+
+Sus principales clientes son fábricas de implementos agrícolas, especialmente empresas vinculadas a la fabricación de sembradoras y fumigadoras. Entre los clientes mencionados por la organización se encuentran 
+Agrometal
+, 
+Crucianelli
+, 
+Dolbi
+, Giorgi, 
+Comofra
+, 
+Metalfor
+, Víctor Juri, 
+Metlabert
+ y Akron.
+
+
+En cuanto a sus proveedores, la empresa trabaja con firmas vinculadas al abastecimiento de hierro, tubos, chapas, herramental CNC y gases para soldadura y corte láser. Entre ellos se mencionan 
+Sipar
+ Gerdau / 
+Rogiro
+ Aceros, Juan Navarro, 
+Birolo
+ y Sudeste Gases.
+
+
+La empresa considera que sus principales diferencias competitivas son la calidad, la atención y el servicio, la capacidad de respuesta frente a imprevistos o necesidades específicas, la predisposición para buscar soluciones y la mejora continua.
+
+
+
+
+
+
+
+
+1.4 Dimensionamiento
+
+
+GI-RE S.A. cuenta actualmente con aproximadamente 30 empleados y utiliza entre 80 y 90 máquinas industriales, incluyendo maquinarias principales, puentes grúas, 
+autoelevador
+, vehículos y herramientas menores.
+
+
+En relación con las fallas, reparaciones y mantenimientos, la empresa no cuenta actualmente con un registro formal y constante. La cantidad de intervenciones es variable, ya que depende de factores como la antigüedad de las máquinas, el uso intensivo, cortes de energía, paradas prolongadas o desperfectos imprevistos.
+
+
+Esta falta de registro sistemático representa una dificultad para analizar con precisión la frecuencia de fallas, los costos asociados y el historial de mantenimiento de cada máquina.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Relevamiento estructural
+
+GI-RE S.A. presenta una estructura propia de una 
+PyME
+ familiar, donde algunas responsabilidades pueden estar compartidas entre distintas personas o áreas. Según lo relevado, las áreas principales son: Dirección, Administración General, Ingeniería y Desarrollo, Gestión de la Producción, Logística, Producción y Mantenimiento.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+2.1 Organigrama funcional de GI-RE
+
+
+
+
+
+
+
+
+
+
+
+2.2 Descripción de áreas
+
+
+
+
+
+Dirección: se encarga de la gestión integral de la empresa, la toma de decisiones generales y la coordinación de las principales áreas. También interviene en decisiones vinculadas a compras, producción, mantenimiento y cuestiones financieras.
+
+
+
+
+
+Administración General: realiza tareas administrativas, contables, impositivas, financieras, de pagos, costos, compras, ventas, recepción y recursos humanos. Es un área de apoyo fundamental para el funcionamiento interno de la empresa.
+
+
+
+
+
+Ingeniería y Desarrollo: interviene en el desarrollo de productos y procesos, confección de planos, instructivos, procedimientos y documentación técnica. También participa en la gestión operativa del mantenimiento.
+
+
+
+
+
+Gestión de la Producción: se encarga del orden, planificación y seguimiento de la producción, coordinando las actividades necesarias para cumplir con los trabajos solicitados.
+
+
+
+
+
+Logística: realiza tareas vinculadas al movimiento de materiales, carga y descarga, despacho de productos, emisión de remitos, gestión de stock, pañol y tareas asociadas a higiene y seguridad.
+
+
+
+
+
+Producción: agrupa los distintos sectores productivos de la empresa, entre ellos soldadura, plegado, corte, corte láser, laminado, roscado, forjado, prensas y mecanizado CNC.
+
+
+
+
+
+Mantenimiento: se encarga de la gestión de trabajos, planificación, reparaciones, contacto con proveedores y técnicos externos, búsqueda de repuestos y gestión de manuales de maquinarias.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+3. Relevamiento funcional
+
+
+A partir de la información relevada, se identificaron tres procesos principales: Mantenimiento correctivo, mantenimiento preventivo, gestión de repuestos. 
+
+
+Estos procesos fueron seleccionados porque intervienen directamente en el funcionamiento de las máquinas, el registro de fallas, la planificación de tareas de mantenimiento y la disponibilidad de repuestos necesarios para las reparaciones.
+
+
+Actualmente, la empresa presenta dificultades en el registro y seguimiento de estas actividades. En varios casos, la información se comunica verbalmente o se intenta registrar en planillas Excel, lo cual genera pérdida de datos y falta de trazabilidad
+
+
+
+
+
+
+
+
+3.1 Referencias de simbología
+
+
+Simbología utilizada:
+
+
+
+
+
+Inicio / Fin: indica el comienzo o cierre del proceso.
+
+
+
+
+
+Actividad: representa una tarea realizada por una persona, área o sector.
+
+
+
+
+
+Decisión: indica una pregunta o punto de evaluación dentro del proceso, generalmente con opciones como “Sí” o “No”.
+
+
+
+
+
+Flecha: marca la dirección del flujo del proceso.
+
+
+
+
+3.2 Proceso 1: Mantenimiento correctivo
+
+
+El mantenimiento correctivo comienza cuando el operador detecta una falla en una máquina. Actualmente, la falla se informa de manera verbal a I+D, Dirección o Mantenimiento, sin un circuito formal definido.
+
+
+Luego, I+D o Dirección evalúa la situación y coordina la reparación, ya sea con personal interno o mediante soporte externo. Si se necesitan repuestos, la compra es solicitada o autorizada por Dirección o I+D.
+
+
+El registro de lo realizado se intenta llevar en Excel, con facturas o información verbal, pero el proceso resulta lento e incompleto, generando pérdida de datos. 
+
+
+Documentación asociada: facturas, registros en Excel, información verbal y comprobantes de repuestos.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+3.3 Proceso 2: Mantenimiento preventivo
+
+
+El mantenimiento preventivo no se realiza actualmente de forma general y planificada. La necesidad de mantenimiento se detecta por horas de uso, nivel de lubricantes, desgastes visibles o kilómetros recorridos en el caso de vehículos.
+
+
+En algunos equipos, como Corte Láser de Planos y Compresor, se utilizan planillas colocadas en la máquina. Sin embargo, el registro todavía es inicial y presenta dificultades por el uso de Excel y la falta de reporte constante. 
+
+
+Documentación asociada: planillas de máquina, Excel de mantenimiento, 
+checklists
+ y registros de revisión.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+3.4 Proceso 3: Gestión de repuestos
+
+
+La empresa no cuenta con un stock formal de repuestos, salvo elementos puntuales y menores. Cuando falta un repuesto, se producen demoras en reparaciones y atrasos productivos.
+
+
+La compra es solicitada o autorizada por Dirección o I+D. El ingreso se registra en el sistema contable SAE mediante factura, pero la salida por “Baja de Almacén” aún no está instrumentada. 
+
+
+Documentación asociada: facturas, remitos, presupuestos, planillas y registros del sistema SAE.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Relevamiento funcional - Segunda Parte
+
+
+A partir del primer relevamiento funcional realizado, se profundiza el análisis del sistema de mantenimiento industrial propuesto para GI-RE S.A. Esta segunda parte tiene como objetivo describir con mayor detalle el funcionamiento esperado del sistema, los usuarios principales, la información que deberá registrarse y las consultas necesarias para mejorar la gestión del mantenimiento.
+
+
+El sistema no tiene como finalidad reemplazar el funcionamiento general de la empresa ni convertirse en un sistema integral de gestión de órdenes de trabajo. Su propósito principal es centralizar y ordenar la información vinculada al mantenimiento industrial, permitiendo registrar máquinas, fallas, intervenciones, distintos tipos de mantenimiento, repuestos utilizados, costos asociados y documentación respaldatoria.
+
+
+
+
+
+4.1 Usuarios principales del sistema
+
+
+Según lo relevado, los usuarios principales del sistema serán el administrador, el responsable de mantenimiento, el operario y los usuarios de consulta de Dirección e I+D. Sus funciones estarán determinadas por perfiles y permisos configurables, que podrán adaptarse a las responsabilidades de cada usuario.
+
+
+El administrador será el encargado de gestionar la configuración general del sistema. Podrá administrar usuarios, perfiles, permisos, máquinas, sectores, tipos y criterios de mantenimiento, estados, repuestos y otros parámetros configurables.
+
+
+El responsable de mantenimiento será el encargado de gestionar y dar seguimiento a las necesidades e intervenciones de mantenimiento. Podrá consultar los registros de los operarios, planificar mantenimientos y registrar tareas, observaciones, repuestos utilizados, tiempos, costos y documentación asociada, según sus permisos.
+
+
+El operario será usuario directo del sistema. Podrá registrar fallas, anomalías o necesidades de mantenimiento desde un celular o una terminal a pie de máquina, y consultar la información para la cual tenga permisos asignados.
+
+
+Los usuarios de Dirección e I+D tendrán acceso principalmente a consultas, reportes e indicadores para apoyar la planificación y la toma de decisiones. Sus permisos podrán configurarse de acuerdo con las necesidades de cada usuario.
+
+
+
+
+
+
+
+
+
+
+
+4.2 Tabla de usuarios y permisos
+
+La siguiente tabla presenta las funciones principales de los usuarios como referencia para configurar sus perfiles y permisos. El ingreso al sistema se realizará utilizando el nombre del usuario y su número de legajo, siendo este último la clave de acceso.
+
+
+
+Usuario / Perfil
+
+Permisos principales
+
+Descripción
+
+Administrador
+
+Gestionar usuarios, perfiles, permisos, máquinas, sectores, tipos y criterios de mantenimiento, estados, repuestos y otros parámetros configurables.
+
+Administra la configuración general y la información necesaria para adaptar el sistema al funcionamiento de la empresa.
+
+Responsable de mantenimiento
+
+Gestionar intervenciones, planificar mantenimientos, actualizar estados, registrar tareas, repuestos, costos y tiempos, adjuntar documentación y consultar historiales.
+
+Realiza el seguimiento de las necesidades registradas y mantiene actualizada la información de las intervenciones.
+
+Operario
+
+Registrar fallas, anomalías o necesidades de mantenimiento y consultar la información habilitada por sus permisos.
+
+Accede directamente desde un celular o una terminal a pie de máquina para registrar las situaciones detectadas.
+
+Dirección / I+D
+
+Consultar reportes, indicadores, historial de máquinas, costos, fallas registradas y mantenimientos realizados.
+
+Accede principalmente a información para la planificación y la toma de decisiones, según los permisos asignados.
+
+
+
+
+4.3 Funcionamiento general del sistema
+
+
+El funcionamiento general del sistema comienza cuando se detecta una falla, anomalía o necesidad de mantenimiento en una máquina. El operario podrá registrar directamente esta situación desde un celular o una terminal a pie de máquina, identificando el equipo y describiendo lo detectado.
+
+
+El responsable de mantenimiento podrá consultar las necesidades registradas y gestionar las intervenciones correspondientes. En cada intervención se identificará la máquina, el responsable, el tipo de mantenimiento, la fecha, la descripción y el estado inicial, junto con los demás datos necesarios para su seguimiento.
+
+
+Durante el desarrollo del mantenimiento, el responsable podrá actualizar el estado, registrar tareas y observaciones, indicar repuestos utilizados, cargar tiempos y costos y adjuntar documentación respaldatoria. Al finalizar, se dejará constancia del trabajo realizado y su resultado, conservando la información en el historial de la máquina.
+
+
+Las intervenciones también podrán corresponder a mantenimientos programados según los criterios definidos para cada máquina o tipo de mantenimiento. El sistema permitirá configurar avisos relacionados con mantenimientos previstos, vencimientos, intervenciones pendientes y otros eventos.
+
+
+Este circuito permitirá que la empresa cuente con información organizada y consultable, evitando depender únicamente de comunicaciones verbales, planillas incompletas o comprobantes dispersos.
+
+
+
+
+
+
+
+
+4.4 Información a registrar en una intervención
+
+
+Cada intervención de mantenimiento deberá contener la información necesaria para identificar qué ocurrió, sobre qué máquina, quién intervino, cuánto tiempo demandó y qué costos generó.
+
+
+Los datos principales a registrar serán:
+
+
+Máquina afectada.
+
+
+Sector donde se encuentra la máquina.
+
+
+Tipo de mantenimiento.
+
+
+Fecha de creación.
+
+
+Responsable asignado.
+
+
+Usuario que registra la intervención.
+
+
+Descripción de la falla o necesidad detectada.
+
+
+Estado de la intervención.
+
+
+Fecha de inicio y fecha de finalización.
+
+
+Tiempos de trabajo y de inactividad de la máquina, cuando corresponda.
+
+
+Repuestos utilizados y cantidades.
+
+
+Costo de mano de obra, si corresponde.
+
+
+Costo de repuestos utilizados.
+
+
+Costo total registrado de la intervención.
+
+
+Observaciones.
+
+
+Documentación respaldatoria asociada.
+
+
+Esta información permitirá construir un historial por máquina y facilitará el análisis posterior de fallas, costos y mantenimientos realizados.
+
+
+
+
+
+
+
+
+4.5 Estados de una intervención
+
+
+Para ordenar el seguimiento de los trabajos, cada intervención contará con un estado. El sistema permitirá definir y actualizar estos estados de acuerdo con la configuración y los permisos establecidos.
+
+
+Como referencia inicial, se contemplan los siguientes estados:
+
+
+Pendiente: la intervención fue registrada, pero todavía no comenzó el trabajo.
+
+
+En proceso: el responsable ya tomó la intervención y se encuentra trabajando sobre la máquina o coordinando la reparación.
+
+
+En espera de repuestos: la intervención no puede finalizar porque falta uno o más repuestos necesarios.
+
+
+Finalizada: la reparación, revisión o tarea prevista fue realizada y se dejó constancia del resultado.
+
+
+Cancelada: la intervención fue anulada o no corresponde continuarla.
+
+
+El uso de estados permitirá mejorar el seguimiento de los trabajos pendientes, identificar demoras y conocer qué máquinas se encuentran detenidas o con mantenimiento en curso.
+
+
+
+
+
+
+
+
+4.6 Planificación de mantenimientos
+
+
+El sistema permitirá administrar distintos tipos de mantenimiento, incluyendo el correctivo, el preventivo y otros que puedan incorporarse según las necesidades de la organización. También permitirá programar mantenimientos futuros para mejorar la organización de las tareas y reducir fallas y paradas imprevistas.
+
+
+La planificación se realizará mediante criterios configurables, como fecha, períodos de tiempo, horas de uso, kilómetros recorridos u otros que puedan incorporarse. El criterio se definirá de acuerdo con las características de la máquina y el tipo de mantenimiento.
+
+
+Según lo relevado, existe una preferencia por la planificación mediante períodos de tiempo. El sistema contemplará esta modalidad y permitirá utilizar otros criterios cuando las necesidades de mantenimiento lo requieran.
+
+
+Cada mantenimiento programado deberá estar asociado a una máquina y podrá incluir una descripción de la tarea, el tipo de mantenimiento, el criterio y la frecuencia o valor previsto, la fecha estimada cuando corresponda, el responsable y las observaciones. Una vez realizado, deberá quedar registrado como una intervención dentro del historial correspondiente.
+
+
+
+
+
+4.7 Gestión de repuestos y stock
+
+
+El sistema permitirá administrar los repuestos vinculados al mantenimiento industrial, registrar sus ingresos y egresos y consultar las cantidades disponibles. La gestión contemplará su utilización en las intervenciones y la conservación de los costos históricos.
+
+
+Cada repuesto contará con información como nombre, proveedor, cantidad disponible y costos registrados. El sistema conservará los cambios de costo o precio a lo largo del tiempo, permitiendo consultar los valores históricos correspondientes.
+
+
+Cuando un repuesto sea utilizado en una intervención, se registrarán la cantidad y el costo asociado, y se descontará del stock disponible. La utilización quedará vinculada a la intervención y a la máquina correspondiente, permitiendo conocer su participación en el costo total del mantenimiento.
+
+
+Esta funcionalidad ayudará a reducir demoras por falta de repuestos, mejorar la planificación de compras y conocer el gasto histórico asociado a cada máquina.
+
+
+
+
+
+
+
+
+
+
+
+4.8 Consultas y reportes necesarios
+
+
+Uno de los objetivos principales del sistema será brindar información útil para la toma de decisiones. Por este motivo, deberá permitir consultar reportes relacionados con fallas, mantenimientos, costos, tiempos y repuestos.
+
+
+Entre los reportes más importantes se identifican:
+
+
+Historial económico por máquina.
+
+
+Tiempo de inactividad por máquina.
+
+
+Fallas históricas registradas.
+
+
+Cantidad total de fallas por período.
+
+
+Cantidad total de mantenimientos realizados.
+
+
+Costos totales de mantenimiento.
+
+
+Dinero utilizado en repuestos.
+
+
+Repuestos más utilizados.
+
+
+Máquinas con mayor cantidad de intervenciones.
+
+
+Intervenciones pendientes o en proceso.
+
+
+Estos reportes permitirán a la empresa detectar máquinas críticas, evaluar costos de mantenimiento, analizar la frecuencia de fallas y tomar mejores decisiones sobre reparaciones, compras o reemplazos.
+
+
+
+
+
+
+
+
+4.9 Documentación respaldatoria
+
+
+El sistema deberá permitir adjuntar o referenciar documentación respaldatoria asociada a las máquinas y a las intervenciones de mantenimiento. Esta documentación puede incluir facturas, remitos, presupuestos, planillas, comprobantes, fotografías, manuales o capturas del sistema SAE.
+
+
+En el relevamiento actual se cuenta con documentación de respaldo como planillas, facturas, remitos e imágenes relacionadas con la empresa, además de una captura del sistema SAE incorporada en los anexos. Estos elementos permiten identificar la documentación utilizada actualmente para respaldar compras y actividades de mantenimiento.
+
+
+La incorporación de esta documentación permitirá respaldar las intervenciones realizadas y mejorar la trazabilidad de los mantenimientos, repuestos y costos asociados.
+
+
+
+
+
+
+
+
+4.10 Relación con el sistema SAE
+
+
+El sistema de mantenimiento propuesto no reemplazará al sistema contable SAE. El SAE continuará siendo utilizado para registrar facturas, compras y movimientos contables correspondientes.
+
+
+La relación entre ambos sistemas será de apoyo documental. El sistema de mantenimiento podrá tomar como 
+referencia comprobantes
+ o capturas provenientes del SAE, especialmente en casos vinculados a compras de repuestos o facturas asociadas a reparaciones.
+
+
+De esta manera, el sistema propuesto se enfocará únicamente en la gestión del mantenimiento industrial, mientras que el SAE continuará cumpliendo su función contable y administrativa.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+4.11 Beneficios esperados
+
+
+La implementación del sistema permitirá mejorar la organización interna del mantenimiento industrial en GI-RE S.A. Al centralizar la información, se reducirá la pérdida de datos y se facilitará la consulta del historial de cada máquina.
+
+
+También permitirá conocer con mayor precisión los costos de mantenimiento, los repuestos utilizados, los tiempos de inactividad y la frecuencia de fallas. Esta información será útil para anticipar problemas, planificar mantenimientos y tomar decisiones basadas en datos.
+
+
+En conclusión, el sistema propuesto busca resolver una necesidad concreta de la empresa: ordenar el registro y seguimiento del mantenimiento industrial, manteniendo una solución simple, práctica y adaptada al funcionamiento real de la organización.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Requerimientos del sistema
+
+
+A partir del relevamiento realizado, se identifican los principales requerimientos que deberá contemplar el Sistema de Mantenimiento Industrial. Estos requerimientos surgen de las necesidades detectadas en la empresa y del funcionamiento esperado para la gestión de máquinas, intervenciones, mantenimientos preventivos, repuestos, costos, documentación y reportes.
+
+
+
+
+
+Los requerimientos se dividen en funcionales y no funcionales. Los requerimientos funcionales describen las acciones que el sistema debe permitir realizar. Los requerimientos no funcionales describen condiciones de uso, seguridad, accesibilidad, rendimiento y características generales que deberá cumplir la solución.
+
+
+
+
+
+
+
+
+Requerimientos funcionales
+
+
+RF-01 - Gestión de usuarios
+
+
+El sistema deberá permitir gestionar usuarios con distintos perfiles de acceso, principalmente administrador, responsable de mantenimiento y usuarios de consulta para Dirección o I+D.
+
+
+
+
+
+RF-02 - Inicio de sesión
+
+
+El sistema deberá permitir el ingreso mediante usuario y contraseña, diferenciando las funciones disponibles según el perfil asignado.
+
+
+
+
+
+RF-03 - Gestión de máquinas
+
+
+El sistema deberá permitir registrar, modificar y consultar máquinas industriales, indicando datos básicos como nombre, sector, tipo, estado, ubicación y documentación asociada.
+
+
+
+
+
+RF-04 - Gestión de sectores
+
+
+El sistema deberá permitir registrar y consultar los sectores donde se encuentran ubicadas las máquinas, para facilitar la identificación del lugar en el que ocurre una falla o mantenimiento.
+
+
+
+
+
+RF-05 - Registro de intervenciones
+
+
+El sistema deberá permitir registrar intervenciones de mantenimiento sobre una máquina determinada, indicando fecha, responsable, descripción de la falla o necesidad detectada, tipo de intervención y observaciones.
+
+
+
+
+
+RF-06 - Actualización de estados
+
+
+El sistema deberá permitir actualizar el estado de una intervención. Los estados principales serán: pendiente, en proceso, en espera de repuestos, finalizada y cancelada.
+
+
+
+
+
+RF-07 - Registro de mantenimiento correctivo
+
+
+El sistema deberá permitir registrar mantenimientos correctivos originados por fallas, desperfectos o problemas detectados durante el uso de una máquina.
+
+
+
+
+
+RF-08 - Registro de mantenimiento preventivo
+
+
+El sistema deberá permitir registrar y planificar mantenimientos preventivos, principalmente por fecha o período de tiempo, con la posibilidad de asociarlos a una máquina y a un responsable.
+
+
+
+
+
+RF-09 - Gestión básica de repuestos
+
+
+El sistema deberá permitir registrar repuestos con datos básicos como nombre, proveedor, costo y cantidad disponible.
+
+
+
+
+
+RF-10 - Asociación de repuestos a intervenciones
+
+
+El sistema deberá permitir asociar uno o más repuestos utilizados a una intervención de mantenimiento, registrando cantidad, costo y máquina relacionada.
+
+
+
+
+
+RF-11 - Control básico de stock
+
+
+El sistema deberá permitir consultar la disponibilidad de repuestos y descontar del stock aquellos que sean utilizados en una intervención.
+
+
+
+
+
+RF-12 - Registro de costos
+
+
+El sistema deberá permitir registrar costos asociados a una intervención, incluyendo costo de repuestos, costo de mano de obra si corresponde y costo total estimado.
+
+
+
+
+
+RF-13 - Registro de tiempos de intervención
+
+
+El sistema deberá permitir registrar fecha de inicio, fecha de finalización y tiempo de inactividad asociado a una máquina, cuando corresponda.
+
+
+
+
+
+RF-14 - Adjuntar documentación respaldatoria
+
+
+El sistema deberá permitir adjuntar o referenciar documentación relacionada con una intervención, como facturas, remitos, presupuestos, planillas, comprobantes, fotografías, manuales o capturas del sistema SAE.
+
+
+
+
+
+RF-15 - Consulta de historial por máquina
+
+
+El sistema deberá permitir consultar el historial de mantenimiento de cada máquina, incluyendo fallas registradas, intervenciones realizadas, repuestos utilizados, costos y observaciones.
+
+
+
+
+
+RF-16 - Consulta de intervenciones pendientes
+
+
+El sistema deberá permitir consultar las intervenciones pendientes, en proceso o en espera de repuestos, para facilitar el seguimiento de trabajos no finalizados.
+
+
+
+
+
+RF-17 - Generación de reportes
+
+
+El sistema deberá permitir generar reportes básicos sobre fallas, mantenimientos, costos, repuestos utilizados, máquinas con mayor cantidad de intervenciones y tiempos de inactividad.
+
+
+
+
+
+RF-18 - Consulta para Dirección e I+D
+
+
+El sistema deberá permitir que Dirección e Ingeniería y Desarrollo consulten información relevante para la toma de decisiones, como historial económico por máquina, costos totales, fallas frecuentes y trabajos realizados.
+
+
+
+
+
+RF-19 - Relación documental con SAE
+
+
+El sistema deberá permitir utilizar comprobantes o capturas provenientes del sistema SAE como respaldo documental, sin reemplazar sus funciones contables o administrativas.
+
+
+
+
+
+RF-20 - Búsqueda y filtrado de información
+
+
+El sistema deberá permitir buscar o filtrar información por máquina, sector, fecha, responsable, estado, tipo de intervención o repuesto utilizado.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Requerimientos no funcionales
+
+
+RNF-01 - Simplicidad de uso
+
+
+El sistema deberá contar con una interfaz simple y clara, adaptada a usuarios con distintos niveles de conocimiento técnico.
+
+
+
+
+
+RNF-02 - Acceso web
+
+
+El sistema deberá funcionar como una aplicación web, accesible desde equipos conectados a la red interna de la empresa mediante un navegador.
+
+
+
+
+
+RNF-03 - Base de datos centralizada
+
+
+La información deberá almacenarse en una base de datos centralizada, permitiendo consultar los datos desde distintos equipos autorizados.
+
+
+
+
+
+RNF-04 - Seguridad de acceso
+
+
+El sistema deberá restringir el acceso mediante usuario y contraseña, evitando que personas no autorizadas puedan visualizar o modificar información.
+
+
+
+
+
+RNF-05 - Permisos por perfil
+
+
+El sistema deberá diferenciar las funciones disponibles según el perfil de usuario, evitando que todos los usuarios tengan acceso completo a la información o configuración del sistema.
+
+
+
+
+
+RNF-06 - Integridad de la información
+
+
+El sistema deberá evitar registros incompletos en datos importantes, como máquina, fecha, responsable, descripción de la intervención y estado.
+
+
+
+
+
+RNF-07 - Disponibilidad interna
+
+
+El sistema deberá estar disponible para su uso dentro de la empresa durante la jornada laboral, permitiendo registrar y consultar intervenciones cuando sea necesario.
+
+
+
+
+
+RNF-08 - Resguardo de información
+
+
+La información registrada deberá poder respaldarse periódicamente para reducir el riesgo de pérdida de datos.
+
+
+
+
+
+RNF-09 - Trazabilidad
+
+
+El sistema deberá permitir mantener un seguimiento de las intervenciones realizadas, sus estados, responsables, repuestos utilizados y documentación asociada.
+
+
+
+
+
+RNF-10 - Rendimiento aceptable
+
+
+El sistema deberá responder en tiempos adecuados para operaciones habituales, como registrar una intervención, consultar una máquina o generar un reporte básico.
+
+
+
+
+
+RNF-11 - Escalabilidad inicial
+
+
+El sistema deberá permitir una carga progresiva de máquinas, repuestos, usuarios e intervenciones, contemplando el crecimiento futuro de la información.
+
+
+
+
+
+RNF-12 - Compatibilidad con equipos existentes
+
+
+El sistema deberá poder utilizarse desde los equipos informáticos disponibles en la empresa, sin requerir hardware especializado.
+
+
+
+
+
+RNF-13 - Confidencialidad
+
+
+La información técnica, comercial y documental registrada en el sistema deberá utilizarse únicamente para fines internos de la empresa y del proyecto.
+
+
+
+
+
+RNF-14 - Mantenimiento del sistema
+
+
+El sistema deberá permitir futuras modificaciones o ampliaciones, como nuevos reportes, nuevos tipos de intervención o mejoras en la gestión de repuestos.
+
+
+
+
+
+RNF-15 - Alcance limitado
+
+
+El sistema no deberá reemplazar al sistema contable SAE, ni incluir facturación, pagos, impuestos, gestión integral de producción, ventas, clientes, sensores industriales, 
+IoT
+ o control automático de máquinas.
+
+
+
+
+
+5.3 Alcance de los requerimientos
+
+
+
+
+
+Los requerimientos definidos corresponden a una primera versión del Sistema de Mantenimiento Industrial. El objetivo principal es resolver las necesidades centrales detectadas durante el relevamiento, evitando incorporar funciones demasiado complejas que dificulten la implementación inicial.
+
+
+
+
+
+Por este motivo, se priorizan las funciones relacionadas con el registro de máquinas, intervenciones, mantenimientos preventivos, repuestos, costos, documentación respaldatoria y reportes básicos. De esta manera, el sistema podrá aportar orden, trazabilidad y mejor información para la toma de decisiones, manteniendo un alcance realista y adecuado al funcionamiento actual de GI-RE S.A.
+
+
+
+
+
+
+
+
+Relevamiento tecnológico
+
+
+6.1 Topología interna 
+
+
+
+
+
+La topología propuesta representa una solución web de uso interno para GI-RE S.A. Los usuarios acceden al sistema desde equipos ubicados en Planta I y Planta II, conectados a la red interna de la empresa mediante LAN o 
+WiFi
+.
+
+El sistema se compone de un servidor de aplicación, donde se ejecuta la lógica principal del sistema web/API, y una base de datos centralizada donde se almacenan máquinas, fallas, intervenciones, repuestos, costos, usuarios y reportes. También se contempla un almacenamiento de documentación respaldatoria, como facturas, remitos, planillas, comprobantes y capturas.
+
+El sistema SAE se representa como una referencia externa, ya que no será reemplazado por el sistema de mantenimiento. Su función será servir como apoyo documental para compras, facturas o movimientos vinculados a repuestos y reparaciones.
+
+
+
+
+En cuanto al hardware, se utilizan equipos de escritorio y/o notebooks para tareas administrativas, consultas, carga de información y uso de sistemas internos. También se cuenta con impresoras y equipamiento de apoyo para la emisión o digitalización de documentación, como facturas, remitos, planillas o comprobantes. El sistema propuesto no requiere hardware industrial específico, ya que funcionará como una solución web accesible desde los equipos disponibles en la empresa.
+
+
+Respecto a la conectividad, GI-RE S.A. posee dos plantas físicas separadas por una calle, por lo que resulta importante contar con acceso interno a la información desde distintos sectores. La solución propuesta contempla el uso de una red interna mediante LAN o 
+WiFi
+, donde los usuarios podrán ingresar al sistema desde 
+PCs
+ o notebooks conectadas a la empresa. La topología interna ya presentada muestra esta relación entre usuarios, red interna, servidor de aplicación, base de datos centralizada, almacenamiento documental y el sistema SAE como referencia externa.
+
+
+En relación con el software, la empresa utiliza el sistema SAE para tareas contables, compras y facturación. También se emplean planillas de cálculo, principalmente Excel, para registros parciales de mantenimiento, costos o controles. Estas herramientas sirven como apoyo, pero no permiten llevar un seguimiento completo del historial de máquinas, intervenciones, repuestos y costos.
+
+
+Como tecnología aplicable, se propone una aplicación web interna con base de datos centralizada, acceso por usuarios y permisos, almacenamiento de documentación respaldatoria, reportes básicos y copias de seguridad. Esta tecnología permite aprovechar los equipos existentes, ordenar la información y facilitar la consulta desde distintos sectores de la empresa sin incorporar sensores industriales, 
+IoT
+ ni control automático de máquinas.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Diagnóstico y propuesta
+
+
+A partir del relevamiento realizado, se identificaron distintos puntos débiles vinculados a la gestión informática del mantenimiento industrial. A continuación, se presenta el diagnóstico junto con la propuesta de solución correspondiente.
+
+
+Diagnóstico
+
+
+Propuesta
+
+
+No existe un registro formal y centralizado de fallas, reparaciones y mantenimientos.
+
+
+Implementar un sistema de mantenimiento industrial que permita registrar intervenciones por máquina.
+
+
+La información se comunica verbalmente o queda dispersa en planillas y comprobantes.
+
+
+Centralizar la información en una base de datos única, accesible desde la red interna.
+
+
+No se cuenta con un historial confiable de mantenimiento por máquina.
+
+
+Incorporar consultas de historial con fallas, reparaciones, repuestos utilizados, costos y observaciones.
+
+
+El mantenimiento preventivo no se encuentra planificado de manera general.
+
+
+Permitir la planificación de mantenimientos preventivos por fecha o período.
+
+
+La gestión de repuestos es limitada y no permite conocer con claridad disponibilidad y costos.
+
+
+Registrar repuestos, cantidades disponibles, proveedores, costos y uso en cada intervención.
+
+
+No se conoce con precisión el costo económico de mantenimiento por máquina.
+
+
+Registrar costos de repuestos, mano de obra si corresponde y costo total estimado de cada intervención.
+
+
+La documentación respaldatoria se encuentra distribuida entre facturas, remitos, planillas y SAE.
+
+
+Adjuntar o referenciar documentación dentro de cada intervención de mantenimiento.
+
+
+Dirección e I+D no cuentan con reportes simples para analizar fallas, costos y máquinas críticas.
+
+
+Generar reportes de fallas, mantenimientos, costos, repuestos utilizados y trabajos pendientes.
+
+
+El sistema SAE cumple funciones contables, pero no gestiona específicamente el mantenimiento industrial.
+
+
+Mantener SAE como respaldo documental y utilizar el nuevo sistema para la gestión de mantenimiento.
+
+
+El diagnóstico evidencia que el principal problema no es la ausencia de tareas de mantenimiento, sino la falta de un sistema que permita registrar, ordenar y consultar la información generada por esas tareas. La propuesta busca resolver esta situación mediante una solución web simple, centralizada y adaptada al funcionamiento real de GI-RE S.A.
+
+
+
+
+
+
+
+
+Propuesta general
+
+
+Se propone desarrollar un Sistema de Mantenimiento Industrial para GI-RE S.A., orientado a centralizar y ordenar la información vinculada a máquinas, fallas, intervenciones, mantenimientos preventivos, repuestos, costos, documentación respaldatoria y reportes.
+
+
+El sistema tendrá como objetivo principal mejorar la trazabilidad del mantenimiento industrial, evitando la pérdida de información generada por comunicaciones verbales, registros incompletos o planillas dispersas. La solución no reemplazará al sistema contable SAE, ni buscará abarcar la gestión integral de producción, ventas, clientes o facturación. Su alcance estará enfocado específicamente en el mantenimiento de máquinas y equipos industriales.
+
+
+Los módulos principales propuestos son:
+
+
+Gestión de usuarios y permisos: permitirá administrar perfiles de acceso, principalmente administrador, responsable de mantenimiento y usuarios de consulta para Dirección o I+D.
+
+
+Gestión de máquinas y sectores: permitirá registrar máquinas industriales, su ubicación, sector, estado, tipo y documentación asociada.
+
+
+Registro de intervenciones: permitirá cargar fallas, reparaciones, mantenimientos correctivos, observaciones, responsables, estados, fechas, tiempos y documentación respaldatoria.
+
+
+Mantenimiento preventivo: permitirá planificar y registrar tareas preventivas por fecha o período, con el objetivo de reducir fallas inesperadas y paradas de producción.
+
+
+Gestión básica de repuestos: permitirá registrar repuestos, proveedores, costos, cantidades disponibles y repuestos utilizados en cada intervención.
+
+
+Gestión de costos: permitirá registrar costos asociados a cada mantenimiento, incluyendo repuestos, mano de obra si corresponde y costo total estimado.
+
+
+Documentación respaldatoria: permitirá adjuntar o referenciar facturas, remitos, presupuestos, planillas, comprobantes, fotografías, manuales o capturas del sistema SAE.
+
+
+Consultas e historial: permitirá consultar el historial de mantenimiento por máquina, responsable, período, tipo de intervención o estado.
+
+
+Reportes: permitirá generar información útil para Dirección, I+D y Mantenimiento, como historial económico por máquina, fallas frecuentes, tiempos de inactividad, repuestos utilizados, costos totales y trabajos pendientes.
+
+
+La propuesta busca brindar una herramienta simple y práctica, adecuada a una 
+PyME
+ familiar con responsabilidades compartidas entre distintas áreas. Su implementación permitirá mejorar la organización interna, reducir la pérdida de información, facilitar la toma de decisiones y contar con datos confiables sobre el estado y mantenimiento de las máquinas.
+
+
+
+
+
+
+
+
+Modelo de Requerimientos y Ambiental
+
+
+Definición de Objetivos, Límites y Alcance 
+
+
+Objetivo general
+
+
+Desarrollar un Sistema de Mantenimiento Industrial para GI-RE S.A. que permita centralizar y gestionar la información relacionada con el mantenimiento de máquinas y equipos, facilitando el registro, seguimiento y consulta de las actividades realizadas dentro de la organización.
+
+
+El sistema buscará mejorar la trazabilidad de las intervenciones, reducir la pérdida de información y brindar datos confiables que permitan analizar el estado, historial y costos asociados al mantenimiento de las máquinas.
+
+
+
+
+
+
+
+
+
+
+
+
+Objetivos específicos
+
+
+
+
+
+Permitir el registro y administración de máquinas y equipos de la organización.
+
+
+Permitir que los operarios registren directamente fallas o necesidades de mantenimiento desde dispositivos móviles o terminales disponibles en planta.
+
+
+Gestionar distintos tipos de mantenimiento, permitiendo que sus características y criterios puedan adaptarse a las necesidades de cada máquina.
+
+
+Registrar y realizar el seguimiento de las intervenciones efectuadas sobre cada equipo.
+
+
+Mantener un historial completo de mantenimientos e intervenciones por máquina.
+
+
+Gestionar repuestos, disponibilidad, utilización y costos asociados.
+
+
+Registrar documentación respaldatoria relacionada con los mantenimientos.
+
+
+Permitir la configuración de usuarios, perfiles y permisos de acceso.
+
+
+Generar consultas, reportes e indicadores que faciliten la toma de decisiones.
+
+
+Centralizar la información actualmente distribuida entre comunicaciones verbales, planillas y documentación administrativa.
+
+Alcance del sistema
+
+
+El Sistema de Mantenimiento Industrial abarcará la gestión de la información relacionada con máquinas, mantenimientos, intervenciones, repuestos, usuarios, documentación y reportes.
+
+
+Los operarios podrán ingresar al sistema desde un celular o desde una terminal disponible en planta para registrar una falla o necesidad de mantenimiento. Cada usuario contará con una identificación de acceso asociada a su número de legajo.
+
+
+El sistema permitirá administrar diferentes tipos y criterios de mantenimiento sin limitarse a una única modalidad. De esta manera, podrán contemplarse mantenimientos definidos según tiempo, utilización, kilometraje u otros criterios que puedan incorporarse de acuerdo con las necesidades de la organización.
+
+
+También se permitirá realizar el seguimiento de cada intervención, asociar responsables, estados, observaciones, repuestos utilizados, costos, tiempos y documentación respaldatoria.
+
+
+Los permisos del sistema serán configurables mediante perfiles de usuario, permitiendo determinar qué funciones puede realizar cada persona según las responsabilidades asignadas.
+
+
+La información generada permitirá consultar el historial de cada máquina y obtener reportes relacionados con fallas, mantenimientos, tiempos de inactividad, costos y utilización de repuestos.
+
+Límites del sistema
+
+El sistema estará orientado específicamente a la gestión del mantenimiento industrial y no tendrá como objetivo reemplazar los demás sistemas administrativos o productivos utilizados por GI-RE S.A.
+
+Quedan fuera del alcance inicial:
+
+La gestión contable integral de la empresa.
+
+Facturación, pagos, impuestos y funciones propias del sistema SAE.
+
+La gestión completa de producción, ventas y clientes.
+
+El control automático de máquinas industriales.
+
+La integración directa con sensores.
+
+La automatización física de los procesos de mantenimiento.
+
+La gestión integral de recursos humanos.
+
+El sistema podrá utilizar información o documentación proveniente de otras herramientas de la empresa como respaldo, pero mantendrá su funcionamiento independiente y enfocado en la gestión del mantenimiento industrial.
+
+
+
+
+Lista de Requerimientos 
+
+Lista de Requerimientos
+
+
+
+A partir del relevamiento realizado, la propuesta definida y las nuevas precisiones obtenidas del cliente, se establece la siguiente lista de requerimientos para el Sistema de Mantenimiento Industrial.
+
+
+
+La presente lista contempla tanto los requerimientos funcionales, relacionados con las acciones que deberá permitir realizar el sistema, como los requerimientos no funcionales, vinculados con las condiciones generales de funcionamiento, seguridad, accesibilidad y calidad de la solución.
+
+
+
+
+
+
+
+
+
+Requerimientos funcionales
+
+
+
+RF-01 - Gestión de usuarios
+
+El sistema deberá permitir registrar, modificar y administrar usuarios.
+
+RF-02 - Identificación de usuarios
+
+Cada usuario deberá contar con un nombre y un número de legajo asociado.
+
+RF-03 - Inicio de sesión
+
+El sistema deberá permitir el ingreso utilizando el nombre del usuario y el número de legajo como clave de acceso.
+
+RF-04 - Gestión de perfiles y permisos
+
+El sistema deberá permitir crear perfiles y configurar los permisos asociados a cada uno, determinando qué funciones puede utilizar cada usuario.
+
+RF-05 - Acceso del operario
+
+El operario deberá poder ingresar directamente al sistema para registrar una falla o necesidad de mantenimiento.
+
+RF-06 - Acceso desde distintos dispositivos
+
+El sistema deberá permitir el acceso desde computadoras, terminales ubicadas en planta y dispositivos móviles.
+
+RF-07 - Gestión de máquinas y equipos
+
+El sistema deberá permitir registrar, modificar, consultar y administrar las máquinas y equipos incluidos dentro del mantenimiento.
+
+RF-08 - Gestión de sectores
+
+El sistema deberá permitir organizar las máquinas según su sector o ubicación dentro de la empresa.
+
+RF-09 - Registro de necesidades de mantenimiento
+
+El sistema deberá permitir registrar una falla, anomalía o necesidad de mantenimiento asociada a una máquina.
+
+RF-10 - Gestión de intervenciones
+
+El sistema deberá permitir crear y gestionar intervenciones de mantenimiento, asociándolas a una máquina, usuarios responsables y demás información correspondiente.
+
+RF-11 - Estados de intervención
+
+El sistema deberá permitir definir y actualizar los estados de una intervención durante su desarrollo.
+
+RF-12 - Tipos de mantenimiento
+
+El sistema deberá permitir administrar distintos tipos de mantenimiento sin limitarse únicamente al mantenimiento correctivo o preventivo.
+
+RF-13 - Criterios de mantenimiento
+
+El sistema deberá permitir configurar distintos criterios para determinar cuándo corresponde realizar un mantenimiento, tales como tiempo, horas de utilización, kilometraje u otros criterios que puedan incorporarse posteriormente.
+
+RF-14 - Planificación de mantenimientos
+
+El sistema deberá permitir programar mantenimientos futuros de acuerdo con los criterios definidos para cada máquina o tipo de mantenimiento.
+
+RF-15 - Notificaciones y avisos
+
+El sistema deberá permitir generar avisos o notificaciones relacionados con mantenimientos programados, vencimientos, intervenciones pendientes u otros eventos configurados.
+
+
+
+RF-16 - Gestión de repuestos
+
+El sistema deberá permitir registrar y administrar los repuestos utilizados dentro de las tareas de mantenimiento.
+
+RF-17 - Control de stock de repuestos
+
+El sistema deberá permitir conocer las cantidades disponibles de cada repuesto y registrar sus ingresos y egresos.
+
+RF-18 - Asociación de repuestos a intervenciones
+
+El sistema deberá permitir registrar los repuestos utilizados dentro de cada intervención y descontarlos del stock correspondiente.
+
+RF-19 - Registro histórico de costos de repuestos
+
+El sistema deberá permitir conservar información sobre los costos o precios registrados para los repuestos a lo largo del tiempo.
+
+RF-20 - Registro de costos de mantenimiento
+
+El sistema deberá permitir registrar los costos relacionados con una intervención, incluyendo repuestos, mano de obra u otros gastos asociados.
+
+RF-21 - Registro de tiempos de intervención
+
+El sistema deberá permitir registrar fechas y tiempos asociados a cada intervención para determinar, entre otros datos, el tiempo de inactividad de una máquina.
+
+RF-22 - Documentación respaldatoria
+
+El sistema deberá permitir adjuntar o referenciar documentos relacionados con las máquinas o intervenciones, como facturas, remitos, presupuestos, fotografías, manuales y otros comprobantes.
+
+RF-23 - Historial por máquina
+
+El sistema deberá mantener un historial de las intervenciones y mantenimientos realizados sobre cada máquina.
+
+RF-24 - Consultas y búsquedas
+
+El sistema deberá permitir buscar y filtrar información utilizando distintos criterios, como máquina, sector, usuario, fecha, estado o tipo de mantenimiento.
+
+RF-25 - Generación de reportes
+
+El sistema deberá permitir generar reportes relacionados con la información registrada.
+
+RF-26 - Indicadores de mantenimiento
+
+El sistema deberá permitir obtener información como cantidad de fallas, cantidad de mantenimientos, tiempos de inactividad, costos por máquina y gastos asociados a repuestos.
+
+RF-27 - Historial económico por máquina
+
+El sistema deberá permitir consultar los costos históricos asociados al mantenimiento de cada máquina.
+
+RF-28 - Administración de información configurable
+
+El sistema deberá permitir administrar elementos configurables como tipos de mantenimiento, estados, perfiles, permisos y otros parámetros necesarios para adaptar su funcionamiento a las necesidades de la empresa.
+
+
+
+Requerimientos no funcionales
+
+RNF-01 - Facilidad de uso
+
+El sistema deberá presentar una interfaz simple, clara y comprensible para los distintos tipos de usuarios.
+
+RNF-02 - Aplicación web
+
+El sistema deberá implementarse como una solución web accesible mediante un navegador.
+
+RNF-03 - Adaptabilidad a dispositivos
+
+La interfaz deberá poder utilizarse tanto desde computadoras y terminales de planta como desde dispositivos móviles.
+
+RNF-04 - Base de datos centralizada
+
+La información deberá almacenarse de manera centralizada para permitir su consulta desde los distintos puntos de acceso autorizados.
+
+RNF-05 - Seguridad de acceso
+
+El sistema deberá controlar el acceso mediante la identificación de cada usuario.
+
+RNF-06 - Control de permisos
+
+Las funciones disponibles deberán depender de los permisos asignados al perfil o usuario correspondiente.
+
+RNF-07 - Integridad de la información
+
+El sistema deberá controlar la información obligatoria y reducir la posibilidad de generar registros incompletos o inconsistentes.
+
+RNF-08 - Trazabilidad
+
+Las operaciones relacionadas con el mantenimiento deberán conservar información suficiente para conocer su historial, responsables y modificaciones relevantes.
+
+
+
+RNF-09 - Respaldo de información
+
+La información registrada deberá poder ser respaldada periódicamente para reducir el riesgo de pérdida de datos.
+
+RNF-10 - Rendimiento
+
+Las operaciones habituales del sistema deberán ejecutarse en tiempos adecuados para no dificultar las tareas de los usuarios.
+
+RNF-11 - Escalabilidad
+
+El sistema deberá permitir incorporar nuevas máquinas, usuarios, tipos de mantenimiento, criterios, reportes y funcionalidades sin modificar su estructura general.
+
+RNF-12 - Mantenibilidad
+
+La solución deberá estar diseñada de manera que permita realizar futuras modificaciones y ampliaciones.
+
+RNF-13 - Confidencialidad
+
+La información almacenada deberá estar disponible únicamente para los usuarios autorizados según sus permisos.
+
+RNF-14 - Compatibilidad
+
+El sistema deberá poder utilizarse desde los equipos disponibles en la empresa sin requerir hardware especializado para las funciones principales.
+
+RNF-15 - Independencia del sistema SAE
+
+El Sistema de Mantenimiento Industrial deberá funcionar de manera independiente del sistema SAE y no reemplazará sus funciones contables, administrativas o de facturación.
+
+
+9.3 Modelo de Caso de Uso Ambiental y descripción de actores 
+
+Actores del sistema:
+
+Operario
+
+Es el usuario que trabaja directamente con las máquinas y equipos de producción. Puede ingresar al sistema desde un dispositivo móvil o desde una terminal ubicada en planta utilizando su nombre y número de legajo.
+
+Su función principal dentro del sistema será registrar fallas, anomalías o necesidades de mantenimiento detectadas durante la utilización de una máquina. También podrá consultar aquella información para la cual tenga permisos asignados.
+
+
+
+
+
+
+
+
+
+Responsable de mantenimiento
+
+Es el usuario encargado de realizar el seguimiento de las necesidades e intervenciones de mantenimiento.
+
+Podrá consultar los registros realizados por los operarios, gestionar intervenciones, actualizar información, registrar tareas realizadas, asociar repuestos, costos, tiempos y documentación, además de consultar el historial de las máquinas.
+
+Sus funciones estarán determinadas por los permisos asignados dentro del sistema.
+
+
+
+Administrador
+
+Es el usuario encargado de administrar la configuración general del sistema.
+
+Podrá gestionar usuarios, perfiles, permisos, máquinas, sectores, tipos y criterios de mantenimiento, estados, repuestos y demás parámetros configurables necesarios para adaptar el sistema al funcionamiento de la empresa.
+
+
+
+Usuario de consulta / Dirección e I+D
+
+Representa a aquellos usuarios que requieren acceder principalmente a información histórica, consultas, reportes e indicadores para apoyar la planificación y la toma de decisiones.
+
+Los permisos de consulta podrán configurarse de acuerdo con las necesidades de cada usuario.
+
+
+
+En el modelo ambiental se consideran las siguientes funciones principales
+
+Iniciar sesión.
+
+Registrar necesidad de mantenimiento.
+
+Gestionar intervenciones.
+
+Gestionar mantenimientos.
+
+Gestionar máquinas y sectores.
+
+Gestionar repuestos.
+
+Consultar historial.
+
+Consultar reportes e indicadores.
+
+Gestionar usuarios, perfiles y permisos.
+
+Configurar parámetros del sistema.
+
+Consultar notificaciones y avisos.
+
+
+
+El sistema será utilizado por distintos tipos de usuarios, pero las funciones disponibles para cada uno dependerán de los perfiles y permisos configurados. De esta manera, el modelo no limita de forma rígida las operaciones a un único puesto de trabajo y permite adaptar el sistema a futuros cambios en la organización.
+
+
+
+
+
+DRIVE: https://drive.google.com/file/d/1gW-s2xGUYTfDP2g8yxSVg20YCT3EX6XW/view?usp=sharing
+
+
+
+
+9.4 Modelo de Paquetes 
+
+El Modelo de Paquetes permite organizar el Sistema de Mantenimiento Industrial en grupos funcionales relacionados, facilitando la comprensión de su estructura general antes de profundizar en los casos de uso específicos.
+
+A partir de los requerimientos definidos, el sistema se divide en los siguientes paquetes principales:
+
+Usuarios y Seguridad: comprende la gestión de usuarios, identificación, perfiles, permisos y acceso al sistema.
+
+Máquinas y Sectores: agrupa las funciones relacionadas con el registro, administración y consulta de máquinas, equipos, sectores y ubicaciones.
+
+Mantenimiento: constituye el núcleo principal del sistema e incluye el registro de necesidades de mantenimiento, gestión de intervenciones, tipos y criterios de mantenimiento, planificación y seguimiento de estados.
+
+Repuestos y Stock: comprende la administración de repuestos, disponibilidad, movimientos, utilización en intervenciones y registro histórico de costos.
+
+Documentación: permite gestionar la documentación asociada a máquinas e intervenciones, como facturas, remitos, fotografías, presupuestos, manuales y comprobantes.
+
+Consultas y Reportes: reúne las funciones de búsqueda, consulta de historiales, generación de indicadores, análisis de costos, tiempos de inactividad y elaboración de reportes.
+
+Notificaciones: comprende la generación de avisos relacionados con mantenimientos programados, vencimientos, intervenciones pendientes y otros eventos configurados.
+
+
+
+DRIVE: https://drive.google.com/file/d/1v3GtUNjrPJTjnI1W7e6UfRhWZiZUiUaG/view?usp=sharing
+
+
+9.5 Diagrama de Árbol de Casos de Uso
+El Diagrama de Árbol de Casos de Uso presenta una descomposición jerárquica de las principales funciones del Sistema de Mantenimiento Industrial.
+
+En el primer nivel se representa el sistema completo. A partir de este se identifican los paquetes funcionales definidos previamente: Usuarios y Seguridad, Máquinas y Sectores, Mantenimiento, Repuestos y Stock, Documentación, Consultas y Reportes y Notificaciones.
+
+Cada paquete se descompone en los casos de uso principales que deberá implementar el sistema. Este modelo permite visualizar de forma general las funcionalidades previstas sin profundizar todavía en la descripción individual de cada caso de uso.
+
+La estructura obtenida mantiene correspondencia con los requerimientos funcionales definidos y servirá como base para las siguientes etapas de análisis y diseño del sistema.
+
+
+
+
+
+
+
+
+Drive: https://drive.google.com/file/d/1HCOsjoPRatbr0TF_tJGDsBS8t62X4Bjs/view?usp=sharing
+
+
+
+
+
+
+
+
+Documentación del paquete Mantenimiento
+
+
+En continuidad con el modelo de requerimientos, ambiental, de paquetes y árbol de casos de uso desarrollado anteriormente, se documenta en forma completa el paquete Mantenimiento. La selección de este paquete responde a que concentra procesos de negocio centrales para GI-RE S.A.: registrar necesidades, gestionar intervenciones y planificar mantenimientos. De esta manera, se priorizan transacciones propias de la organización por sobre funciones administrativas de tipo ABM.
+
+
+El paquete se mantiene general y configurable. Permite utilizar distintos tipos de mantenimiento, criterios basados en fecha, períodos de tiempo, horas de uso, kilómetros u otros parámetros que puedan incorporarse, además de estados, perfiles, permisos y notificaciones configurables. El sistema SAE permanece como herramienta externa de apoyo documental y contable, sin ser reemplazado por este módulo.
+
+
+10.1 Definición y alcance del paquete
+
+
+El paquete Mantenimiento tiene como finalidad centralizar el registro y seguimiento de las necesidades e intervenciones de mantenimiento industrial sobre las máquinas y equipos de GI-RE S.A. Incluye el registro de la situación detectada, la organización de intervenciones, la planificación de tareas futuras y la conservación de información histórica sobre tiempos, costos, repuestos, responsables, estados y documentación asociada.
+
+
+Se definen como casos de uso base los siguientes: Registrar necesidad de mantenimiento, Gestionar intervenciones y Planificar mantenimientos. Como funciones auxiliares o incluidas se consideran Gestionar estados, Registrar tiempos y costos, Gestionar tipos de mantenimiento y Configurar criterios de mantenimiento. La disponibilidad de cada función dependerá de los permisos configurados para el usuario.
+
+
+El paquete utiliza como referencias las clases Máquina, Usuario, Repuesto y Documento, pertenecientes a otros paquetes del sistema. Estas referencias permiten mantener la separación funcional sin duplicar la administración de máquinas, usuarios, stock ni documentación. Las multiplicidades del modelo de clases constituyen una propuesta de diseño coherente con los requerimientos relevados y podrán ajustarse durante el diseño detallado.
+
+
+10.2 Diagrama de Casos de Uso del paquete Mantenimiento
+
+
+El diagrama presenta los actores que participan directamente en el paquete y las principales funcionalidades. El Operario registra una necesidad de mantenimiento desde un dispositivo móvil o una terminal ubicada a pie de máquina. El Responsable de mantenimiento gestiona intervenciones y planifica mantenimientos. El Administrador configura tipos y criterios, de acuerdo con sus permisos. Las funciones de gestión de estados y registro de tiempos y costos se vinculan con el seguimiento de las intervenciones.
+
+
+Figura 10.1. Diagrama de Casos de Uso del paquete Mantenimiento
+
+
+
+
+
+10.3 Diagrama de Clases del paquete Mantenimiento
+
+
+El diagrama de clases representa la estructura estática del paquete. La clase 
+IntervencionMantenimiento
+ es el elemento central y se vincula con las necesidades registradas, los planes, la máquina, el tipo y el estado de mantenimiento, los usuarios involucrados, los registros de tiempo, los costos, los consumos de repuestos y la documentación. Los tipos, criterios y estados se modelan como clases configurables para evitar una solución rígida.
+
+
+
+RegistroTiempo
+ permite distinguir tiempos de trabajo e inactividad. 
+ConsumoRepuesto
+ conserva la cantidad utilizada y el costo unitario histórico correspondiente, mientras que 
+CostoIntervencion
+ registra mano de obra y otros conceptos. 
+CambioEstado
+ permite mantener la trazabilidad de los cambios realizados sobre una intervención.
+
+
+Figura 10.2. Diagrama de Clases del paquete Mantenimiento
+
+
+
+
+
+
+
+
+10.4 Diagrama de Estados de la clase 
+IntervencionMantenimiento
+
+
+
+
+
+
+
+El diagrama de estados describe la evolución de una intervención desde su registro hasta su finalización o cancelación. Se proponen como referencia inicial cinco estados configurables: Pendiente, En proceso, En espera de repuestos, Finalizada y Cancelada. La configuración permitirá adaptar los estados y las transiciones a las necesidades de GI-RE S.A., respetando los permisos de cada perfil.
+
+
+El estado Pendiente representa una intervención registrada que todavía no comenzó. En proceso indica que el trabajo está siendo gestionado. En espera de repuestos se utiliza cuando la continuidad depende de la disponibilidad de uno o más repuestos. Finalizada indica que la tarea prevista fue realizada y se registró su resultado. Cancelada representa una intervención que no continuará.
+
+
+
+
+
+Figura 10.3. Diagrama de Estados de 
+IntervencionMantenimiento
+
+
+
+
+
+
+
+
+
+
+
+
+10.5 Registrar necesidad de mantenimiento
+
+
+Este caso de uso permite que un usuario registre una falla, anomalía o necesidad de mantenimiento asociada a una máquina. El Operario es el actor principal y podrá realizar la carga desde un celular o desde una terminal ubicada a pie de máquina, utilizando su nombre y número de legajo.
+
+
+10.5.1 Lista de requerimientos
+
+
+Los siguientes requerimientos detallan el comportamiento esperado para este caso de uso y se vinculan con los requerimientos generales definidos para el sistema.
+
+Código
+
+Requerimiento
+
+M-RF-01
+
+Permitir registrar una necesidad asociada a una máquina existente.
+
+M-RF-02
+
+Registrar automáticamente la fecha, hora y usuario que realiza la carga.
+
+M-RF-03
+
+Solicitar como mínimo la máquina afectada y una descripción de la falla o necesidad.
+
+M-RF-04
+
+Asignar a la necesidad un estado inicial configurable, tomando Pendiente como referencia.
+
+M-RF-05
+
+Permitir consultar las necesidades registradas para su posterior seguimiento.
+
+M-RNF-01
+
+La pantalla deberá ser simple y adaptable a celulares y terminales de planta.
+
+M-RNF-02
+
+La operación deberá conservar el usuario identificado y la fecha de registro para asegurar trazabilidad.
+
+
+10.5.2 Prototipo de interfaz
+
+
+El prototipo representa una propuesta inicial de pantalla. Los campos y acciones podrán adaptarse a los permisos configurados para cada perfil.
+
+Componente
+
+Contenido o comportamiento
+
+Encabezado
+
+Registrar necesidad de mantenimiento.
+
+Usuario
+
+Nombre y legajo del usuario identificado. Se muestra como dato de control.
+
+Máquina
+
+Selector o búsqueda de la máquina sobre la que se detectó la situación.
+
+Fecha y hora
+
+Se completan automáticamente al iniciar el registro.
+
+Descripción
+
+Campo de texto para explicar la falla, anomalía o necesidad detectada.
+
+Estado inicial
+
+Se propone Pendiente, de acuerdo con la configuración vigente.
+
+Acciones
+
+Guardar registro o cancelar la operación.
+
+Confirmación
+
+Mensaje de registro exitoso con identificación de la necesidad.
+
+
+10.5.3 Ficha del caso de uso
+
+Elemento
+
+Descripción
+
+Nombre
+
+Registrar necesidad de mantenimiento.
+
+Objetivo
+
+Registrar una situación que requiera mantenimiento y dejarla disponible para su seguimiento.
+
+Actor principal
+
+Operario.
+
+Actores secundarios
+
+Responsable de mantenimiento y otros usuarios autorizados.
+
+Precondiciones
+
+El usuario debe estar identificado y la máquina debe encontrarse registrada y habilitada.
+
+Disparador
+
+El usuario detecta una falla, anomalía o necesidad de mantenimiento.
+
+Flujo principal
+
+1. El usuario ingresa al sistema. 2. Selecciona la máquina. 3. Describe la situación. 4. Confirma el registro. 5. El sistema asigna fecha, usuario y estado inicial. 6. El sistema informa que la necesidad fue registrada.
+
+Flujos alternativos
+
+Si la máquina no existe, se informa el inconveniente y no se guarda el registro. Si faltan datos obligatorios, se solicita completarlos. Si el usuario no posee permiso, se rechaza la operación.
+
+Postcondiciones
+
+La necesidad queda almacenada y disponible para que el Responsable de mantenimiento la consulte y gestione.
+
+
+10.5.4 Diagrama de asociaciones
+
+
+El diagrama deberá mostrar la relación entre el Operario, la interfaz de registro, el sistema, la máquina y la entidad 
+NecesidadMantenimiento
+. También deberá indicar la asociación con Usuario y el estado inicial de la necesidad.
+
+
+Figura 10.5.1. Diagrama de asociaciones - Registrar necesidad de mantenimiento
+
+
+
+
+
+
+
+
+
+
+
+10.5.5 Diagrama de interacciones
+
+
+Se propone representar la secuencia entre Operario, Interfaz de registro, Control de necesidades y base de datos: identificación, selección de máquina, validación, almacenamiento y confirmación.
+
+
+Figura 10.5.2. Diagrama de secuencia - Registrar necesidad de mantenimiento
+
+
+
+
+
+
+
+
+10.6 Gestionar intervenciones
+
+
+Este caso de uso permite crear, actualizar y dar seguimiento a una intervención de mantenimiento. El Responsable de mantenimiento es el actor principal. La intervención puede originarse en una necesidad registrada, en una planificación o en una carga directa autorizada, y conserva el historial de las actividades realizadas.
+
+
+10.6.1 Lista de requerimientos
+
+
+Los siguientes requerimientos detallan el comportamiento esperado para este caso de uso y se vinculan con los requerimientos generales definidos para el sistema.
+
+Código
+
+Requerimiento
+
+M-RF-06
+
+Permitir crear una intervención vinculada a una máquina y, cuando corresponda, a una necesidad o planificación.
+
+M-RF-07
+
+Permitir asignar tipo de mantenimiento, responsable, descripción, fechas y estado.
+
+M-RF-08
+
+Permitir actualizar el estado y conservar el historial de cambios realizados.
+
+M-RF-09
+
+Registrar tareas, observaciones, tiempos de trabajo e inactividad y documentación asociada.
+
+M-RF-10
+
+Permitir registrar repuestos utilizados, cantidades, costos históricos y otros costos de la intervención.
+
+M-RF-11
+
+Calcular y conservar el costo total registrado sin duplicar el costo de los repuestos.
+
+M-RF-12
+
+Permitir finalizar o cancelar la intervención según los permisos configurados.
+
+M-RNF-03
+
+Conservar la trazabilidad de usuarios, fechas y modificaciones relevantes.
+
+M-RNF-04
+
+Validar la información obligatoria antes de guardar o finalizar una intervención.
+
+
+10.6.2 Prototipo de interfaz
+
+
+El prototipo representa una propuesta inicial de pantalla. Los campos y acciones podrán adaptarse a los permisos configurados para cada perfil.
+
+Componente
+
+Contenido o comportamiento
+
+Encabezado
+
+Gestión de intervención de mantenimiento.
+
+Filtros
+
+Búsqueda por máquina, estado, tipo, responsable, fecha o necesidad de origen.
+
+Datos generales
+
+Máquina, necesidad o plan de origen, tipo, responsable, descripción, fechas y estado.
+
+Tareas y observaciones
+
+Registro de actividades realizadas, resultado y observaciones.
+
+Tiempos
+
+Carga diferenciada de tiempo de trabajo y tiempo de inactividad.
+
+Repuestos y costos
+
+Repuestos utilizados, cantidades, costo histórico, mano de obra y otros conceptos.
+
+Documentación
+
+Referencia o adjunto de fotografías, presupuestos, facturas, remitos, manuales u otros documentos.
+
+Historial
+
+Consulta de cambios de estado y usuarios que realizaron modificaciones.
+
+Acciones
+
+Guardar, cambiar estado, finalizar, cancelar y volver a la consulta.
+
+
+10.6.3 Ficha del caso de uso
+
+Elemento
+
+Descripción
+
+Nombre
+
+Gestionar intervenciones.
+
+Objetivo
+
+Organizar, actualizar y cerrar la información de una actividad de mantenimiento realizada o en curso.
+
+Actor principal
+
+Responsable de mantenimiento.
+
+Actores secundarios
+
+Operario, Administrador y usuarios autorizados según permisos.
+
+Precondiciones
+
+El usuario debe estar identificado y debe existir una máquina registrada. Puede existir una necesidad o un plan de origen, aunque no es obligatorio para toda intervención.
+
+Disparador
+
+Se recibe una necesidad, llega la fecha de un mantenimiento planificado o se inicia una intervención autorizada.
+
+Flujo principal
+
+1. El responsable consulta o crea la intervención. 2. Selecciona la máquina y el origen cuando corresponda. 3. Completa tipo, responsable, descripción y estado. 4. Registra tareas, tiempos, repuestos, costos y documentos. 5. Actualiza el estado durante el seguimiento. 6. Registra el resultado y finaliza la intervención.
+
+Flujos alternativos
+
+Si faltan repuestos, se utiliza En espera de repuestos. Si la tarea deja de corresponder, se cancela. Si existen datos incompletos, el sistema solicita corregirlos antes de finalizar.
+
+Postcondiciones
+
+La intervención queda actualizada y disponible en el historial de la máquina, con sus tiempos, costos, repuestos, documentos y cambios de estado.
+
+
+10.6.4 Diagrama de asociaciones
+
+
+El diagrama deberá mostrar las asociaciones entre Responsable de mantenimiento, 
+IntervencionMantenimiento
+, Maquina, 
+NecesidadMantenimiento
+, 
+PlanMantenimiento
+, Usuario, 
+EstadoIntervencion
+, 
+RegistroTiempo
+, 
+CostoIntervencion
+, 
+ConsumoRepuesto
+ y Documento.
+
+
+Figura 10.6.1. Diagrama de asociaciones - Gestionar intervenciones
+
+
+
+
+
+10.6.5 Diagrama de interacciones
+
+
+Se propone representar la secuencia entre Responsable de mantenimiento, interfaz, control de intervenciones y los servicios de tiempos, costos, repuestos, documentos y estados. El flujo debe mostrar actualización y finalización.
+
+
+Figura 10.6.2. Diagrama de secuencia - Gestionar intervenciones
+
+
+
+
+
+
+
+
+10.7 Planificar mantenimientos
+
+
+Este caso de uso permite programar mantenimientos futuros para una máquina utilizando tipos y criterios configurables. El Responsable de mantenimiento es el actor principal. La planificación puede establecerse por fecha, período, horas de uso, kilómetros u otro criterio que la organización defina.
+
+
+10.7.1 Lista de requerimientos
+
+
+Los siguientes requerimientos detallan el comportamiento esperado para este caso de uso y se vinculan con los requerimientos generales definidos para el sistema.
+
+Código
+
+Requerimiento
+
+M-RF-13
+
+Permitir crear un plan asociado a una máquina y a un tipo de mantenimiento.
+
+M-RF-14
+
+Permitir seleccionar un criterio configurable de programación.
+
+M-RF-15
+
+Permitir registrar fecha estimada, intervalo o valor objetivo según el criterio seleccionado.
+
+M-RF-16
+
+Permitir asignar un responsable previsto, descripción, observaciones y vigencia.
+
+M-RF-17
+
+Permitir modificar, reprogramar, activar o desactivar un plan.
+
+M-RF-18
+
+Relacionar la ejecución del plan con una intervención e incorporarla al historial de la máquina.
+
+M-RF-19
+
+Generar avisos para vencimientos o mantenimientos previstos cuando el evento esté configurado.
+
+M-RNF-05
+
+La planificación deberá admitir nuevos criterios sin modificar la estructura general del módulo.
+
+M-RNF-06
+
+La información de los planes deberá poder consultarse desde los dispositivos autorizados.
+
+
+10.7.2 Prototipo de interfaz
+
+
+El prototipo representa una propuesta inicial de pantalla. Los campos y acciones podrán adaptarse a los permisos configurados para cada perfil.
+
+Componente
+
+Contenido o comportamiento
+
+Encabezado
+
+Planificar mantenimiento.
+
+Máquina
+
+Selección de la máquina a la que se aplicará el plan.
+
+Tipo
+
+Selección de un tipo de mantenimiento configurable.
+
+Criterio
+
+Fecha, período, horas de uso, kilómetros u otro criterio disponible.
+
+Parámetros
+
+Intervalo, valor objetivo o fecha programada, según el criterio elegido.
+
+Responsable
+
+Usuario previsto para realizar o dar seguimiento al mantenimiento.
+
+Descripción y observaciones
+
+Detalle de la tarea, alcance y aclaraciones necesarias.
+
+Estado del plan
+
+Activo o inactivo, de acuerdo con la configuración y la operación realizada.
+
+Acciones
+
+Guardar, reprogramar, activar, desactivar o cancelar.
+
+
+10.7.3 Ficha del caso de uso
+
+Elemento
+
+Descripción
+
+Nombre
+
+Planificar mantenimientos.
+
+Objetivo
+
+Programar tareas futuras para ordenar el mantenimiento y reducir fallas y paradas imprevistas.
+
+Actor principal
+
+Responsable de mantenimiento.
+
+Actores secundarios
+
+Administrador y usuarios autorizados para consultar o configurar parámetros.
+
+Precondiciones
+
+La máquina debe estar registrada y deben existir un tipo de mantenimiento y un criterio habilitados.
+
+Disparador
+
+El responsable identifica la necesidad de realizar una tarea futura o periódica.
+
+Flujo principal
+
+1. El responsable inicia la planificación. 2. Selecciona la máquina. 3. Selecciona tipo y criterio. 4. Completa fecha, intervalo o valor objetivo. 5. Asigna responsable y observaciones. 6. Guarda el plan. 7. El sistema lo deja activo y registra la planificación.
+
+Flujos alternativos
+
+Si el criterio requiere un dato que no fue informado, el sistema solicita completarlo. El plan puede reprogramarse o desactivarse sin eliminar su trazabilidad.
+
+Postcondiciones
+
+El plan queda disponible para consulta y, cuando corresponda, puede originar una intervención y una notificación configurable.
+
+
+10.7.4 Diagrama de asociaciones
+
+
+El diagrama deberá mostrar las asociaciones entre Responsable de mantenimiento, 
+PlanMantenimiento
+, Maquina, 
+TipoMantenimiento
+, 
+CriterioMantenimiento
+, Usuario e 
+IntervencionMantenimiento
+.
+
+
+Figura 10.7.1. Diagrama de asociaciones - Planificar mantenimientos
+
+
+
+
+
+
+
+
+10.7.5 Diagrama de interacciones
+
+
+Se propone representar la secuencia entre Responsable de mantenimiento, interfaz de planificación, control de planes y los catálogos de máquina, tipo y criterio, incluyendo el guardado y la eventual generación de un aviso.
+
+
+Figura 10.7.2. Diagrama de secuencia - Planificar mantenimientos
+
+
+
+
+
+
+
+
+10.8 Correspondencia y consistencia del modelo
+
+
+La documentación del paquete mantiene correspondencia entre los requerimientos, los actores, los casos de uso, las clases, los estados y las interfaces. Registrar necesidad de mantenimiento utiliza 
+NecesidadMantenimiento
+ y se relaciona con Usuario y Maquina. Gestionar intervenciones utiliza 
+IntervencionMantenimiento
+ y sus registros asociados de tiempos, costos, repuestos, documentación y estados. Planificar mantenimientos utiliza 
+PlanMantenimiento
+, 
+TipoMantenimiento
+ y 
+CriterioMantenimiento
+, y puede originar una intervención posterior.
+
+
+Los estados de referencia Pendiente, En proceso, En espera de repuestos, Finalizada y Cancelada permiten representar el seguimiento básico de una intervención, pero permanecen configurables. Los perfiles y permisos no se modelan como subclases rígidas, sino como una configuración del paquete Usuarios y Seguridad. De igual modo, el control completo de stock, los reportes, las notificaciones y la documentación se mantienen vinculados a sus paquetes correspondientes, sin duplicar responsabilidades dentro de Mantenimiento.
+
+
+Los tres diagramas generales del módulo y los diagramas específicos de cada caso de uso se encuentran incorporados en las figuras correspondientes en las Figuras 10.1, 10.2 y 10.3. Además, se dejaron marcadores específicos para los diagramas de asociaciones y de secuencia exigidos para cada caso de uso base.
+
+
+Glosario
+
+
+
+
+
+GI-RE S.A.: empresa relevada para el desarrollo del sistema de mantenimiento industrial.
+
+
+
+
+
+Industria metalmecánica: sector industrial dedicado a la fabricación y transformación de piezas, partes y conjuntos metálicos.
+
+
+
+
+
+Mantenimiento correctivo: reparación realizada luego de que una máquina presenta una falla.
+
+
+
+
+
+Mantenimiento preventivo: tareas planificadas o periódicas destinadas a evitar fallas futuras en máquinas o equipos.
+
+
+
+
+
+I+D: área de Ingeniería y Desarrollo. Interviene en productos, procesos, instructivos, procedimientos y también en la gestión operativa del mantenimiento.
+
+
+
+
+
+Pañol: sector donde se almacenan herramientas, repuestos, insumos o elementos necesarios para la producción y mantenimiento.
+
+
+
+
+
+SAE: sistema contable utilizado por la empresa para registrar ingresos de compras mediante facturas.
+
+
+
+
+
+Trazabilidad: posibilidad de seguir el historial de una máquina, reparación, repuesto o mantenimiento realizado.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Anexos
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figura A.1: Planilla utilizada como registro operativo vinculado a mantenimiento y costos.
+
+
+
+
+
+Figura A.2: Factura emitida por GI-RE S.A., utilizada como ejemplo de documentación comercial respaldatoria.
+
+
+
+
+
+
+
+
+Figura A.3: Remito utilizado por GI-RE S.A. como documentación de traslado o entrega de mercadería.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figura A.4: Logo GI-RE S.A. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figura A.5: Gato mecánico de lanza fabricado por GI-RE S.A. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Figura A.6: Captura del sistema SAE utilizado como respaldo para registrar compras, facturas y documentación vinculada a repuestos o mantenimientos.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIRMA DEL CLIENTE 
+

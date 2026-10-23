@@ -4,6 +4,7 @@ import { pool } from './db.ts';
 import authApp from './auth.ts';
 import sectoresApp from './sectores.ts';
 import maquinasApp from './maquinas.ts';
+import intervencionesApp from './intervenciones.ts';
 
 import { JWT_SECRET } from './config.ts';
 
@@ -17,6 +18,7 @@ app.use('*', cors({ origin: allowedOrigin }));
 app.route('/api/auth', authApp);
 app.route('/api/sectores', sectoresApp);
 app.route('/api/maquinas', maquinasApp);
+app.route('/api/intervenciones', intervencionesApp);
 
 app.get('/health', (c) => {
   return c.json({

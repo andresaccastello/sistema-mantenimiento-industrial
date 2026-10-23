@@ -14,6 +14,10 @@
     "dev:frontend": "npm run dev --workspace frontend",
     "typecheck:backend": "tsc --noEmit -p backend/tsconfig.json",
     "typecheck": "npm run typecheck:backend && npm run typecheck --workspace frontend",
+    "test:migration": "tsx --env-file=.env --test backend/tests/migration_003.test.ts",
+    "test:permisos": "tsx --env-file=.env --test backend/tests/permisos_granulares.test.ts",
+    "test:intervenciones": "tsx --env-file=.env --test backend/tests/intervenciones.test.ts",
+    "test:e2e": "tsx --env-file=.env --test backend/tests/crud.test.ts",
     "build:frontend": "npm run build --workspace frontend"
   },
   "dependencies": {
