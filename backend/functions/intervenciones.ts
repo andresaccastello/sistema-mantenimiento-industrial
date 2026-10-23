@@ -523,12 +523,15 @@ intervencionesApp.post('/:id/tomar', async (c) => {
   try {
     body = await c.req.json();
   } catch {
-    // body opcional o vacío
+    // body no json o vacío
   }
 
-  const estadoEsperado = parseString(body.estado_esperado) || 'PENDIENTE';
-
   try {
+    const estadoEsperado = parseString(body?.estado_esperado);
+    if (!estadoEsperado) {
+      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
+    }
+
     const res = await conTransaccion(async (client) => {
       return tomarIntervencionServicio(client, id, usuario, estadoEsperado);
     });
@@ -560,12 +563,13 @@ intervencionesApp.put('/:id/responsable', async (c) => {
   }
 
   const motivo = parseString(body.motivo);
-  const estadoEsperado = parseString(body.estado_esperado);
-  if (!estadoEsperado) {
-    throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
-  }
 
   try {
+    const estadoEsperado = parseString(body.estado_esperado);
+    if (!estadoEsperado) {
+      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
+    }
+
     const res = await conTransaccion(async (client) => {
       return asignarResponsableServicio(client, id, usuario, destinatarioId, motivo, estadoEsperado);
     });
@@ -592,12 +596,13 @@ intervencionesApp.delete('/:id/responsable', async (c) => {
   }
 
   const motivo = parseString(body.motivo);
-  const estadoEsperado = parseString(body.estado_esperado);
-  if (!estadoEsperado) {
-    throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
-  }
 
   try {
+    const estadoEsperado = parseString(body.estado_esperado);
+    if (!estadoEsperado) {
+      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
+    }
+
     const res = await conTransaccion(async (client) => {
       return desasignarResponsableServicio(client, id, usuario, motivo, estadoEsperado);
     });
@@ -623,15 +628,15 @@ intervencionesApp.post('/:id/iniciar', async (c) => {
     return badRequest(c, 'El cuerpo debe ser un JSON válido');
   }
 
-  const estadoEsperado = parseString(body.estado_esperado);
-  if (!estadoEsperado) {
-    throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
-  }
-
   const fechaInicio = parseString(body.fecha_inicio);
   const observacion = parseString(body.observacion);
 
   try {
+    const estadoEsperado = parseString(body.estado_esperado);
+    if (!estadoEsperado) {
+      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
+    }
+
     const res = await conTransaccion(async (client) => {
       return ejecutarTransicionServicio(client, id, usuario, 'INICIAR', {
         estadoEsperado,
@@ -661,14 +666,14 @@ intervencionesApp.post('/:id/espera-repuestos', async (c) => {
     return badRequest(c, 'El cuerpo debe ser un JSON válido');
   }
 
-  const estadoEsperado = parseString(body.estado_esperado);
-  if (!estadoEsperado) {
-    throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
-  }
-
   const observacion = parseString(body.observacion);
 
   try {
+    const estadoEsperado = parseString(body.estado_esperado);
+    if (!estadoEsperado) {
+      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
+    }
+
     const res = await conTransaccion(async (client) => {
       return ejecutarTransicionServicio(client, id, usuario, 'ESPERAR_REPUESTOS', {
         estadoEsperado,
@@ -697,14 +702,14 @@ intervencionesApp.post('/:id/reanudar', async (c) => {
     return badRequest(c, 'El cuerpo debe ser un JSON válido');
   }
 
-  const estadoEsperado = parseString(body.estado_esperado);
-  if (!estadoEsperado) {
-    throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
-  }
-
   const observacion = parseString(body.observacion);
 
   try {
+    const estadoEsperado = parseString(body.estado_esperado);
+    if (!estadoEsperado) {
+      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
+    }
+
     const res = await conTransaccion(async (client) => {
       return ejecutarTransicionServicio(client, id, usuario, 'REANUDAR', {
         estadoEsperado,

@@ -35,3 +35,8 @@ export const TRANSICIONES: TransicionDef[] = [
 export function buscarTransicion(accion: AccionTransicion, estadoActual: string): TransicionDef | null {
   return TRANSICIONES.find((t) => t.accion === accion && t.desde === estadoActual) || null;
 }
+
+export function buscarTransicionPorAccion(accion: AccionTransicion): TransicionDef | null {
+  return TRANSICIONES.find((t) => t.accion === accion) || null;
+}
+

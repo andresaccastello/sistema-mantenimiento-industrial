@@ -6,7 +6,7 @@ import { bloquearIntervencion } from './bloqueos.ts';
 import { recalcularEstadoMaquina } from './recalculoMaquina.ts';
 import { registrarCambioEstado } from './cambioEstado.ts';
 import { registrarAuditoria, registrarNotificaciones } from './auditoria.ts';
-import { AccionTransicion, buscarTransicion } from './transiciones.ts';
+import { AccionTransicion, buscarTransicion, buscarTransicionPorAccion } from './transiciones.ts';
 
 /**
  * Verifica si un usuario es "responsable habilitado" para una intervención concreta:
@@ -347,8 +347,18 @@ export async function ejecutarTransicionServicio(
     fechaInicio?: string | null;
   }
 ) {
-  // 1. Validar permiso base de cambio de estado
-  if (!('INTERVENCIONES_CAMBIAR_ESTADO' in usuario.permisos)) {
+  // 1. Obtener la definición de la transición por acción
+  const transicion = buscarTransicionPorAccion(accion);
+  if (!transicion) {
+    throw new ErrorNegocio(
+      409,
+      'TRANSICION_NO_PERMITIDA',
+      `Acción de transición desconocida: ${accion}`
+    );
+  }
+
+  // 2. Validar permiso tomado directamente de transicion.permiso
+  if (!(transicion.permiso in usuario.permisos)) {
     throw new ErrorNegocio(
       403,
       'PERMISO_INSUFICIENTE',
@@ -362,7 +372,7 @@ export async function ejecutarTransicionServicio(
     usuario
   );
 
-  // 2. Validar estado esperado coincidente
+  // 3. Validar estado esperado coincidente
   if (params.estadoEsperado !== intervencion.estado) {
     throw new ErrorNegocio(
       409,
@@ -371,9 +381,8 @@ export async function ejecutarTransicionServicio(
     );
   }
 
-  // 3. Validar que la acción admite el estado actual según la matriz
-  const transicion = buscarTransicion(accion, intervencion.estado);
-  if (!transicion) {
+  // 4. Validar que la acción admite el estado actual
+  if (intervencion.estado !== transicion.desde) {
     throw new ErrorNegocio(
       409,
       'TRANSICION_NO_PERMITIDA',
@@ -439,8 +448,22 @@ export async function ejecutarTransicionServicio(
       await validarResponsableHabilitado(client, responsableId, maquina.sector_id);
     }
 
-    // fecha_inicio: validar coherencia si viene en el body
-    if (params.fechaInicio) {
+    // fecha_inicio: validar formato y coherencia si viene en el body
+    if (params.fechaInicio !== undefined && params.fechaInicio !== null) {
+      // Validar formato ISO 8601 con zona horaria explícita (Z o ±hh:mm / ±hhmm)
+      const ISO_TZ_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/;
+      if (
+        typeof params.fechaInicio !== 'string' ||
+        !ISO_TZ_REGEX.test(params.fechaInicio) ||
+        isNaN(Date.parse(params.fechaInicio))
+      ) {
+        throw new ErrorNegocio(
+          422,
+          'DATOS_INVALIDOS',
+          'La fecha_inicio debe tener formato ISO 8601 con zona horaria explícita (Z o ±hh:mm)'
+        );
+      }
+
       const resValida = await client.query(
         `SELECT (
            $1::timestamptz >= fecha_creacion 

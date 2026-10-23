@@ -1109,6 +1109,9 @@ test('Etapa 4A — Motor de estados: núcleo, asignación e inicio del trabajo',
       `);
 
       try {
+        const audBefore = await client.query('SELECT count(*) FROM intervencion_auditoria WHERE intervencion_id = $1', [intId]);
+        const histMBefore = await client.query('SELECT count(*) FROM historial_estados_maquina WHERE maquina_id = $1', [mId]);
+
         const resIni = await app.request(`/api/intervenciones/${intId}/iniciar`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resp1Token}` },
@@ -1124,6 +1127,13 @@ test('Etapa 4A — Motor de estados: núcleo, asignación e inicio del trabajo',
 
         const checkM = await client.query('SELECT estado FROM maquinas WHERE id = $1', [mId]);
         assert.strictEqual(checkM.rows[0].estado, 'DETENIDA');
+
+        // Refuerzo P-25: verificar además que intervencion_auditoria e historial_estados_maquina no tienen filas nuevas
+        const audAfter = await client.query('SELECT count(*) FROM intervencion_auditoria WHERE intervencion_id = $1', [intId]);
+        assert.strictEqual(Number(audAfter.rows[0].count), Number(audBefore.rows[0].count));
+
+        const histMAfter = await client.query('SELECT count(*) FROM historial_estados_maquina WHERE maquina_id = $1', [mId]);
+        assert.strictEqual(Number(histMAfter.rows[0].count), Number(histMBefore.rows[0].count));
       } finally {
         await client.query('DROP TRIGGER IF EXISTS trg_p25 ON historial_estados_intervencion');
         await client.query('DROP FUNCTION IF EXISTS trigger_falla_p25');
@@ -1156,6 +1166,11 @@ test('Etapa 4A — Motor de estados: núcleo, asignación e inicio del trabajo',
       const [r1, r2] = await Promise.all([p1, p2]);
       const statuses = [r1.status, r2.status].sort();
       assert.deepStrictEqual(statuses, [200, 409]);
+
+      // Refuerzo P-26: verificar que el 409 tiene codigo ESTADO_DESACTUALIZADO
+      const res409 = r1.status === 409 ? r1 : r2;
+      const data409 = await res409.json();
+      assert.strictEqual(data409.codigo, 'ESTADO_DESACTUALIZADO');
 
       // Solo una fila nueva en historial
       const hist = await client.query('SELECT count(*) FROM historial_estados_intervencion WHERE intervencion_id = $1 AND estado_nuevo = ' + "'EN_PROCESO'", [intId]);
@@ -1199,6 +1214,13 @@ test('Etapa 4A — Motor de estados: núcleo, asignación e inicio del trabajo',
 
       const cM = await client.query('SELECT estado FROM maquinas WHERE id = $1', [mId]);
       assert.strictEqual(cM.rows[0].estado, 'EN_MANTENIMIENTO');
+
+      // Refuerzo P-27: verificar exactamente una fila DETENIDA → EN_MANTENIMIENTO en historial_estados_maquina para esa máquina
+      const histM = await client.query(
+        "SELECT estado_anterior, estado_nuevo FROM historial_estados_maquina WHERE maquina_id = $1 AND estado_anterior = 'DETENIDA' AND estado_nuevo = 'EN_MANTENIMIENTO'",
+        [mId]
+      );
+      assert.strictEqual(histM.rows.length, 1);
 
       // Cleanup
       await limpiarIntervenciones([idA, idB]);
@@ -1277,6 +1299,124 @@ test('Etapa 4A — Motor de estados: núcleo, asignación e inicio del trabajo',
         body: JSON.stringify({ ubicacion: 'Nave Central Actualizada' })
       });
       assert.strictEqual(rPutOk.status, 200);
+    });
+
+    // P-31: Endpoints sin estado_esperado devuelven 422 DATOS_INVALIDOS
+    await t.test('P-31: Endpoints sin estado_esperado devuelven 422 DATOS_INVALIDOS', async () => {
+      const resPost = await app.request('/api/intervenciones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+        body: JSON.stringify({ maquina_id: maquinaId, descripcion: 'Intervencion P-31' })
+      });
+      const intId = (await resPost.json()).id;
+
+      // 1. POST /:id/tomar
+      const rTomar = await app.request(`/api/intervenciones/${intId}/tomar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resp1Token}` },
+        body: JSON.stringify({})
+      });
+      assert.strictEqual(rTomar.status, 422);
+      assert.strictEqual((await rTomar.json()).codigo, 'DATOS_INVALIDOS');
+
+      // 2. PUT /:id/responsable
+      const rAsignar = await app.request(`/api/intervenciones/${intId}/responsable`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+        body: JSON.stringify({ usuario_id: resp1Id })
+      });
+      assert.strictEqual(rAsignar.status, 422);
+      assert.strictEqual((await rAsignar.json()).codigo, 'DATOS_INVALIDOS');
+
+      // 3. DELETE /:id/responsable
+      const rDesasig = await app.request(`/api/intervenciones/${intId}/responsable`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+        body: JSON.stringify({ motivo: 'Error en asignación' })
+      });
+      assert.strictEqual(rDesasig.status, 422);
+      assert.strictEqual((await rDesasig.json()).codigo, 'DATOS_INVALIDOS');
+
+      // 4. POST /:id/iniciar
+      const rIniciar = await app.request(`/api/intervenciones/${intId}/iniciar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resp1Token}` },
+        body: JSON.stringify({})
+      });
+      assert.strictEqual(rIniciar.status, 422);
+      assert.strictEqual((await rIniciar.json()).codigo, 'DATOS_INVALIDOS');
+
+      // 5. POST /:id/espera-repuestos
+      const rEspera = await app.request(`/api/intervenciones/${intId}/espera-repuestos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resp1Token}` },
+        body: JSON.stringify({ observacion: 'Falta repuesto X' })
+      });
+      assert.strictEqual(rEspera.status, 422);
+      assert.strictEqual((await rEspera.json()).codigo, 'DATOS_INVALIDOS');
+
+      // 6. POST /:id/reanudar
+      const rReanudar = await app.request(`/api/intervenciones/${intId}/reanudar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resp1Token}` },
+        body: JSON.stringify({})
+      });
+      assert.strictEqual(rReanudar.status, 422);
+      assert.strictEqual((await rReanudar.json()).codigo, 'DATOS_INVALIDOS');
+    });
+
+    // P-32: Validación de formato y zona horaria en fecha_inicio
+    await t.test('P-32: Validación de formato y zona horaria en fecha_inicio', async () => {
+      const resPost = await app.request('/api/intervenciones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+        body: JSON.stringify({ maquina_id: maquinaId, descripcion: 'Intervencion P-32' })
+      });
+      const intId = (await resPost.json()).id;
+
+      // 1. "ayer" -> 422 DATOS_INVALIDOS
+      const rAyer = await app.request(`/api/intervenciones/${intId}/iniciar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resp1Token}` },
+        body: JSON.stringify({ estado_esperado: 'PENDIENTE', fecha_inicio: 'ayer' })
+      });
+      assert.strictEqual(rAyer.status, 422);
+      assert.strictEqual((await rAyer.json()).codigo, 'DATOS_INVALIDOS');
+
+      // 2. "2026-10-23T10:00" (sin zona) -> 422 DATOS_INVALIDOS
+      const rSinZona = await app.request(`/api/intervenciones/${intId}/iniciar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resp1Token}` },
+        body: JSON.stringify({ estado_esperado: 'PENDIENTE', fecha_inicio: '2026-10-23T10:00' })
+      });
+      assert.strictEqual(rSinZona.status, 422);
+      assert.strictEqual((await rSinZona.json()).codigo, 'DATOS_INVALIDOS');
+
+      // 3. Fecha válida con -03:00 -> 200 y guarda el instante correcto
+      const now = new Date();
+      const dateValida = new Date(now.getTime() - 5000);
+      const tzOffsetHours = 3;
+      const localTime = new Date(dateValida.getTime() - tzOffsetHours * 3600000);
+      const lY = localTime.getUTCFullYear();
+      const lM = String(localTime.getUTCMonth() + 1).padStart(2, '0');
+      const lD = String(localTime.getUTCDate()).padStart(2, '0');
+      const lH = String(localTime.getUTCHours()).padStart(2, '0');
+      const lMi = String(localTime.getUTCMinutes()).padStart(2, '0');
+      const lS = String(localTime.getUTCSeconds()).padStart(2, '0');
+      const fechaConOffset = `${lY}-${lM}-${lD}T${lH}:${lMi}:${lS}-03:00`;
+
+      const rOk = await app.request(`/api/intervenciones/${intId}/iniciar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resp1Token}` },
+        body: JSON.stringify({ estado_esperado: 'PENDIENTE', fecha_inicio: fechaConOffset })
+      });
+      assert.strictEqual(rOk.status, 200);
+
+      // Verificar en base que se guardó el instante correcto
+      const checkI = await client.query('SELECT fecha_inicio FROM intervenciones WHERE id = $1', [intId]);
+      const storedInstant = new Date(checkI.rows[0].fecha_inicio).getTime();
+      const expectedInstant = new Date(fechaConOffset).getTime();
+      assert.strictEqual(Math.floor(storedInstant / 1000), Math.floor(expectedInstant / 1000));
     });
 
   } finally {

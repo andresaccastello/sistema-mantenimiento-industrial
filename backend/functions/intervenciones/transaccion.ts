@@ -11,6 +11,8 @@ export async function conTransaccion<T>(
   const client = await pool.connect();
   const lockTimeout = process.env.LOCK_TIMEOUT || '5s';
 
+  let rollbackErr: any = null;
+
   try {
     await client.query('BEGIN');
     await client.query(`SET LOCAL lock_timeout = '${lockTimeout}'`);
@@ -22,8 +24,9 @@ export async function conTransaccion<T>(
   } catch (error: any) {
     try {
       await client.query('ROLLBACK');
-    } catch (rollbackError) {
-      console.error('Error durante rollback:', rollbackError);
+    } catch (err: any) {
+      console.error('Error durante rollback:', err);
+      rollbackErr = err;
     }
 
     // 55P03: lock_not_available
@@ -37,6 +40,10 @@ export async function conTransaccion<T>(
 
     throw error;
   } finally {
-    client.release();
+    if (rollbackErr) {
+      client.release(rollbackErr);
+    } else {
+      client.release();
+    }
   }
 }
