@@ -354,12 +354,13 @@ export async function aplicarReglaActor(
     intervencion: any;
     maquina: any;
     usuario: UsuarioVisibilidad;
+    validaHabilitacion?: boolean;
     camposExtra?: Record<string, any>;
     eventos?: Array<{ tipo: string; payload: any }>;
     motivoAutoAsignacion?: string;
   }
 ): Promise<{ responsableId: number; autoAsignado: boolean }> {
-  const { intervencionId, intervencion, maquina, usuario, camposExtra, eventos, motivoAutoAsignacion } = opts;
+  const { intervencionId, intervencion, maquina, usuario, validaHabilitacion, camposExtra, eventos, motivoAutoAsignacion } = opts;
   const responsableId = intervencion.responsable_usuario_id
     ? Number(intervencion.responsable_usuario_id)
     : null;
@@ -415,7 +416,9 @@ export async function aplicarReglaActor(
       );
     }
 
-    await validarResponsableHabilitado(client, responsableId, maquina.sector_id);
+    if (validaHabilitacion) {
+      await validarResponsableHabilitado(client, responsableId, maquina.sector_id);
+    }
 
     return { responsableId, autoAsignado: false };
   }
@@ -497,6 +500,7 @@ export async function ejecutarTransicionServicio(
       intervencion,
       maquina,
       usuario,
+      validaHabilitacion: transicion.validaHabilitacion,
       camposExtra,
       eventos,
       motivoAutoAsignacion: 'Asignación automática al iniciar trabajo',
@@ -669,7 +673,13 @@ export async function finalizarIntervencionServicio(
   }
 
   if (transicion.requiereActor) {
-    await aplicarReglaActor(client, { intervencionId, intervencion, maquina, usuario });
+    await aplicarReglaActor(client, {
+      intervencionId,
+      intervencion,
+      maquina,
+      usuario,
+      validaHabilitacion: transicion.validaHabilitacion,
+    });
   }
 
   // Validaciones de datos
@@ -860,6 +870,7 @@ export async function resolverAhoraIntervencionServicio(
       intervencion,
       maquina,
       usuario,
+      validaHabilitacion: transicion.validaHabilitacion,
       motivoAutoAsignacion: 'Asignación automática por resolución inmediata',
     });
     responsableId = resActor.responsableId;
@@ -1070,7 +1081,13 @@ export async function cancelarIntervencionServicio(
   }
 
   if (transicion.requiereActor) {
-    await aplicarReglaActor(client, { intervencionId, intervencion, maquina, usuario });
+    await aplicarReglaActor(client, {
+      intervencionId,
+      intervencion,
+      maquina,
+      usuario,
+      validaHabilitacion: transicion.validaHabilitacion,
+    });
   }
 
   // Motivo de cancelación obligatorio (min 5 caracteres)

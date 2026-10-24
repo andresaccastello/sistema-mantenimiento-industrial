@@ -15,6 +15,7 @@ export interface TransicionDef {
   hacia: string;
   permiso: string;
   requiereActor: boolean;
+  validaHabilitacion: boolean;
 }
 
 export const TRANSICIONES: TransicionDef[] = [
@@ -25,6 +26,7 @@ export const TRANSICIONES: TransicionDef[] = [
     hacia: 'EN_PROCESO',
     permiso: 'INTERVENCIONES_CAMBIAR_ESTADO',
     requiereActor: true,
+    validaHabilitacion: true,
   },
   {
     accion: 'RESOLVER_AHORA',
@@ -33,6 +35,7 @@ export const TRANSICIONES: TransicionDef[] = [
     hacia: 'FINALIZADA',
     permiso: 'INTERVENCIONES_FINALIZAR',
     requiereActor: true,
+    validaHabilitacion: true,
   },
   {
     accion: 'CANCELAR',
@@ -41,6 +44,7 @@ export const TRANSICIONES: TransicionDef[] = [
     hacia: 'CANCELADA',
     permiso: 'INTERVENCIONES_CANCELAR',
     requiereActor: false,
+    validaHabilitacion: false,
   },
   {
     accion: 'ESPERAR_REPUESTOS',
@@ -49,6 +53,7 @@ export const TRANSICIONES: TransicionDef[] = [
     hacia: 'EN_ESPERA_REPUESTOS',
     permiso: 'INTERVENCIONES_CAMBIAR_ESTADO',
     requiereActor: true,
+    validaHabilitacion: false,
   },
   {
     accion: 'REANUDAR',
@@ -57,6 +62,7 @@ export const TRANSICIONES: TransicionDef[] = [
     hacia: 'EN_PROCESO',
     permiso: 'INTERVENCIONES_CAMBIAR_ESTADO',
     requiereActor: true,
+    validaHabilitacion: false,
   },
   {
     accion: 'FINALIZAR',
@@ -65,6 +71,7 @@ export const TRANSICIONES: TransicionDef[] = [
     hacia: 'FINALIZADA',
     permiso: 'INTERVENCIONES_FINALIZAR',
     requiereActor: true,
+    validaHabilitacion: false,
   },
   {
     accion: 'CANCELAR',
@@ -73,6 +80,7 @@ export const TRANSICIONES: TransicionDef[] = [
     hacia: 'CANCELADA',
     permiso: 'INTERVENCIONES_CANCELAR',
     requiereActor: false,
+    validaHabilitacion: false,
   },
   {
     accion: 'CANCELAR',
@@ -81,6 +89,7 @@ export const TRANSICIONES: TransicionDef[] = [
     hacia: 'CANCELADA',
     permiso: 'INTERVENCIONES_CANCELAR',
     requiereActor: false,
+    validaHabilitacion: false,
   },
 ];
 

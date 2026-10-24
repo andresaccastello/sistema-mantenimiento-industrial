@@ -1888,6 +1888,99 @@ test('Etapa 4B — Motor de estados: cierres, recuperación de la máquina y est
       assert.strictEqual(data.periodos_detencion[0].observacion_confirmacion, 'Máquina recuperada y probada a plena carga');
     });
 
+    await t.test('B-39: Responsable desactivado a mitad del trabajo permite a usuario con ASIGNAR continuar y cerrar, pero bloquea iniciar nueva', async () => {
+      // 1. Crear usuario responsable dedicado para B-39
+      const legajoB39 = 'R_B39_' + Date.now();
+      const resB39 = await client.query(
+        `INSERT INTO usuarios (legajo, nombre, password_hash, perfil_id, activo)
+         VALUES ($1, 'Resp B39 Test', $2, $3, true) RETURNING id`,
+        [legajoB39, hash, perfilMap['RESPONSABLE_MANTENIMIENTO']]
+      );
+      const userB39Id = Number(resB39.rows[0].id);
+      createdUsuarioIds.push(userB39Id);
+
+      await client.query(
+        'INSERT INTO usuario_sector (usuario_id, sector_id) VALUES ($1, $2)',
+        [userB39Id, sector1Id]
+      );
+
+      const loginB39 = await app.request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ legajo: legajoB39, password: 'pass123' })
+      });
+      const userB39Token = (await loginB39.json()).token;
+
+      // 2. Intervención 1: el responsable la inicia
+      const { body: inv1 } = await crearIntervencion({ detiene_maquina: false });
+      const rIni = await app.request(`/api/intervenciones/${inv1.id}/iniciar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userB39Token}` },
+        body: JSON.stringify({ estado_esperado: 'PENDIENTE' })
+      });
+      assert.strictEqual(rIni.status, 200);
+
+      const checkIni = await client.query('SELECT estado, responsable_usuario_id FROM intervenciones WHERE id = $1', [inv1.id]);
+      assert.strictEqual(checkIni.rows[0].estado, 'EN_PROCESO');
+      assert.strictEqual(Number(checkIni.rows[0].responsable_usuario_id), userB39Id);
+
+      // 3. Desactivar al responsable por SQL
+      await client.query('UPDATE usuarios SET activo = false WHERE id = $1', [userB39Id]);
+
+      // 4. Usuario con INTERVENCIONES_ASIGNAR (adminToken) la pasa a espera -> 200 y responsable intacto
+      const rEspera = await app.request(`/api/intervenciones/${inv1.id}/espera-repuestos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ estado_esperado: 'EN_PROCESO', observacion: 'Esperando repuestos especiales' })
+      });
+      assert.strictEqual(rEspera.status, 200);
+
+      const checkEsp = await client.query('SELECT estado, responsable_usuario_id FROM intervenciones WHERE id = $1', [inv1.id]);
+      assert.strictEqual(checkEsp.rows[0].estado, 'EN_ESPERA_REPUESTOS');
+      assert.strictEqual(Number(checkEsp.rows[0].responsable_usuario_id), userB39Id);
+
+      // 5. Usuario con INTERVENCIONES_ASIGNAR la reanuda -> 200 y responsable intacto
+      const rReanudar = await app.request(`/api/intervenciones/${inv1.id}/reanudar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ estado_esperado: 'EN_ESPERA_REPUESTOS' })
+      });
+      assert.strictEqual(rReanudar.status, 200);
+
+      const checkRean = await client.query('SELECT estado, responsable_usuario_id FROM intervenciones WHERE id = $1', [inv1.id]);
+      assert.strictEqual(checkRean.rows[0].estado, 'EN_PROCESO');
+      assert.strictEqual(Number(checkRean.rows[0].responsable_usuario_id), userB39Id);
+
+      // 6. Usuario con INTERVENCIONES_ASIGNAR la finaliza -> 200 y responsable intacto
+      const rFin = await app.request(`/api/intervenciones/${inv1.id}/finalizar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({
+          estado_esperado: 'EN_PROCESO',
+          trabajo_realizado: 'Finalizado por supervisor ante baja de responsable',
+          ejecucion: 'INTERNA'
+        })
+      });
+      assert.strictEqual(rFin.status, 200);
+
+      const checkFin = await client.query('SELECT estado, responsable_usuario_id FROM intervenciones WHERE id = $1', [inv1.id]);
+      assert.strictEqual(checkFin.rows[0].estado, 'FINALIZADA');
+      assert.strictEqual(Number(checkFin.rows[0].responsable_usuario_id), userB39Id);
+
+      // 7. Y el mismo responsable desactivado en una PENDIENTE asignada: iniciar → 422 RESPONSABLE_NO_HABILITADO
+      const { body: inv2 } = await crearIntervencion({ detiene_maquina: false });
+      await client.query('UPDATE intervenciones SET responsable_usuario_id = $1 WHERE id = $2', [userB39Id, inv2.id]);
+
+      const rIniBloqueado = await app.request(`/api/intervenciones/${inv2.id}/iniciar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ estado_esperado: 'PENDIENTE' })
+      });
+      assert.strictEqual(rIniBloqueado.status, 422);
+      const dataBloqueado = await rIniBloqueado.json();
+      assert.strictEqual(dataBloqueado.codigo, 'RESPONSABLE_NO_HABILITADO');
+    });
+
   } finally {
     // Limpieza general
     try {
