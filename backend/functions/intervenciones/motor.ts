@@ -336,6 +336,92 @@ export async function desasignarResponsableServicio(
 }
 
 /**
+ * Implementación unificada de la Regla de Actor (D-23, D-28).
+ * Se aplica cuando la transición tiene `requiereActor: true`.
+ *
+ * - Si no hay responsable asignado (en PENDIENTE para INICIAR o RESOLVER_AHORA):
+ *   El usuario debe poseer INTERVENCIONES_ASIGNARSE para auto-asignarse (y estar habilitado).
+ *   Si no lo posee, lanza 422 RESPONSABLE_REQUERIDO.
+ * - Si ya hay responsable asignado:
+ *   El usuario debe ser el responsable asignado O poseer INTERVENCIONES_ASIGNAR.
+ *   Si no, lanza 403 NO_ES_RESPONSABLE.
+ *   El responsable asignado debe seguir habilitado (422 RESPONSABLE_NO_HABILITADO).
+ */
+export async function aplicarReglaActor(
+  client: pg.PoolClient,
+  opts: {
+    intervencionId: number;
+    intervencion: any;
+    maquina: any;
+    usuario: UsuarioVisibilidad;
+    camposExtra?: Record<string, any>;
+    eventos?: Array<{ tipo: string; payload: any }>;
+    motivoAutoAsignacion?: string;
+  }
+): Promise<{ responsableId: number; autoAsignado: boolean }> {
+  const { intervencionId, intervencion, maquina, usuario, camposExtra, eventos, motivoAutoAsignacion } = opts;
+  const responsableId = intervencion.responsable_usuario_id
+    ? Number(intervencion.responsable_usuario_id)
+    : null;
+
+  if (responsableId === null) {
+    const tieneAsignarse = 'INTERVENCIONES_ASIGNARSE' in usuario.permisos;
+    if (!tieneAsignarse) {
+      throw new ErrorNegocio(
+        422,
+        'RESPONSABLE_REQUERIDO',
+        'La intervención no tiene responsable asignado y no posees permiso para asignártela'
+      );
+    }
+
+    await validarResponsableHabilitado(client, usuario.id, maquina.sector_id);
+
+    if (camposExtra) {
+      camposExtra.responsable_usuario_id = usuario.id;
+    } else {
+      await client.query('UPDATE intervenciones SET responsable_usuario_id = $1 WHERE id = $2', [
+        usuario.id,
+        intervencionId,
+      ]);
+    }
+
+    await registrarAuditoria(client, {
+      intervencionId,
+      tipoEvento: 'ASIGNACION',
+      campo: 'responsable_usuario_id',
+      valorAnterior: null,
+      valorNuevo: String(usuario.id),
+      motivo: motivoAutoAsignacion || 'Asignación automática al iniciar trabajo',
+      usuarioId: usuario.id,
+    });
+
+    if (eventos) {
+      eventos.push({
+        tipo: 'INTERVENCION_ASIGNADA',
+        payload: { intervencionId, responsableId: usuario.id },
+      });
+    }
+
+    return { responsableId: usuario.id, autoAsignado: true };
+  } else {
+    const esResponsable = responsableId === usuario.id;
+    const tieneAsignar = 'INTERVENCIONES_ASIGNAR' in usuario.permisos;
+
+    if (!esResponsable && !tieneAsignar) {
+      throw new ErrorNegocio(
+        403,
+        'NO_ES_RESPONSABLE',
+        'Solo el responsable asignado o un usuario con permiso de asignación puede realizar esta acción'
+      );
+    }
+
+    await validarResponsableHabilitado(client, responsableId, maquina.sector_id);
+
+    return { responsableId, autoAsignado: false };
+  }
+}
+
+/**
  * 6. Transición de estado (T1, T4, T5)
  */
 export async function ejecutarTransicionServicio(
@@ -394,10 +480,6 @@ export async function ejecutarTransicionServicio(
     );
   }
 
-  const responsableId = intervencion.responsable_usuario_id
-    ? Number(intervencion.responsable_usuario_id)
-    : null;
-
   const camposExtra: Record<string, any> = {};
   const eventos: Array<{ tipo: string; payload: any }> = [];
 
@@ -405,53 +487,24 @@ export async function ejecutarTransicionServicio(
   // REGLAS ESPECÍFICAS SEGÚN LA TRANSICIÓN
   // =========================================================
 
+  let nuevoResponsableId: number | null = intervencion.responsable_usuario_id
+    ? Number(intervencion.responsable_usuario_id)
+    : null;
+
+  if (transicion.requiereActor) {
+    const resActor = await aplicarReglaActor(client, {
+      intervencionId,
+      intervencion,
+      maquina,
+      usuario,
+      camposExtra,
+      eventos,
+      motivoAutoAsignacion: 'Asignación automática al iniciar trabajo',
+    });
+    nuevoResponsableId = resActor.responsableId;
+  }
+
   if (accion === 'INICIAR') {
-    // T1: PENDIENTE -> EN_PROCESO
-    let nuevoResponsableId = responsableId;
-
-    if (responsableId === null) {
-      // Caso sin responsable: si el usuario tiene INTERVENCIONES_ASIGNARSE y es habilitado, se asigna
-      const tieneAsignarse = 'INTERVENCIONES_ASIGNARSE' in usuario.permisos;
-      if (!tieneAsignarse) {
-        throw new ErrorNegocio(
-          422,
-          'RESPONSABLE_REQUERIDO',
-          'La intervención no tiene responsable asignado y no posees permiso para asignártela'
-        );
-      }
-
-      await validarResponsableHabilitado(client, usuario.id, maquina.sector_id);
-      nuevoResponsableId = usuario.id;
-      camposExtra.responsable_usuario_id = usuario.id;
-
-      await registrarAuditoria(client, {
-        intervencionId,
-        tipoEvento: 'ASIGNACION',
-        campo: 'responsable_usuario_id',
-        valorAnterior: null,
-        valorNuevo: String(usuario.id),
-        motivo: 'Asignación automática al iniciar trabajo',
-        usuarioId: usuario.id,
-      });
-
-      eventos.push({ tipo: 'INTERVENCION_ASIGNADA', payload: { intervencionId, responsableId: usuario.id } });
-    } else {
-      // Responsable ya asignado: aplicar regla de actor (D-23)
-      const esResponsable = responsableId === usuario.id;
-      const tieneAsignar = 'INTERVENCIONES_ASIGNAR' in usuario.permisos;
-
-      if (!esResponsable && !tieneAsignar) {
-        throw new ErrorNegocio(
-          403,
-          'NO_ES_RESPONSABLE',
-          'Solo el responsable asignado o un usuario con permiso de asignación puede iniciar este trabajo'
-        );
-      }
-
-      // El responsable asignado debe seguir habilitado
-      await validarResponsableHabilitado(client, responsableId, maquina.sector_id);
-    }
-
     // fecha_inicio: validar formato y coherencia si viene en el body
     if (params.fechaInicio !== undefined && params.fechaInicio !== null) {
       await validarFechaISO(client, params.fechaInicio, 'fecha_inicio');
@@ -481,26 +534,13 @@ export async function ejecutarTransicionServicio(
     } else {
       if (intervencion.fecha_inicio === null) {
         // Por defecto NOW()
-        const resNow = await client.query('SELECT NOW() AS ahora');
-        camposExtra.fecha_inicio = resNow.rows[0].ahora;
+        camposExtra.fecha_inicio = new Date().toISOString();
       }
     }
 
     eventos.push({ tipo: 'INTERVENCION_INICIADA', payload: { intervencionId, responsableId: nuevoResponsableId } });
 
   } else if (accion === 'ESPERAR_REPUESTOS') {
-    // T4: EN_PROCESO -> EN_ESPERA_REPUESTOS
-    const esResponsable = responsableId === usuario.id;
-    const tieneAsignar = 'INTERVENCIONES_ASIGNAR' in usuario.permisos;
-
-    if (!esResponsable && !tieneAsignar) {
-      throw new ErrorNegocio(
-        403,
-        'NO_ES_RESPONSABLE',
-        'Solo el responsable asignado o un supervisor con permiso de asignación puede pasar a espera de repuestos'
-      );
-    }
-
     const obs = params.observacion ? params.observacion.trim() : '';
     if (obs.length < 5) {
       throw new ErrorNegocio(
@@ -513,18 +553,6 @@ export async function ejecutarTransicionServicio(
     eventos.push({ tipo: 'INTERVENCION_EN_ESPERA', payload: { intervencionId } });
 
   } else if (accion === 'REANUDAR') {
-    // T5: EN_ESPERA_REPUESTOS -> EN_PROCESO
-    const esResponsable = responsableId === usuario.id;
-    const tieneAsignar = 'INTERVENCIONES_ASIGNAR' in usuario.permisos;
-
-    if (!esResponsable && !tieneAsignar) {
-      throw new ErrorNegocio(
-        403,
-        'NO_ES_RESPONSABLE',
-        'Solo el responsable asignado o un supervisor con permiso de asignación puede reanudar el trabajo'
-      );
-    }
-
     // No modifica fecha_inicio
     eventos.push({ tipo: 'INTERVENCION_REANUDADA', payload: { intervencionId } });
   }
@@ -611,7 +639,13 @@ export async function finalizarIntervencionServicio(
     observacion_recuperacion?: unknown;
   }
 ) {
-  if (!('INTERVENCIONES_FINALIZAR' in usuario.permisos)) {
+  const transiciones = transicionesDeAccion('FINALIZAR');
+  if (transiciones.length === 0) {
+    throw new ErrorNegocio(409, 'TRANSICION_NO_PERMITIDA', 'Acción no permitida: FINALIZAR');
+  }
+
+  const permisoRequerido = transiciones[0].permiso;
+  if (!(permisoRequerido in usuario.permisos)) {
     throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No posees permiso para finalizar intervenciones');
   }
 
@@ -621,7 +655,8 @@ export async function finalizarIntervencionServicio(
     throw new ErrorNegocio(409, 'ESTADO_DESACTUALIZADO', 'El estado de la intervención ha cambiado concurrentemente');
   }
 
-  if (intervencion.estado !== 'EN_PROCESO') {
+  const transicion = transiciones.find((t) => t.desde === intervencion.estado);
+  if (!transicion) {
     throw new ErrorNegocio(
       409,
       'TRANSICION_NO_PERMITIDA',
@@ -629,16 +664,12 @@ export async function finalizarIntervencionServicio(
     );
   }
 
-  // Regla de actor (D-23 / D-28)
-  const responsableId = intervencion.responsable_usuario_id ? Number(intervencion.responsable_usuario_id) : null;
-  const esResponsable = responsableId === usuario.id;
-  const tieneAsignar = 'INTERVENCIONES_ASIGNAR' in usuario.permisos;
-  if (!esResponsable && !tieneAsignar) {
-    throw new ErrorNegocio(
-      403,
-      'NO_ES_RESPONSABLE',
-      'Solo el responsable asignado o un usuario con permiso de asignación puede finalizar esta intervención'
-    );
+  if (!(transicion.permiso in usuario.permisos)) {
+    throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No posees permiso para finalizar intervenciones');
+  }
+
+  if (transicion.requiereActor) {
+    await aplicarReglaActor(client, { intervencionId, intervencion, maquina, usuario });
   }
 
   // Validaciones de datos
@@ -697,8 +728,8 @@ export async function finalizarIntervencionServicio(
   // Mutaciones:
   await registrarCambioEstado(client, {
     intervencionId,
-    estadoActual: 'EN_PROCESO',
-    estadoNuevo: 'FINALIZADA',
+    estadoActual: transicion.desde,
+    estadoNuevo: transicion.hacia,
     usuarioId: usuario.id,
     observacion: typeof body.observacion === 'string' ? body.observacion.trim() : null,
     camposExtra: {
@@ -793,7 +824,13 @@ export async function resolverAhoraIntervencionServicio(
     observacion_recuperacion?: unknown;
   }
 ) {
-  if (!('INTERVENCIONES_FINALIZAR' in usuario.permisos)) {
+  const transiciones = transicionesDeAccion('RESOLVER_AHORA');
+  if (transiciones.length === 0) {
+    throw new ErrorNegocio(409, 'TRANSICION_NO_PERMITIDA', 'Acción no permitida: RESOLVER_AHORA');
+  }
+
+  const permisoRequerido = transiciones[0].permiso;
+  if (!(permisoRequerido in usuario.permisos)) {
     throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No posees permiso para finalizar intervenciones');
   }
 
@@ -803,7 +840,8 @@ export async function resolverAhoraIntervencionServicio(
     throw new ErrorNegocio(409, 'ESTADO_DESACTUALIZADO', 'El estado de la intervención ha cambiado concurrentemente');
   }
 
-  if (intervencion.estado !== 'PENDIENTE') {
+  const transicion = transiciones.find((t) => t.desde === intervencion.estado);
+  if (!transicion) {
     throw new ErrorNegocio(
       409,
       'TRANSICION_NO_PERMITIDA',
@@ -811,32 +849,20 @@ export async function resolverAhoraIntervencionServicio(
     );
   }
 
-  // Regla de actor y asignación (como en T1)
+  if (!(transicion.permiso in usuario.permisos)) {
+    throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No posees permiso para finalizar intervenciones');
+  }
+
   let responsableId = intervencion.responsable_usuario_id ? Number(intervencion.responsable_usuario_id) : null;
-  let autoAsignado = false;
-  if (responsableId === null) {
-    const tieneAsignarse = 'INTERVENCIONES_ASIGNARSE' in usuario.permisos;
-    if (!tieneAsignarse) {
-      throw new ErrorNegocio(
-        422,
-        'RESPONSABLE_REQUERIDO',
-        'La intervención no tiene responsable asignado y no posees permiso para asignártela'
-      );
-    }
-    await validarResponsableHabilitado(client, usuario.id, maquina.sector_id);
-    responsableId = usuario.id;
-    autoAsignado = true;
-  } else {
-    const esResponsable = responsableId === usuario.id;
-    const tieneAsignar = 'INTERVENCIONES_ASIGNAR' in usuario.permisos;
-    if (!esResponsable && !tieneAsignar) {
-      throw new ErrorNegocio(
-        403,
-        'NO_ES_RESPONSABLE',
-        'Solo el responsable asignado o un usuario con permiso de asignación puede resolver esta intervención'
-      );
-    }
-    await validarResponsableHabilitado(client, responsableId, maquina.sector_id);
+  if (transicion.requiereActor) {
+    const resActor = await aplicarReglaActor(client, {
+      intervencionId,
+      intervencion,
+      maquina,
+      usuario,
+      motivoAutoAsignacion: 'Asignación automática por resolución inmediata',
+    });
+    responsableId = resActor.responsableId;
   }
 
   // fecha_inicio es obligatoria
@@ -904,24 +930,7 @@ export async function resolverAhoraIntervencionServicio(
     observacionRecuperacion: body.observacion_recuperacion,
   });
 
-  // Mutaciones:
-  if (autoAsignado) {
-    await client.query('UPDATE intervenciones SET responsable_usuario_id = $1 WHERE id = $2', [
-      responsableId,
-      intervencionId,
-    ]);
-    await registrarAuditoria(client, {
-      intervencionId,
-      tipoEvento: 'ASIGNACION',
-      campo: 'responsable_usuario_id',
-      valorAnterior: null,
-      valorNuevo: String(responsableId),
-      motivo: 'Asignación automática por resolución inmediata',
-      usuarioId: usuario.id,
-    });
-  }
-
-  // EXACTAMENTE DOS FILAS EN HISTORIAL:
+  // EXACTAMENTE DOS FILAS EN HISTORIAL (D-30):
   // 1. PENDIENTE -> EN_PROCESO
   await registrarCambioEstado(client, {
     intervencionId,
@@ -934,11 +943,11 @@ export async function resolverAhoraIntervencionServicio(
     },
   });
 
-  // 2. EN_PROCESO -> FINALIZADA
+  // 2. EN_PROCESO -> FINALIZADA (transicion.hacia)
   await registrarCambioEstado(client, {
     intervencionId,
     estadoActual: 'EN_PROCESO',
-    estadoNuevo: 'FINALIZADA',
+    estadoNuevo: transicion.hacia,
     usuarioId: usuario.id,
     observacion: typeof body.observacion === 'string' ? body.observacion.trim() : null,
     camposExtra: {
@@ -1031,7 +1040,13 @@ export async function cancelarIntervencionServicio(
     observacion_recuperacion?: unknown;
   }
 ) {
-  if (!('INTERVENCIONES_CANCELAR' in usuario.permisos)) {
+  const transiciones = transicionesDeAccion('CANCELAR');
+  if (transiciones.length === 0) {
+    throw new ErrorNegocio(409, 'TRANSICION_NO_PERMITIDA', 'Acción no permitida: CANCELAR');
+  }
+
+  const permisoRequerido = transiciones[0].permiso;
+  if (!(permisoRequerido in usuario.permisos)) {
     throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No posees permiso para cancelar intervenciones');
   }
 
@@ -1041,8 +1056,8 @@ export async function cancelarIntervencionServicio(
     throw new ErrorNegocio(409, 'ESTADO_DESACTUALIZADO', 'El estado de la intervención ha cambiado concurrentemente');
   }
 
-  const estadosPermitidos = ['PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS'];
-  if (!estadosPermitidos.includes(intervencion.estado)) {
+  const transicion = transiciones.find((t) => t.desde === intervencion.estado);
+  if (!transicion) {
     throw new ErrorNegocio(
       409,
       'TRANSICION_NO_PERMITIDA',
@@ -1050,7 +1065,15 @@ export async function cancelarIntervencionServicio(
     );
   }
 
-  // Regla de actor: NO (D-28)
+  if (!(transicion.permiso in usuario.permisos)) {
+    throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No posees permiso para cancelar intervenciones');
+  }
+
+  if (transicion.requiereActor) {
+    await aplicarReglaActor(client, { intervencionId, intervencion, maquina, usuario });
+  }
+
+  // Motivo de cancelación obligatorio (min 5 caracteres)
   const motivo = typeof body.motivo === 'string' ? body.motivo.trim() : '';
   if (motivo.length < 5) {
     throw new ErrorNegocio(422, 'MOTIVO_REQUERIDO', 'Debe indicar un motivo de cancelación de al menos 5 caracteres');
@@ -1073,8 +1096,8 @@ export async function cancelarIntervencionServicio(
   // Mutaciones:
   await registrarCambioEstado(client, {
     intervencionId,
-    estadoActual: intervencion.estado,
-    estadoNuevo: 'CANCELADA',
+    estadoActual: transicion.desde,
+    estadoNuevo: transicion.hacia,
     usuarioId: usuario.id,
     observacion: motivo,
   });

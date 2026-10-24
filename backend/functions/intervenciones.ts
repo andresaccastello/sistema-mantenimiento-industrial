@@ -315,7 +315,7 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
   try {
     const resI = await pool.query(
       `SELECT 
-         i.id, i.descripcion, i.estado, i.ejecucion, i.observaciones,
+         i.id, i.descripcion, i.estado, i.ejecucion, i.observaciones, i.trabajo_realizado,
          i.fecha_creacion, i.fecha_inicio, i.fecha_finalizacion,
          i.tiempo_inactividad_minutos, i.costo_mano_obra, i.costo_repuestos, i.costo_total_estimado,
          i.eliminado_en, i.creado_por_usuario_id, i.responsable_usuario_id,
@@ -362,7 +362,7 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
 
     // Períodos de detención
     const resPeriodos = await pool.query(
-      `SELECT pd.id, pd.desde, pd.hasta, pd.observacion,
+      `SELECT pd.id, pd.desde, pd.hasta, pd.observacion, pd.observacion_confirmacion,
               ua.id AS abierto_id, ua.nombre AS abierto_nombre,
               uc.id AS confirmado_id, uc.nombre AS confirmado_nombre
        FROM intervencion_periodos_detencion pd
@@ -390,6 +390,7 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
       estado: r.estado,
       ejecucion: r.ejecucion,
       observaciones: r.observaciones,
+      trabajo_realizado: r.trabajo_realizado,
       fecha_creacion: r.fecha_creacion,
       fecha_inicio: r.fecha_inicio,
       fecha_finalizacion: r.fecha_finalizacion,
@@ -434,6 +435,7 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
         hasta: p.hasta,
         esta_abierto: p.hasta === null,
         observacion: p.observacion,
+        observacion_confirmacion: p.observacion_confirmacion,
         abierto_por: { id: Number(p.abierto_id), nombre: p.abierto_nombre },
         confirmado_por: p.confirmado_id ? { id: Number(p.confirmado_id), nombre: p.confirmado_nombre } : null,
       })),

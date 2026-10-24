@@ -14,8 +14,7 @@ export async function conTransaccion<T>(
   let rollbackErr: any = null;
 
   try {
-    await client.query('BEGIN');
-    await client.query(`SET LOCAL lock_timeout = '${lockTimeout}'`);
+    await client.query(`BEGIN; SET LOCAL lock_timeout = '${lockTimeout}'`);
 
     const result = await fn(client);
 

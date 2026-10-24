@@ -124,13 +124,13 @@ export async function confirmarRecuperacionMaquina(
   }
   const maquina = resM.rows[0];
 
-  // 2. Bloqueo de períodos FOR UPDATE
+  // 2. Bloqueo de períodos FOR UPDATE (filtrado por maquina_id para no bloquear períodos ajenos)
   const resP = await client.query(
     `SELECT pd.id, pd.intervencion_id, pd.maquina_id, pd.desde, pd.hasta
      FROM intervencion_periodos_detencion pd
-     WHERE pd.id = ANY($1)
+     WHERE pd.id = ANY($1) AND pd.maquina_id = $2
      FOR UPDATE`,
-    [periodoIds]
+    [periodoIds, maquinaId]
   );
   const periodosEncontrados = new Map<number, any>(resP.rows.map((p) => [Number(p.id), p]));
 
@@ -205,7 +205,7 @@ export async function confirmarRecuperacionMaquina(
     [fechaRecuperacion]
   );
   if (resFutura.rows[0]?.es_futura) {
-    throw new ErrorNegocio(422, 'FECHA_FUTURA', 'La fecha de recuperación no puede ser futura');
+    throw new ErrorNegocio(422, 'FECHA_INCOHERENTE', 'La fecha de recuperación no puede ser futura');
   }
 
   for (const pid of periodoIds) {

@@ -1278,7 +1278,7 @@ test('Etapa 4B — Motor de estados: cierres, recuperación de la máquina y est
         body: JSON.stringify({ periodo_ids: [pId], fecha_recuperacion: '2099-01-01T00:00:00Z' })
       });
       assert.strictEqual(r2.status, 422);
-      assert.strictEqual((await r2.json()).codigo, 'FECHA_FUTURA');
+      assert.strictEqual((await r2.json()).codigo, 'FECHA_INCOHERENTE');
 
       await client.query('UPDATE intervencion_periodos_detencion SET hasta = NOW(), confirmado_por_usuario_id = $2 WHERE id = $1', [pId, resp1Id]);
       await client.query("UPDATE maquinas SET estado = 'OPERATIVA' WHERE id = $1", [mId]);
@@ -1855,6 +1855,37 @@ test('Etapa 4B — Motor de estados: cierres, recuperación de la máquina y est
         await client.query('DROP TRIGGER IF EXISTS trg_test_fail_periodo ON intervencion_periodos_detencion');
         await client.query('DROP FUNCTION IF EXISTS fail_update_periodo_test()');
       }
+    });
+
+    await t.test('B-38b: GET /api/intervenciones/:id devuelve trabajo_realizado y observacion_confirmacion', async () => {
+      const mId = await crearMaquina();
+      const { body: inv } = await crearIntervencion({ maquina_id: mId, detiene_maquina: true });
+      await iniciarIntervencion(inv.id, resp1Token);
+
+      const rFin = await app.request(`/api/intervenciones/${inv.id}/finalizar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${resp1Token}` },
+        body: JSON.stringify({
+          estado_esperado: 'EN_PROCESO',
+          trabajo_realizado: 'Reparación de motor y calibrado de rodamientos',
+          ejecucion: 'INTERNA',
+          maquina_recuperada: true,
+          observacion_recuperacion: 'Máquina recuperada y probada a plena carga'
+        })
+      });
+      assert.strictEqual(rFin.status, 200);
+
+      const resGet = await app.request(`/api/intervenciones/${inv.id}`, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${resp1Token}` }
+      });
+      assert.strictEqual(resGet.status, 200);
+      const data = await resGet.json();
+
+      assert.strictEqual(data.trabajo_realizado, 'Reparación de motor y calibrado de rodamientos');
+      assert.ok(Array.isArray(data.periodos_detencion));
+      assert.strictEqual(data.periodos_detencion.length, 1);
+      assert.strictEqual(data.periodos_detencion[0].observacion_confirmacion, 'Máquina recuperada y probada a plena carga');
     });
 
   } finally {
