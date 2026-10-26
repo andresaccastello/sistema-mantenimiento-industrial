@@ -4,9 +4,10 @@ export type AccionTransicion =
   | 'REANUDAR'
   | 'RESOLVER_AHORA'
   | 'FINALIZAR'
-  | 'CANCELAR';
+  | 'CANCELAR'
+  | 'REABRIR';
 
-export type CodigoTransicion = 'T1' | 'T2' | 'T3' | 'T4' | 'T5' | 'T6' | 'T7' | 'T8';
+export type CodigoTransicion = 'T1' | 'T2' | 'T3' | 'T4' | 'T5' | 'T6' | 'T7' | 'T8' | 'T9';
 
 export interface TransicionDef {
   accion: AccionTransicion;
@@ -88,6 +89,15 @@ export const TRANSICIONES: TransicionDef[] = [
     desde: 'EN_ESPERA_REPUESTOS',
     hacia: 'CANCELADA',
     permiso: 'INTERVENCIONES_CANCELAR',
+    requiereActor: false,
+    validaHabilitacion: false,
+  },
+  {
+    accion: 'REABRIR',
+    codigo: 'T9',
+    desde: 'FINALIZADA',
+    hacia: 'EN_PROCESO',
+    permiso: 'INTERVENCIONES_REABRIR',
     requiereActor: false,
     validaHabilitacion: false,
   },

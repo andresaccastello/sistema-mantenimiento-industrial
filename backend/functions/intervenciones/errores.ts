@@ -4,25 +4,26 @@ export class ErrorNegocio extends Error {
   public status: number;
   public codigo: string;
   public mensaje: string;
+  public detalles?: Record<string, any>;
 
-  constructor(status: number, codigo: string, mensaje: string) {
+  constructor(status: number, codigo: string, mensaje: string, detalles?: Record<string, any>) {
     super(mensaje);
     this.name = 'ErrorNegocio';
     this.status = status;
     this.codigo = codigo;
     this.mensaje = mensaje;
+    this.detalles = detalles;
   }
 }
 
 export const responderError = (c: Context, error: unknown) => {
   if (error instanceof ErrorNegocio) {
-    return c.json(
-      {
-        error: error.mensaje,
-        codigo: error.codigo,
-      },
-      error.status as any
-    );
+    const body: Record<string, any> = {
+      error: error.mensaje,
+      codigo: error.codigo,
+      ...(error.detalles || {}),
+    };
+    return c.json(body, error.status as any);
   }
 
   console.error('Error no controlado en operación de intervenciones:', error);

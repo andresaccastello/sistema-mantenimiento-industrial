@@ -749,6 +749,39 @@ export async function finalizarIntervencionServicio(
     },
   });
 
+  // 5.4 Auditoría de trabajo_realizado / ejecucion al volver a finalizar (tras reapertura)
+  if (
+    intervencion.trabajo_realizado !== null &&
+    intervencion.trabajo_realizado !== undefined &&
+    intervencion.trabajo_realizado !== trabajoRealizado
+  ) {
+    await registrarAuditoria(client, {
+      intervencionId,
+      tipoEvento: 'OTRO',
+      campo: 'trabajo_realizado',
+      valorAnterior: intervencion.trabajo_realizado,
+      valorNuevo: trabajoRealizado,
+      motivo: 'Nueva finalización tras reapertura',
+      usuarioId: usuario.id,
+    });
+  }
+
+  if (
+    intervencion.ejecucion !== null &&
+    intervencion.ejecucion !== undefined &&
+    intervencion.ejecucion !== body.ejecucion
+  ) {
+    await registrarAuditoria(client, {
+      intervencionId,
+      tipoEvento: 'OTRO',
+      campo: 'ejecucion',
+      valorAnterior: intervencion.ejecucion,
+      valorNuevo: String(body.ejecucion),
+      motivo: 'Nueva finalización tras reapertura',
+      usuarioId: usuario.id,
+    });
+  }
+
   const eventos: Array<{ tipo: string; payload: any }> = [
     { tipo: 'INTERVENCION_FINALIZADA', payload: { intervencionId } },
   ];
@@ -1182,5 +1215,579 @@ export async function cancelarIntervencionServicio(
       cambio: recalculo.cambio,
     },
     periodo,
+  };
+}
+
+/**
+ * 5. POST /api/intervenciones/:id/reabrir (T9)
+ */
+export async function reabrirIntervencionServicio(
+  client: pg.PoolClient,
+  intervencionId: number,
+  usuario: UsuarioVisibilidad,
+  body: {
+    estado_esperado: string;
+    motivo?: unknown;
+    maquina_detenida?: unknown;
+    desde?: unknown;
+    observacion_detencion?: unknown;
+  }
+) {
+  const transiciones = transicionesDeAccion('REABRIR');
+  if (transiciones.length === 0) {
+    throw new ErrorNegocio(409, 'TRANSICION_NO_PERMITIDA', 'Acción no permitida: REABRIR');
+  }
+
+  const permisoRequerido = transiciones[0].permiso;
+  if (!(permisoRequerido in usuario.permisos)) {
+    throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No posees permiso para reabrir intervenciones');
+  }
+
+  const { intervencion, maquina } = await bloquearIntervencion(client, intervencionId, usuario);
+
+  if (body.estado_esperado !== intervencion.estado) {
+    throw new ErrorNegocio(409, 'ESTADO_DESACTUALIZADO', 'El estado de la intervención ha cambiado concurrentemente');
+  }
+
+  const transicion = transiciones.find((t) => t.desde === intervencion.estado);
+  if (!transicion) {
+    throw new ErrorNegocio(
+      409,
+      'TRANSICION_NO_PERMITIDA',
+      `No se puede reabrir una intervención en estado ${intervencion.estado}`
+    );
+  }
+
+  if (!(transicion.permiso in usuario.permisos)) {
+    throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No posees permiso para reabrir intervenciones');
+  }
+
+  const motivo = typeof body.motivo === 'string' ? body.motivo.trim() : '';
+  if (motivo.length < 5) {
+    throw new ErrorNegocio(422, 'MOTIVO_REQUERIDO', 'El motivo de la reapertura es obligatorio y debe tener al menos 5 caracteres');
+  }
+
+  // 3. Período de detención (E9, ejemplo 4):
+  const resPeriodoAbierto = await client.query(
+    'SELECT id, desde FROM intervencion_periodos_detencion WHERE intervencion_id = $1 AND hasta IS NULL FOR UPDATE',
+    [intervencionId]
+  );
+
+  let periodoVigente: any = null;
+  let seAbrioPeriodo = false;
+
+  if (resPeriodoAbierto.rows.length > 0) {
+    // Si tiene período abierto (ej. E7): continúa sin cambios. maquina_detenida y desde se ignoran.
+    const pRow = resPeriodoAbierto.rows[0];
+    periodoVigente = {
+      id: Number(pRow.id),
+      cerrado: false,
+      hasta: null,
+    };
+  } else {
+    // Si no tiene período abierto: maquina_detenida es obligatorio (boolean)
+    if (body.maquina_detenida === undefined || body.maquina_detenida === null || typeof body.maquina_detenida !== 'boolean') {
+      throw new ErrorNegocio(422, 'DECISION_DETENCION_REQUERIDA', 'Debe indicar si la máquina volvió a detenerse (maquina_detenida)');
+    }
+
+    if (body.maquina_detenida === true) {
+      let desdeISO: string;
+      if (body.desde !== undefined && body.desde !== null && String(body.desde).trim() !== '') {
+        desdeISO = await validarFechaISO(client, body.desde, 'desde');
+      } else {
+        const resNow = await client.query('SELECT NOW() AS ahora');
+        desdeISO = new Date(resNow.rows[0].ahora).toISOString();
+      }
+
+      // Validar: desde >= fecha_creacion y desde <= NOW()
+      const resCheckCreacion = await client.query(
+        `SELECT (
+           $1::timestamptz >= $2::timestamptz
+           AND $1::timestamptz <= NOW() + INTERVAL '10 seconds'
+         ) AS coherente`,
+        [desdeISO, intervencion.fecha_creacion]
+      );
+      if (!resCheckCreacion.rows[0] || !resCheckCreacion.rows[0].coherente) {
+        throw new ErrorNegocio(
+          422,
+          'FECHA_INCOHERENTE',
+          'La fecha de la detención debe ser mayor o igual a la creación de la intervención y menor o igual al instante actual'
+        );
+      }
+
+      // Validar: desde >= hasta del último período cerrado
+      const resUltimo = await client.query(
+        `SELECT hasta FROM intervencion_periodos_detencion
+         WHERE intervencion_id = $1 AND hasta IS NOT NULL
+         ORDER BY hasta DESC, id DESC LIMIT 1`,
+        [intervencionId]
+      );
+      if (resUltimo.rows.length > 0) {
+        const hastaUltimo = resUltimo.rows[0].hasta;
+        const resCheckUltimo = await client.query(
+          `SELECT ($1::timestamptz >= $2::timestamptz) AS coherente`,
+          [desdeISO, hastaUltimo]
+        );
+        if (!resCheckUltimo.rows[0] || !resCheckUltimo.rows[0].coherente) {
+          throw new ErrorNegocio(
+            422,
+            'FECHA_INCOHERENTE',
+            'La fecha de la nueva detención debe ser mayor o igual a la finalización del último período cerrado'
+          );
+        }
+      }
+
+      const obsDetencion = typeof body.observacion_detencion === 'string' && body.observacion_detencion.trim() !== ''
+        ? body.observacion_detencion.trim()
+        : null;
+
+      const resIns = await client.query(
+        `INSERT INTO intervencion_periodos_detencion (
+           intervencion_id, maquina_id, desde, abierto_por_usuario_id, observacion
+         )
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id`,
+        [intervencionId, maquina.id, desdeISO, usuario.id, obsDetencion]
+      );
+      seAbrioPeriodo = true;
+      periodoVigente = {
+        id: Number(resIns.rows[0].id),
+        cerrado: false,
+        hasta: null,
+      };
+    } else {
+      periodoVigente = null;
+    }
+  }
+
+  // 4. Mutaciones:
+  await registrarCambioEstado(client, {
+    intervencionId,
+    estadoActual: transicion.desde,
+    estadoNuevo: transicion.hacia,
+    usuarioId: usuario.id,
+    observacion: motivo,
+    camposExtra: {
+      fecha_finalizacion: null,
+    },
+  });
+
+  // Auditoría REAPERTURA con fecha previa y valor nuevo NULL
+  const fechaAnterior = intervencion.fecha_finalizacion
+    ? new Date(intervencion.fecha_finalizacion).toISOString()
+    : null;
+
+  await registrarAuditoria(client, {
+    intervencionId,
+    tipoEvento: 'REAPERTURA',
+    campo: 'fecha_finalizacion',
+    valorAnterior: fechaAnterior,
+    valorNuevo: null,
+    motivo,
+    usuarioId: usuario.id,
+  });
+
+  // 5. Recalcular máquina
+  const recalculo = await recalcularEstadoMaquina(client, maquina.id, {
+    usuarioId: usuario.id,
+    intervencionId,
+    motivo: `Reapertura de intervención: ${motivo}`,
+    confirmacion: false,
+  });
+
+  // 6. Eventos
+  const eventos: Array<{ tipo: string; payload: any }> = [
+    { tipo: 'INTERVENCION_REABIERTA', payload: { intervencionId } },
+  ];
+
+  if (seAbrioPeriodo) {
+    eventos.push({
+      tipo: 'DETENCION_REGISTRADA',
+      payload: { intervencionId, maquinaId: maquina.id, periodoId: periodoVigente.id },
+    });
+  }
+
+  if (recalculo.cambio) {
+    eventos.push({
+      tipo: 'MAQUINA_CAMBIO_ESTADO',
+      payload: {
+        maquinaId: maquina.id,
+        estadoAnterior: recalculo.estadoAnterior,
+        estadoNuevo: recalculo.estadoNuevo,
+      },
+    });
+  }
+
+  await registrarNotificaciones(client, eventos);
+
+  // Consultar intervención actualizada
+  const resAct = await client.query(
+    `SELECT i.id, i.estado, i.fecha_inicio, i.fecha_finalizacion, i.trabajo_realizado, i.ejecucion, i.tiempo_inactividad_minutos,
+            u.id AS resp_id, u.legajo AS resp_legajo, u.nombre AS resp_nombre
+     FROM intervenciones i
+     LEFT JOIN usuarios u ON i.responsable_usuario_id = u.id
+     WHERE i.id = $1`,
+    [intervencionId]
+  );
+  const row = resAct.rows[0];
+
+  return {
+    intervencion: {
+      id: Number(row.id),
+      estado: row.estado,
+      fecha_inicio: row.fecha_inicio,
+      fecha_finalizacion: row.fecha_finalizacion,
+      trabajo_realizado: row.trabajo_realizado,
+      ejecucion: row.ejecucion,
+      tiempo_inactividad_minutos: row.tiempo_inactividad_minutos != null ? Number(row.tiempo_inactividad_minutos) : null,
+      responsable: row.resp_id
+        ? { id: Number(row.resp_id), legajo: row.resp_legajo, nombre: row.resp_nombre }
+        : null,
+    },
+    maquina: {
+      id: Number(maquina.id),
+      estado_anterior: recalculo.estadoAnterior,
+      estado_nuevo: recalculo.estadoNuevo,
+      cambio: recalculo.cambio,
+    },
+    periodo: periodoVigente,
+  };
+}
+
+/**
+ * 6. POST /api/intervenciones/:id/eliminar (Eliminación lógica)
+ */
+export async function eliminarIntervencionServicio(
+  client: pg.PoolClient,
+  intervencionId: number,
+  usuario: UsuarioVisibilidad,
+  body: {
+    motivo?: unknown;
+    maquina_recuperada?: unknown;
+    observacion_recuperacion?: unknown;
+  }
+) {
+  if (!('INTERVENCIONES_ELIMINAR' in usuario.permisos)) {
+    throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No posees permiso para eliminar intervenciones');
+  }
+
+  const { intervencion, maquina } = await bloquearIntervencion(client, intervencionId, usuario);
+
+  const motivo = typeof body.motivo === 'string' ? body.motivo.trim() : '';
+  if (motivo.length < 5) {
+    throw new ErrorNegocio(422, 'MOTIVO_REQUERIDO', 'El motivo de la eliminación es obligatorio y debe tener al menos 5 caracteres');
+  }
+
+  // 3. Evaluar condiciones de actividad relevante
+  const motivosBloqueo: string[] = [];
+
+  if (intervencion.estado !== 'PENDIENTE') {
+    motivosBloqueo.push('ESTADO_NO_PENDIENTE');
+  }
+
+  if (intervencion.fecha_inicio !== null && intervencion.fecha_inicio !== undefined) {
+    motivosBloqueo.push('TIENE_FECHA_INICIO');
+  }
+
+  const resCostos = await client.query('SELECT 1 FROM intervencion_costos WHERE intervencion_id = $1 LIMIT 1', [intervencionId]);
+  if (resCostos.rows.length > 0) {
+    motivosBloqueo.push('TIENE_COSTOS');
+  }
+
+  const resRepuestos = await client.query('SELECT 1 FROM intervencion_repuestos WHERE intervencion_id = $1 LIMIT 1', [intervencionId]);
+  if (resRepuestos.rows.length > 0) {
+    motivosBloqueo.push('TIENE_REPUESTOS');
+  }
+
+  const resMovStock = await client.query('SELECT 1 FROM movimientos_stock WHERE intervencion_id = $1 LIMIT 1', [intervencionId]);
+  if (resMovStock.rows.length > 0) {
+    motivosBloqueo.push('TIENE_MOVIMIENTOS_STOCK');
+  }
+
+  const resDocs = await client.query('SELECT 1 FROM documentos WHERE intervencion_id = $1 LIMIT 1', [intervencionId]);
+  if (resDocs.rows.length > 0) {
+    motivosBloqueo.push('TIENE_DOCUMENTOS');
+  }
+
+  const resHist = await client.query('SELECT COUNT(*) AS total FROM historial_estados_intervencion WHERE intervencion_id = $1', [intervencionId]);
+  const totalHist = Number(resHist.rows[0]?.total || 0);
+  if (totalHist > 1) {
+    motivosBloqueo.push('TIENE_HISTORIAL');
+  } else if (totalHist === 1) {
+    const resSingleHist = await client.query(
+      'SELECT estado_anterior, estado_nuevo FROM historial_estados_intervencion WHERE intervencion_id = $1',
+      [intervencionId]
+    );
+    const single = resSingleHist.rows[0];
+    if (single.estado_anterior !== null || single.estado_nuevo !== 'PENDIENTE') {
+      motivosBloqueo.push('TIENE_HISTORIAL');
+    }
+  }
+
+  if (motivosBloqueo.length > 0) {
+    throw new ErrorNegocio(
+      409,
+      'ELIMINACION_NO_PERMITIDA',
+      'No se puede eliminar la intervención porque registra actividad previa',
+      { motivos: motivosBloqueo }
+    );
+  }
+
+  // 4. Período abierto (D-34)
+  const resPeriodoAbierto = await client.query(
+    'SELECT id FROM intervencion_periodos_detencion WHERE intervencion_id = $1 AND hasta IS NULL FOR UPDATE',
+    [intervencionId]
+  );
+
+  let confirmacionRecalculo = false;
+  const eventos: Array<{ tipo: string; payload: any }> = [];
+
+  if (resPeriodoAbierto.rows.length > 0) {
+    if (body.maquina_recuperada === undefined || body.maquina_recuperada === null || typeof body.maquina_recuperada !== 'boolean') {
+      throw new ErrorNegocio(422, 'DECISION_RECUPERACION_REQUERIDA', 'Debe indicar la decisión sobre la recuperación de la máquina (maquina_recuperada)');
+    }
+
+    if (body.maquina_recuperada === true) {
+      if (!('INTERVENCIONES_CONFIRMAR_RECUPERACION' in usuario.permisos)) {
+        throw new ErrorNegocio(403, 'CONFIRMACION_NO_PERMITIDA', 'No posees permiso para confirmar la recuperación de la máquina');
+      }
+      confirmacionRecalculo = true;
+    }
+
+    const obsConf = typeof body.observacion_recuperacion === 'string' && body.observacion_recuperacion.trim() !== ''
+      ? `Cerrado por eliminación lógica - ${body.observacion_recuperacion.trim()}`
+      : 'Cerrado por eliminación lógica';
+
+    const periodoId = resPeriodoAbierto.rows[0].id;
+
+    await client.query(
+      `UPDATE intervencion_periodos_detencion
+       SET hasta = NOW(),
+           confirmado_por_usuario_id = $1,
+           observacion_confirmacion = $2
+       WHERE id = $3`,
+      [usuario.id, obsConf, periodoId]
+    );
+
+    // Recalcular tiempo_inactividad_minutos
+    await client.query(
+      `UPDATE intervenciones
+       SET tiempo_inactividad_minutos = (
+         SELECT ROUND(EXTRACT(EPOCH FROM SUM(hasta - desde)) / 60)
+         FROM intervencion_periodos_detencion
+         WHERE intervencion_id = $1 AND hasta IS NOT NULL
+       )
+       WHERE id = $1`,
+      [intervencionId]
+    );
+
+    const recalculo = await recalcularEstadoMaquina(client, maquina.id, {
+      usuarioId: usuario.id,
+      intervencionId,
+      motivo: 'Eliminación lógica de intervención',
+      confirmacion: confirmacionRecalculo,
+    });
+
+    if (recalculo.cambio) {
+      eventos.push({
+        tipo: 'MAQUINA_CAMBIO_ESTADO',
+        payload: {
+          maquinaId: maquina.id,
+          estadoAnterior: recalculo.estadoAnterior,
+          estadoNuevo: recalculo.estadoNuevo,
+        },
+      });
+    }
+  }
+
+  // 5. Mutaciones
+  await client.query(
+    `UPDATE intervenciones
+     SET eliminado_en = NOW(),
+         eliminado_por_usuario_id = $1,
+         motivo_eliminacion = $2,
+         actualizado_en = NOW()
+     WHERE id = $3`,
+    [usuario.id, motivo, intervencionId]
+  );
+
+  // Auditoría ELIMINACION_LOGICA
+  await registrarAuditoria(client, {
+    intervencionId,
+    tipoEvento: 'ELIMINACION_LOGICA',
+    campo: 'eliminado_en',
+    valorAnterior: null,
+    valorNuevo: new Date().toISOString(),
+    motivo,
+    usuarioId: usuario.id,
+  });
+
+  // 6. Eventos
+  eventos.push({
+    tipo: 'INTERVENCION_ELIMINADA',
+    payload: { intervencionId, maquinaId: maquina.id },
+  });
+
+  await registrarNotificaciones(client, eventos);
+
+  return {
+    ok: true,
+    eliminada: true,
+    intervencion_id: intervencionId,
+  };
+}
+
+/**
+ * 7. PATCH /api/intervenciones/:id (Edición)
+ */
+export async function editarIntervencionServicio(
+  client: pg.PoolClient,
+  intervencionId: number,
+  usuario: UsuarioVisibilidad,
+  body: Record<string, any>
+) {
+  if (!('INTERVENCIONES_EDITAR' in usuario.permisos)) {
+    throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No posees permiso para editar intervenciones');
+  }
+
+  const { intervencion, maquina } = await bloquearIntervencion(client, intervencionId, usuario);
+
+  if (!body.estado_esperado || typeof body.estado_esperado !== 'string') {
+    throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
+  }
+
+  if (body.estado_esperado !== intervencion.estado) {
+    throw new ErrorNegocio(409, 'ESTADO_DESACTUALIZADO', 'El estado de la intervención ha cambiado concurrentemente');
+  }
+
+  // 2. Estados editables
+  const estadosEditables = ['PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS'];
+  if (!estadosEditables.includes(intervencion.estado)) {
+    throw new ErrorNegocio(409, 'EDICION_NO_PERMITIDA', `No se permite la edición de intervenciones en estado ${intervencion.estado}`);
+  }
+
+  // 3. Alcance de INTERVENCIONES_EDITAR
+  const alcanceEditar = usuario.permisos['INTERVENCIONES_EDITAR'];
+  if (alcanceEditar === 'PROPIAS') {
+    const esPropia = Number(intervencion.creado_por_usuario_id) === usuario.id;
+    const esPendiente = intervencion.estado === 'PENDIENTE';
+    const sinResponsable = intervencion.responsable_usuario_id === null;
+
+    if (!esPropia || !esPendiente || !sinResponsable) {
+      throw new ErrorNegocio(
+        403,
+        'EDICION_NO_PERMITIDA',
+        'Con alcance PROPIAS solo puedes editar intervenciones creadas por ti, en estado PENDIENTE y sin responsable asignado'
+      );
+    }
+  } else if (alcanceEditar === 'SECTORES') {
+    if (!usuario.sectores.includes(Number(maquina.sector_id))) {
+      throw new ErrorNegocio(403, 'EDICION_NO_PERMITIDA', 'No tienes alcance sobre el sector de la máquina asociada');
+    }
+  }
+
+  // 4. Campos aceptados: solo descripcion y observaciones (además de estado_esperado)
+  for (const key of Object.keys(body)) {
+    if (!['estado_esperado', 'descripcion', 'observaciones'].includes(key)) {
+      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', `Campo no permitido para edición: ${key}`);
+    }
+  }
+
+  if (body.descripcion === undefined && body.observaciones === undefined) {
+    throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'Debe especificar al menos descripción u observaciones');
+  }
+
+  let nuevaDescripcion = intervencion.descripcion;
+  let nuevoObservaciones = intervencion.observaciones;
+  let cambioDescripcion = false;
+  let cambioObservaciones = false;
+
+  // 5. Validaciones
+  if (body.descripcion !== undefined) {
+    if (typeof body.descripcion !== 'string') {
+      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'La descripción debe ser una cadena de texto');
+    }
+    const descTrim = body.descripcion.trim();
+    if (descTrim.length < 5 || descTrim.length > 2000) {
+      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'La descripción debe tener entre 5 y 2000 caracteres');
+    }
+    if (descTrim !== intervencion.descripcion) {
+      nuevaDescripcion = descTrim;
+      cambioDescripcion = true;
+    }
+  }
+
+  if (body.observaciones !== undefined) {
+    let obsVal: string | null = null;
+    if (body.observaciones !== null) {
+      if (typeof body.observaciones !== 'string') {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'Las observaciones deben ser una cadena de texto o null');
+      }
+      const obsTrim = body.observaciones.trim();
+      if (obsTrim.length > 2000) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'Las observaciones no pueden superar los 2000 caracteres');
+      }
+      obsVal = obsTrim.length > 0 ? obsTrim : null;
+    }
+    if (obsVal !== intervencion.observaciones) {
+      nuevoObservaciones = obsVal;
+      cambioObservaciones = true;
+    }
+  }
+
+  // 6. Sin cambios
+  if (!cambioDescripcion && !cambioObservaciones) {
+    throw new ErrorNegocio(422, 'SIN_CAMBIOS', 'Los valores enviados no presentan cambios respecto de los actuales');
+  }
+
+  // 8. Mutación en base de datos
+  await client.query(
+    `UPDATE intervenciones
+     SET descripcion = $1,
+         observaciones = $2,
+         actualizado_en = NOW()
+     WHERE id = $3`,
+    [nuevaDescripcion, nuevoObservaciones, intervencionId]
+  );
+
+  // 7. Auditoría EDICION por campo modificado
+  if (cambioDescripcion) {
+    await registrarAuditoria(client, {
+      intervencionId,
+      tipoEvento: 'EDICION',
+      campo: 'descripcion',
+      valorAnterior: intervencion.descripcion,
+      valorNuevo: nuevaDescripcion,
+      motivo: 'Edición de datos de intervención',
+      usuarioId: usuario.id,
+    });
+  }
+
+  if (cambioObservaciones) {
+    await registrarAuditoria(client, {
+      intervencionId,
+      tipoEvento: 'EDICION',
+      campo: 'observaciones',
+      valorAnterior: intervencion.observaciones,
+      valorNuevo: nuevoObservaciones,
+      motivo: 'Edición de datos de intervención',
+      usuarioId: usuario.id,
+    });
+  }
+
+  const resAct = await client.query(
+    `SELECT i.id, i.descripcion, i.observaciones, i.estado, i.actualizado_en
+     FROM intervenciones i
+     WHERE i.id = $1`,
+    [intervencionId]
+  );
+  const row = resAct.rows[0];
+
+  return {
+    id: Number(row.id),
+    descripcion: row.descripcion,
+    observaciones: row.observaciones,
+    estado: row.estado,
+    actualizado_en: row.actualizado_en,
   };
 }

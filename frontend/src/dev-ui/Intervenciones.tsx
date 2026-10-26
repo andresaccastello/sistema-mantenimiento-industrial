@@ -58,6 +58,27 @@ interface ResponsableHabilitado {
   nombre: string;
 }
 
+function traducirMotivoEliminacion(m: string): string {
+  switch (m) {
+    case 'ESTADO_NO_PENDIENTE':
+      return 'El estado actual no es PENDIENTE.';
+    case 'TIENE_FECHA_INICIO':
+      return 'La intervención registra fecha de inicio de trabajo.';
+    case 'TIENE_COSTOS':
+      return 'Existen renglones de costos asociados (incluso anulados).';
+    case 'TIENE_REPUESTOS':
+      return 'Existen repuestos asociados a la intervención.';
+    case 'TIENE_MOVIMIENTOS_STOCK':
+      return 'Existen movimientos de stock vinculados.';
+    case 'TIENE_DOCUMENTOS':
+      return 'Existen documentos adjuntos asociados.';
+    case 'TIENE_HISTORIAL':
+      return 'El historial de estados registra actividad más allá del alta inicial.';
+    default:
+      return m;
+  }
+}
+
 interface Intervencion {
   id: number;
   descripcion: string;
@@ -69,6 +90,14 @@ interface Intervencion {
   fecha_finalizacion?: string | null;
   fecha_creacion: string;
   detiene_maquina_actualmente: boolean;
+  eliminada?: boolean;
+  eliminado_en?: string | null;
+  eliminado_por?: {
+    id: number;
+    legajo: string;
+    nombre: string;
+  } | null;
+  motivo_eliminacion?: string | null;
   maquina: Maquina;
   creado_por: {
     id: number;
@@ -97,6 +126,8 @@ export function Intervenciones() {
 
   // Filtros
   const [soloSinAsignar, setSoloSinAsignar] = useState(false);
+  const [incluirEliminadas, setIncluirEliminadas] = useState(false);
+  const [puedeVerEliminadas, setPuedeVerEliminadas] = useState(true);
 
   // Formulario de nueva falla
   const [showModal, setShowModal] = useState(false);
@@ -112,7 +143,7 @@ export function Intervenciones() {
 
   // Operaciones de motor de estados
   const [actionLoading, setActionLoading] = useState(false);
-  const [actionError, setActionError] = useState<{ codigo: string; mensaje: string } | null>(null);
+  const [actionError, setActionError] = useState<{ codigo: string; mensaje: string; motivos?: string[] } | null>(null);
 
   // Sub-modal Asignar / Reasignar
   const [showAsignarModal, setShowAsignarModal] = useState(false);
@@ -157,14 +188,40 @@ export function Intervenciones() {
   const [detencionObs, setDetencionObs] = useState('');
   const [detencionDesde, setDetencionDesde] = useState('');
 
+  // Modales Etapa 6
+  // 1. Reabrir
+  const [showReabrirModal, setShowReabrirModal] = useState(false);
+  const [motivoReabrir, setMotivoReabrir] = useState('');
+  const [detenidaReabrir, setDetenidaReabrir] = useState(false);
+  const [desdeReabrir, setDesdeReabrir] = useState('');
+  const [obsDetencionReabrir, setObsDetencionReabrir] = useState('');
+
+  // 2. Eliminar
+  const [showEliminarModal, setShowEliminarModal] = useState(false);
+  const [motivoEliminar, setMotivoEliminar] = useState('');
+  const [recupEliminar, setRecupEliminar] = useState(true);
+  const [obsRecupEliminar, setObsRecupEliminar] = useState('');
+
+  // 3. Editar
+  const [showEditarModal, setShowEditarModal] = useState(false);
+  const [descEditar, setDescEditar] = useState('');
+  const [obsEditar, setObsEditar] = useState('');
+
   const loadIntervenciones = async () => {
     setLoading(true);
     setError(null);
     try {
-      const url = soloSinAsignar ? '/api/intervenciones?sin_asignar=true' : '/api/intervenciones';
-      const data = await fetchApi(url);
+      const params = new URLSearchParams();
+      if (soloSinAsignar) params.set('sin_asignar', 'true');
+      if (incluirEliminadas) params.set('incluir_eliminadas', 'true');
+      const queryStr = params.toString() ? `?${params.toString()}` : '';
+      const data = await fetchApi(`/api/intervenciones${queryStr}`);
       setIntervenciones(data);
     } catch (err: any) {
+      if (incluirEliminadas && err.status === 403) {
+        setPuedeVerEliminadas(false);
+        setIncluirEliminadas(false);
+      }
       setError(err.message || 'Error al cargar intervenciones');
     } finally {
       setLoading(false);
@@ -183,7 +240,7 @@ export function Intervenciones() {
   useEffect(() => {
     loadIntervenciones();
     loadMaquinas();
-  }, [soloSinAsignar]);
+  }, [soloSinAsignar, incluirEliminadas]);
 
   const handleCrearFalla = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -245,8 +302,10 @@ export function Intervenciones() {
         body: body ? JSON.stringify(body) : undefined,
       });
       // Recargar detalle y lista
-      if (selectedIntervencion) {
+      if (selectedIntervencion && !url.endsWith('/eliminar')) {
         await handleVerDetalle(selectedIntervencion.id);
+      } else if (url.endsWith('/eliminar')) {
+        setSelectedIntervencion(null);
       }
       await loadIntervenciones();
       // Cerrar submodales
@@ -257,14 +316,61 @@ export function Intervenciones() {
       setShowResolverModal(false);
       setShowCancelarModal(false);
       setShowDetencionModal(false);
+      setShowReabrirModal(false);
+      setShowEliminarModal(false);
+      setShowEditarModal(false);
     } catch (err: any) {
       setActionError({
         codigo: err.codigo || 'ERROR_OPERACION',
         mensaje: err.message || 'Error al ejecutar la acción',
+        motivos: err.motivos,
       });
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const submitReabrir = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedIntervencion) return;
+    const tieneAbierto = selectedIntervencion.periodos_detencion.some((p) => p.esta_abierto);
+    const body: any = {
+      estado_esperado: selectedIntervencion.estado,
+      motivo: motivoReabrir.trim(),
+    };
+    if (!tieneAbierto) {
+      body.maquina_detenida = detenidaReabrir;
+      if (detenidaReabrir) {
+        if (desdeReabrir) body.desde = new Date(desdeReabrir).toISOString();
+        if (obsDetencionReabrir.trim()) body.observacion_detencion = obsDetencionReabrir.trim();
+      }
+    }
+    await ejecutarAccion(`/api/intervenciones/${selectedIntervencion.id}/reabrir`, 'POST', body);
+  };
+
+  const submitEliminar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedIntervencion) return;
+    const tieneAbierto = selectedIntervencion.periodos_detencion.some((p) => p.esta_abierto);
+    const body: any = {
+      motivo: motivoEliminar.trim(),
+    };
+    if (tieneAbierto) {
+      body.maquina_recuperada = recupEliminar;
+      if (obsRecupEliminar.trim()) body.observacion_recuperacion = obsRecupEliminar.trim();
+    }
+    await ejecutarAccion(`/api/intervenciones/${selectedIntervencion.id}/eliminar`, 'POST', body);
+  };
+
+  const submitEditar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedIntervencion) return;
+    const body: any = {
+      estado_esperado: selectedIntervencion.estado,
+      descripcion: descEditar.trim(),
+      observaciones: obsEditar.trim() || null,
+    };
+    await ejecutarAccion(`/api/intervenciones/${selectedIntervencion.id}`, 'PATCH', body);
   };
 
   // Abrir modal Asignar / Reasignar
@@ -414,19 +520,32 @@ export function Intervenciones() {
       </div>
 
       {/* Selector de Vistas / Filtros */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-        <button
-          className={`btn ${!soloSinAsignar ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => setSoloSinAsignar(false)}
-        >
-          Todas según mi alcance
-        </button>
-        <button
-          className={`btn ${soloSinAsignar ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => setSoloSinAsignar(true)}
-        >
-          ⚠️ Vista "Sin asignar" (Priorizadas)
-        </button>
+      <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            className={`btn ${!soloSinAsignar ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setSoloSinAsignar(false)}
+          >
+            Todas según mi alcance
+          </button>
+          <button
+            className={`btn ${soloSinAsignar ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setSoloSinAsignar(true)}
+          >
+            ⚠️ Vista "Sin asignar" (Priorizadas)
+          </button>
+        </div>
+
+        {puedeVerEliminadas && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.9rem', color: '#444' }}>
+            <input
+              type="checkbox"
+              checked={incluirEliminadas}
+              onChange={(e) => setIncluirEliminadas(e.target.checked)}
+            />
+            Incluir eliminadas
+          </label>
+        )}
       </div>
 
       {error && <div className="alert alert-danger" style={{ marginBottom: '1rem' }}>{error}</div>}
@@ -455,8 +574,23 @@ export function Intervenciones() {
           </thead>
           <tbody>
             {intervenciones.map((i) => (
-              <tr key={i.id}>
-                <td><strong>#{i.id}</strong></td>
+              <tr key={i.id} style={i.eliminada ? { opacity: 0.75, backgroundColor: '#fafafa' } : undefined}>
+                <td>
+                  <strong>#{i.id}</strong>
+                  {i.eliminada && (
+                    <span style={{
+                      backgroundColor: '#757575',
+                      color: '#fff',
+                      fontSize: '0.7rem',
+                      padding: '2px 5px',
+                      borderRadius: '3px',
+                      marginLeft: '5px',
+                      fontWeight: 600
+                    }}>
+                      ELIMINADA
+                    </span>
+                  )}
+                </td>
                 <td>
                   <span className={`badge badge-${i.estado.toLowerCase()}`}>
                     {i.estado}
@@ -486,6 +620,11 @@ export function Intervenciones() {
                   <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {i.descripcion}
                   </div>
+                  {i.eliminada && i.motivo_eliminacion && (
+                    <div style={{ fontSize: '0.75rem', color: '#c62828' }}>
+                      Motivo eliminación: {i.motivo_eliminacion}
+                    </div>
+                  )}
                 </td>
                 <td>
                   {i.creado_por.nombre}
@@ -502,13 +641,19 @@ export function Intervenciones() {
                   {new Date(i.fecha_creacion).toLocaleString()}
                 </td>
                 <td>
-                  <button
-                    className="btn btn-secondary"
-                    style={{ fontSize: '0.8rem', padding: '3px 8px' }}
-                    onClick={() => handleVerDetalle(i.id)}
-                  >
-                    Ver detalle / Gestionar
-                  </button>
+                  {i.eliminada ? (
+                    <span style={{ fontSize: '0.8rem', color: '#888', fontStyle: 'italic' }}>
+                      Eliminada {i.eliminado_por ? `por ${i.eliminado_por.nombre}` : ''}
+                    </span>
+                  ) : (
+                    <button
+                      className="btn btn-secondary"
+                      style={{ fontSize: '0.8rem', padding: '3px 8px' }}
+                      onClick={() => handleVerDetalle(i.id)}
+                    >
+                      Ver detalle / Gestionar
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -644,6 +789,13 @@ export function Intervenciones() {
                 fontSize: '0.9rem'
               }}>
                 <strong>Error [{actionError.codigo}]:</strong> {actionError.mensaje}
+                {actionError.motivos && actionError.motivos.length > 0 && (
+                  <ul style={{ marginTop: '0.5rem', marginBottom: 0, paddingLeft: '1.2rem' }}>
+                    {actionError.motivos.map((m: string) => (
+                      <li key={m}>{traducirMotivoEliminacion(m)}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
 
@@ -756,6 +908,20 @@ export function Intervenciones() {
                     >
                       🚫 Cancelar (T3)
                     </button>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ color: '#c62828', borderColor: '#ef9a9a' }}
+                      disabled={actionLoading}
+                      onClick={() => {
+                        setActionError(null);
+                        setMotivoEliminar('');
+                        setRecupEliminar(true);
+                        setObsRecupEliminar('');
+                        setShowEliminarModal(true);
+                      }}
+                    >
+                      🗑️ Eliminar
+                    </button>
                   </>
                 )}
 
@@ -849,6 +1015,41 @@ export function Intervenciones() {
                       🚫 Cancelar (T8)
                     </button>
                   </>
+                )}
+
+                {/* ESTADO FINALIZADA */}
+                {selectedIntervencion.estado === 'FINALIZADA' && (
+                  <button
+                    className="btn btn-secondary"
+                    style={{ backgroundColor: '#e8f0fe', borderColor: '#aecbfa', color: '#1a73e8' }}
+                    disabled={actionLoading}
+                    onClick={() => {
+                      setActionError(null);
+                      setMotivoReabrir('');
+                      setDetenidaReabrir(false);
+                      setDesdeReabrir('');
+                      setObsDetencionReabrir('');
+                      setShowReabrirModal(true);
+                    }}
+                  >
+                    🔄 Reabrir intervención (T9)
+                  </button>
+                )}
+
+                {/* Editar descripción / observaciones en estados editables */}
+                {['PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS'].includes(selectedIntervencion.estado) && (
+                  <button
+                    className="btn btn-secondary"
+                    disabled={actionLoading}
+                    onClick={() => {
+                      setActionError(null);
+                      setDescEditar(selectedIntervencion.descripcion || '');
+                      setObsEditar(selectedIntervencion.observaciones || '');
+                      setShowEditarModal(true);
+                    }}
+                  >
+                    ✏️ Editar datos
+                  </button>
                 )}
 
                 {/* Registrar detención si está abierta y sin período abierto */}
@@ -1483,6 +1684,272 @@ export function Intervenciones() {
                   disabled={actionLoading}
                 >
                   {actionLoading ? 'Guardando...' : 'Registrar Detención'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-modal: Reabrir Intervención (T9) */}
+      {showReabrirModal && selectedIntervencion && (
+        <div className="dev-modal-overlay" style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100
+        }}>
+          <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '8px', width: '480px', maxWidth: '90%' }}>
+            <h4>Reabrir Intervención (T9)</h4>
+            <p style={{ fontSize: '0.85rem', color: '#666' }}>
+              Pasa la intervención de FINALIZADA a EN_PROCESO manteniendo el historial previo.
+            </p>
+            <form onSubmit={submitReabrir}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.3rem' }}>
+                  Motivo de reapertura (mínimo 5 caracteres) *
+                </label>
+                <textarea
+                  value={motivoReabrir}
+                  onChange={(e) => setMotivoReabrir(e.target.value)}
+                  placeholder="Explique el motivo por el cual se reabre la intervención..."
+                  rows={3}
+                  required
+                  minLength={5}
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                />
+              </div>
+
+              {selectedIntervencion.periodos_detencion.some((p) => p.esta_abierto) ? (
+                <div style={{ padding: '0.8rem', background: '#fff3e0', border: '1px solid #ffe0b2', borderRadius: '4px', marginBottom: '1rem', fontSize: '0.85rem' }}>
+                  ⚠️ Esta intervención ya tiene un período de detención activo. La máquina continuará en mantenimiento.
+                </div>
+              ) : (
+                <div style={{ marginBottom: '1rem', padding: '0.8rem', background: '#f5f5f5', borderRadius: '4px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={detenidaReabrir}
+                      onChange={(e) => setDetenidaReabrir(e.target.checked)}
+                    />
+                    ¿La máquina volvió a detenerse?
+                  </label>
+
+                  {detenidaReabrir && (
+                    <div style={{ marginTop: '0.8rem' }}>
+                      <div style={{ marginBottom: '0.5rem' }}>
+                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.2rem' }}>
+                          Fecha/hora de inicio de parada (opcional, por defecto ahora):
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={desdeReabrir}
+                          onChange={(e) => setDesdeReabrir(e.target.value)}
+                          style={{ width: '100%', padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.2rem' }}>
+                          Observación de detención (opcional):
+                        </label>
+                        <input
+                          type="text"
+                          value={obsDetencionReabrir}
+                          onChange={(e) => setObsDetencionReabrir(e.target.value)}
+                          placeholder="Causa de la nueva detención..."
+                          style={{ width: '100%', padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {actionError && (
+                <div style={{ marginBottom: '1rem', color: '#c62828', fontSize: '0.85rem' }}>
+                  <strong>Error:</strong> {actionError.mensaje}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowReabrirModal(false)}
+                  disabled={actionLoading}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? 'Reabriendo...' : 'Confirmar Reapertura'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-modal: Eliminar Intervención */}
+      {showEliminarModal && selectedIntervencion && (
+        <div className="dev-modal-overlay" style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100
+        }}>
+          <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '8px', width: '480px', maxWidth: '90%' }}>
+            <h4 style={{ color: '#c62828' }}>Eliminar Intervención #{selectedIntervencion.id}</h4>
+            <p style={{ fontSize: '0.85rem', color: '#666' }}>
+              Esta acción realiza una eliminación lógica. Solo está permitida si la intervención no registra ninguna actividad previa.
+            </p>
+            <form onSubmit={submitEliminar}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.3rem' }}>
+                  Motivo de eliminación (mínimo 5 caracteres) *
+                </label>
+                <textarea
+                  value={motivoEliminar}
+                  onChange={(e) => setMotivoEliminar(e.target.value)}
+                  placeholder="Indique por qué se elimina la intervención..."
+                  rows={3}
+                  required
+                  minLength={5}
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                />
+              </div>
+
+              {selectedIntervencion.periodos_detencion.some((p) => p.esta_abierto) && (
+                <div style={{ marginBottom: '1rem', padding: '0.8rem', background: '#fff3e0', border: '1px solid #ffe0b2', borderRadius: '4px' }}>
+                  <p style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+                    Esta intervención tiene un período de detención activo. Debe definir la recuperación de la máquina:
+                  </p>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', marginBottom: '0.4rem', cursor: 'pointer' }}>
+                    <input
+                      type="radio"
+                      name="recupEliminar"
+                      checked={recupEliminar === true}
+                      onChange={() => setRecupEliminar(true)}
+                    />
+                    Máquina recuperada (vuelve a estado OPERATIVA)
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}>
+                    <input
+                      type="radio"
+                      name="recupEliminar"
+                      checked={recupEliminar === false}
+                      onChange={() => setRecupEliminar(false)}
+                    />
+                    Máquina sigue detenida
+                  </label>
+                  {!recupEliminar && (
+                    <input
+                      type="text"
+                      value={obsRecupEliminar}
+                      onChange={(e) => setObsRecupEliminar(e.target.value)}
+                      placeholder="Observación de la no recuperación..."
+                      style={{ width: '100%', marginTop: '0.5rem', padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '0.85rem' }}
+                    />
+                  )}
+                </div>
+              )}
+
+              {actionError && (
+                <div style={{ marginBottom: '1rem', padding: '0.6rem', background: '#ffebee', border: '1px solid #ef9a9a', borderRadius: '4px', color: '#c62828', fontSize: '0.85rem' }}>
+                  <strong>Error [{actionError.codigo}]:</strong> {actionError.mensaje}
+                  {actionError.motivos && actionError.motivos.length > 0 && (
+                    <ul style={{ marginTop: '0.4rem', marginBottom: 0, paddingLeft: '1.2rem' }}>
+                      {actionError.motivos.map((m: string) => (
+                        <li key={m}>{traducirMotivoEliminacion(m)}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowEliminarModal(false)}
+                  disabled={actionLoading}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ backgroundColor: '#c62828', borderColor: '#c62828' }}
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? 'Eliminando...' : 'Confirmar Eliminación'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-modal: Editar Intervención */}
+      {showEditarModal && selectedIntervencion && (
+        <div className="dev-modal-overlay" style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100
+        }}>
+          <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '8px', width: '480px', maxWidth: '90%' }}>
+            <h4>Editar Intervención #{selectedIntervencion.id}</h4>
+            <p style={{ fontSize: '0.85rem', color: '#666' }}>
+              Modifique la descripción u observaciones de la intervención.
+            </p>
+            <form onSubmit={submitEditar}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.3rem' }}>
+                  Descripción (5 a 2000 caracteres) *
+                </label>
+                <textarea
+                  value={descEditar}
+                  onChange={(e) => setDescEditar(e.target.value)}
+                  rows={3}
+                  required
+                  minLength={5}
+                  maxLength={2000}
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.3rem' }}>
+                  Observaciones (opcional, hasta 2000 caracteres)
+                </label>
+                <textarea
+                  value={obsEditar}
+                  onChange={(e) => setObsEditar(e.target.value)}
+                  rows={3}
+                  maxLength={2000}
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }}
+                />
+              </div>
+
+              {actionError && (
+                <div style={{ marginBottom: '1rem', color: '#c62828', fontSize: '0.85rem' }}>
+                  <strong>Error [{actionError.codigo}]:</strong> {actionError.mensaje}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowEditarModal(false)}
+                  disabled={actionLoading}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? 'Guardando...' : 'Guardar Cambios'}
                 </button>
               </div>
             </form>

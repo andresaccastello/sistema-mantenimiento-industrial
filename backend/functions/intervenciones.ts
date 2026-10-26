@@ -16,6 +16,9 @@ import {
   finalizarIntervencionServicio,
   resolverAhoraIntervencionServicio,
   cancelarIntervencionServicio,
+  reabrirIntervencionServicio,
+  eliminarIntervencionServicio,
+  editarIntervencionServicio,
 } from './intervenciones/motor.ts';
 import { registrarDetencionIntervencion } from './intervenciones/detenciones.ts';
 
@@ -200,9 +203,26 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
   const usuario = getUsuarioContext(c);
   const userScope = getUserScope(c, 'INTERVENCIONES_VER') || 'TODAS';
   const sinAsignar = c.req.query('sin_asignar') === 'true';
+  const incluirEliminadas = c.req.query('incluir_eliminadas') === 'true';
+
+  if (incluirEliminadas) {
+    if (!('INTERVENCIONES_ELIMINAR' in usuario.permisos)) {
+      return responderError(
+        c,
+        new ErrorNegocio(
+          403,
+          'PERMISO_INSUFICIENTE',
+          'No posees permiso para consultar intervenciones eliminadas'
+        )
+      );
+    }
+  }
 
   try {
-    const conditions: string[] = ['i.eliminado_en IS NULL'];
+    const conditions: string[] = [];
+    if (!incluirEliminadas) {
+      conditions.push('i.eliminado_en IS NULL');
+    }
     const params: any[] = [];
 
     if (userScope === 'PROPIAS') {
@@ -232,6 +252,11 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
         i.fecha_inicio,
         i.fecha_finalizacion,
         i.tiempo_inactividad_minutos,
+        i.eliminado_en,
+        i.motivo_eliminacion,
+        uel.id AS eliminador_id,
+        uel.legajo AS eliminador_legajo,
+        uel.nombre AS eliminador_nombre,
         m.id AS maquina_id,
         m.nombre AS maquina_nombre,
         m.codigo AS maquina_codigo,
@@ -250,6 +275,7 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
       JOIN sectores s ON m.sector_id = s.id
       JOIN usuarios uc ON i.creado_por_usuario_id = uc.id
       LEFT JOIN usuarios ur ON i.responsable_usuario_id = ur.id
+      LEFT JOIN usuarios uel ON i.eliminado_por_usuario_id = uel.id
       LEFT JOIN intervencion_periodos_detencion pd 
         ON pd.intervencion_id = i.id AND pd.hasta IS NULL
       ${whereClause}
@@ -270,6 +296,16 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
       fecha_finalizacion: r.fecha_finalizacion,
       tiempo_inactividad_minutos: r.tiempo_inactividad_minutos,
       detiene_maquina_actualmente: Boolean(r.detiene_maquina_actualmente),
+      eliminada: Boolean(r.eliminado_en),
+      eliminado_en: r.eliminado_en,
+      eliminado_por: r.eliminador_id
+        ? {
+            id: Number(r.eliminador_id),
+            legajo: r.eliminador_legajo,
+            nombre: r.eliminador_nombre,
+          }
+        : null,
+      motivo_eliminacion: r.motivo_eliminacion,
       maquina: {
         id: Number(r.maquina_id),
         nombre: r.maquina_nombre,
@@ -865,6 +901,95 @@ intervencionesApp.post('/:id/registrar-detencion', async (c) => {
   try {
     const res = await conTransaccion(async (client) => {
       return registrarDetencionIntervencion(client, id, usuario, body);
+    });
+    return c.json(res);
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+/**
+ * 5. POST /api/intervenciones/:id/reabrir (T9)
+ */
+intervencionesApp.post('/:id/reabrir', async (c) => {
+  const id = parseId(c.req.param('id'));
+  if (!id) return badRequest(c, 'ID inválido');
+
+  const usuario = getUsuarioContext(c);
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return badRequest(c, 'El cuerpo debe ser un JSON válido');
+  }
+
+  try {
+    const estadoEsperado = parseString(body.estado_esperado);
+    if (!estadoEsperado) {
+      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
+    }
+
+    const res = await conTransaccion(async (client) => {
+      return reabrirIntervencionServicio(client, id, usuario, {
+        estado_esperado: estadoEsperado,
+        motivo: body.motivo,
+        maquina_detenida: body.maquina_detenida,
+        desde: body.desde,
+        observacion_detencion: body.observacion_detencion,
+      });
+    });
+    return c.json(res);
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+/**
+ * 6. POST /api/intervenciones/:id/eliminar (Eliminación lógica)
+ */
+intervencionesApp.post('/:id/eliminar', async (c) => {
+  const id = parseId(c.req.param('id'));
+  if (!id) return badRequest(c, 'ID inválido');
+
+  const usuario = getUsuarioContext(c);
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return badRequest(c, 'El cuerpo debe ser un JSON válido');
+  }
+
+  try {
+    const res = await conTransaccion(async (client) => {
+      return eliminarIntervencionServicio(client, id, usuario, body);
+    });
+    return c.json(res);
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+/**
+ * 7. PATCH /api/intervenciones/:id (Edición)
+ */
+intervencionesApp.patch('/:id', async (c) => {
+  const id = parseId(c.req.param('id'));
+  if (!id) return badRequest(c, 'ID inválido');
+
+  const usuario = getUsuarioContext(c);
+
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    return badRequest(c, 'El cuerpo debe ser un JSON válido');
+  }
+
+  try {
+    const res = await conTransaccion(async (client) => {
+      return editarIntervencionServicio(client, id, usuario, body);
     });
     return c.json(res);
   } catch (error) {

@@ -31,6 +31,7 @@ export async function fetchApi(path: string, options: RequestInit = {}) {
     const err: any = new Error(errorData.error || errorData.message || `Error HTTP ${response.status}: ${response.statusText}`);
     err.codigo = errorData.codigo;
     err.status = response.status;
+    err.motivos = errorData.motivos;
     throw err;
   }
 

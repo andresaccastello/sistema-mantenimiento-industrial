@@ -11,6 +11,7 @@ export interface IntervencionBloqueada {
   descripcion: string;
   estado: string;
   ejecucion: string | null;
+  trabajo_realizado: string | null;
   fecha_creacion: string;
   fecha_inicio: string | null;
   fecha_finalizacion: string | null;
