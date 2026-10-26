@@ -5,6 +5,7 @@ import authApp from './auth.ts';
 import sectoresApp from './sectores.ts';
 import maquinasApp from './maquinas.ts';
 import intervencionesApp from './intervenciones.ts';
+import notificacionesApp from './notificaciones.ts';
 
 import { JWT_SECRET } from './config.ts';
 
@@ -19,6 +20,7 @@ app.route('/api/auth', authApp);
 app.route('/api/sectores', sectoresApp);
 app.route('/api/maquinas', maquinasApp);
 app.route('/api/intervenciones', intervencionesApp);
+app.route('/api/notificaciones', notificacionesApp);
 
 app.get('/health', (c) => {
   return c.json({

@@ -118,7 +118,11 @@ interface IntervencionDetalle extends Intervencion {
   auditoria: AuditoriaItem[];
 }
 
-export function Intervenciones() {
+interface IntervencionesProps {
+  initialIntervencionId?: number | null;
+}
+
+export function Intervenciones({ initialIntervencionId }: IntervencionesProps = {}) {
   const [intervenciones, setIntervenciones] = useState<Intervencion[]>([]);
   const [maquinas, setMaquinas] = useState<Maquina[]>([]);
   const [loading, setLoading] = useState(false);
@@ -292,6 +296,12 @@ export function Intervenciones() {
       setLoadingDetalle(false);
     }
   };
+
+  useEffect(() => {
+    if (initialIntervencionId) {
+      handleVerDetalle(initialIntervencionId);
+    }
+  }, [initialIntervencionId]);
 
   const ejecutarAccion = async (url: string, method: string, body?: any) => {
     setActionLoading(true);

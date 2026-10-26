@@ -144,7 +144,7 @@ export async function tomarIntervencionServicio(
 
   await registrarNotificaciones(client, [
     { tipo: 'INTERVENCION_ASIGNADA', payload: { intervencionId, responsableId: usuario.id } },
-  ]);
+  ], { actorId: usuario.id });
 
   return { ok: true, responsable_id: usuario.id };
 }
@@ -240,9 +240,14 @@ export async function asignarResponsableServicio(
   await registrarNotificaciones(client, [
     {
       tipo: esReasignacion ? 'INTERVENCION_REASIGNADA' : 'INTERVENCION_ASIGNADA',
-      payload: { intervencionId, responsableId: destinatarioId },
+      payload: {
+        intervencionId,
+        responsableId: destinatarioId,
+        responsableAnteriorId: esReasignacion ? responsableAnteriorId : null,
+        motivo: motivoLimpio || null,
+      },
     },
-  ]);
+  ], { actorId: usuario.id });
 
   return { ok: true, responsable: datosDestinatario };
 }
@@ -329,8 +334,8 @@ export async function desasignarResponsableServicio(
   });
 
   await registrarNotificaciones(client, [
-    { tipo: 'INTERVENCION_DESASIGNADA', payload: { intervencionId, responsableAnteriorId: responsableActual } },
-  ]);
+    { tipo: 'INTERVENCION_DESASIGNADA', payload: { intervencionId, responsableAnteriorId: responsableActual, motivo: motivoLimpio } },
+  ], { actorId: usuario.id });
 
   return { ok: true };
 }
@@ -590,7 +595,7 @@ export async function ejecutarTransicionServicio(
   }
 
   // 6. Enganche de notificaciones
-  await registrarNotificaciones(client, eventos);
+  await registrarNotificaciones(client, eventos, { actorId: usuario.id });
 
   // 7. Consultar datos actualizados de la intervención para la respuesta
   const resActualizado = await client.query(
@@ -812,7 +817,7 @@ export async function finalizarIntervencionServicio(
     });
   }
 
-  await registrarNotificaciones(client, eventos);
+  await registrarNotificaciones(client, eventos, { actorId: usuario.id });
 
   // Consultar intervención actualizada
   const resAct = await client.query(
@@ -1033,7 +1038,7 @@ export async function resolverAhoraIntervencionServicio(
     });
   }
 
-  await registrarNotificaciones(client, eventos);
+  await registrarNotificaciones(client, eventos, { actorId: usuario.id });
 
   // Consultar intervención actualizada
   const resAct = await client.query(
@@ -1153,7 +1158,7 @@ export async function cancelarIntervencionServicio(
   });
 
   const eventos: Array<{ tipo: string; payload: any }> = [
-    { tipo: 'INTERVENCION_CANCELADA', payload: { intervencionId } },
+    { tipo: 'INTERVENCION_CANCELADA', payload: { intervencionId, motivo } },
   ];
 
   const periodo = await aplicarDecisionRecuperacion(client, {
@@ -1182,7 +1187,7 @@ export async function cancelarIntervencionServicio(
     });
   }
 
-  await registrarNotificaciones(client, eventos);
+  await registrarNotificaciones(client, eventos, { actorId: usuario.id });
 
   // Consultar intervención actualizada
   const resAct = await client.query(
@@ -1397,7 +1402,7 @@ export async function reabrirIntervencionServicio(
 
   // 6. Eventos
   const eventos: Array<{ tipo: string; payload: any }> = [
-    { tipo: 'INTERVENCION_REABIERTA', payload: { intervencionId } },
+    { tipo: 'INTERVENCION_REABIERTA', payload: { intervencionId, motivo } },
   ];
 
   if (seAbrioPeriodo) {
@@ -1418,7 +1423,7 @@ export async function reabrirIntervencionServicio(
     });
   }
 
-  await registrarNotificaciones(client, eventos);
+  await registrarNotificaciones(client, eventos, { actorId: usuario.id });
 
   // Consultar intervención actualizada
   const resAct = await client.query(
@@ -1628,7 +1633,7 @@ export async function eliminarIntervencionServicio(
     payload: { intervencionId, maquinaId: maquina.id },
   });
 
-  await registrarNotificaciones(client, eventos);
+  await registrarNotificaciones(client, eventos, { actorId: usuario.id });
 
   return {
     ok: true,

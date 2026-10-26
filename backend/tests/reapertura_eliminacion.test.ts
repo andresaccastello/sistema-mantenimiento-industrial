@@ -28,6 +28,8 @@ test('Etapa 6 — Reapertura de intervenciones, eliminación lógica y edición 
 
   const limpiarIntervenciones = async (ids: number[]) => {
     if (!ids || ids.length === 0) return;
+    await client.query('DELETE FROM notificacion_envios WHERE notificacion_id IN (SELECT id FROM notificaciones WHERE intervencion_id = ANY($1))', [ids]);
+    await client.query('DELETE FROM notificaciones WHERE intervencion_id = ANY($1)', [ids]);
     await client.query('DELETE FROM intervencion_auditoria WHERE intervencion_id = ANY($1)', [ids]);
     await client.query('DELETE FROM intervencion_costos WHERE intervencion_id = ANY($1)', [ids]);
     await client.query('DELETE FROM documentos WHERE intervencion_id = ANY($1)', [ids]);

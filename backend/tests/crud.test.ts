@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { pool } from '../functions/db.ts';
+import { serve } from '@hono/node-server';
+import app from '../functions/api.ts';
 
 const API_URL = 'http://localhost:3000/api';
 
@@ -25,7 +27,9 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 }
 
 test('Security, Auth & CRUD Tests', async (t) => {
-  let validToken = '';
+  const server = serve({ fetch: app.fetch, port: 3000 });
+  try {
+    let validToken = '';
 
   await t.test('1. Solicitud sin token debe fallar (401)', async () => {
     const res = await fetch(`${API_URL}/sectores`);
@@ -83,5 +87,7 @@ test('Security, Auth & CRUD Tests', async (t) => {
     });
     assert.strictEqual(res.status, 400);
   });
-
+  } finally {
+    server.close();
+  }
 });

@@ -167,7 +167,7 @@ intervencionesApp.post('/', requirePermission('INTERVENCIONES_CREAR'), async (c)
           payload: { maquinaId, estadoAnterior: maquina.estado, estadoNuevo: estadoMaquinaFinal },
         });
       }
-      await registrarNotificaciones(client, eventos);
+      await registrarNotificaciones(client, eventos, { actorId: usuario.id });
 
       return {
         id: Number(intervencion.id),
@@ -599,7 +599,7 @@ intervencionesApp.put('/:id/responsable', async (c) => {
     return badRequest(c, 'El cuerpo debe ser un JSON válido');
   }
 
-  const destinatarioId = parseId(body.usuario_id);
+  const destinatarioId = parseId(body.usuario_id ?? body.destinatario_id);
   if (!destinatarioId) {
     return badRequest(c, 'El usuario_id a asignar es requerido y debe ser un número entero');
   }

@@ -252,6 +252,8 @@ test('Etapa 3 — Registrar Falla y Consultar Intervenciones (E2E API)', async (
   } finally {
     // Limpieza de datos temporales
     if (maquinaOperativaId > 0) {
+      await client.query('DELETE FROM notificacion_envios WHERE notificacion_id IN (SELECT id FROM notificaciones WHERE maquina_id = $1)', [maquinaOperativaId]);
+      await client.query('DELETE FROM notificaciones WHERE maquina_id = $1', [maquinaOperativaId]);
       await client.query('DELETE FROM intervencion_periodos_detencion WHERE maquina_id = $1', [maquinaOperativaId]);
       await client.query('DELETE FROM historial_estados_intervencion WHERE intervencion_id IN ($1, $2)', [intervencionSinDetenerId, intervencionConDetencionId]);
       await client.query('DELETE FROM historial_estados_maquina WHERE maquina_id = $1', [maquinaOperativaId]);

@@ -282,7 +282,7 @@ export async function confirmarRecuperacionMaquina(
     });
   }
 
-  await registrarNotificaciones(client, eventos);
+  await registrarNotificaciones(client, eventos, { actorId: usuario.id });
 
   return {
     ok: true,
@@ -349,7 +349,7 @@ export async function cambiarEstadoManualMaquina(
       payload: { maquinaId, estadoAnterior: maquina.estado, motivo },
     });
 
-    await registrarNotificaciones(client, eventos);
+    await registrarNotificaciones(client, eventos, { actorId: usuario.id });
 
     return {
       ok: true,
@@ -385,7 +385,7 @@ export async function cambiarEstadoManualMaquina(
       payload: { maquinaId, estadoNuevo: recalculo.estadoNuevo, motivo },
     });
 
-    await registrarNotificaciones(client, eventos);
+    await registrarNotificaciones(client, eventos, { actorId: usuario.id });
 
     return {
       ok: true,
@@ -419,7 +419,7 @@ export async function cambiarEstadoManualMaquina(
     payload: { maquinaId, estadoNuevo: 'OPERATIVA', motivo },
   });
 
-  await registrarNotificaciones(client, eventos);
+  await registrarNotificaciones(client, eventos, { actorId: usuario.id });
 
   return {
     ok: true,
@@ -540,7 +540,7 @@ export async function registrarDetencionIntervencion(
     });
   }
 
-  await registrarNotificaciones(client, eventos);
+  await registrarNotificaciones(client, eventos, { actorId: usuario.id });
 
   return {
     ok: true,

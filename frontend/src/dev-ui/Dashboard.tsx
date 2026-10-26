@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Sectores } from './Sectores';
 import { Maquinas } from './Maquinas';
 import { Intervenciones } from './Intervenciones';
+import { NotificacionesBell } from './NotificacionesBell';
 
 interface DashboardProps {
   onLogout: () => void;
@@ -9,6 +10,12 @@ interface DashboardProps {
 
 export function Dashboard({ onLogout }: DashboardProps) {
   const [currentView, setCurrentView] = useState<'intervenciones' | 'maquinas' | 'sectores'>('intervenciones');
+  const [selectedIntervencionId, setSelectedIntervencionId] = useState<number | null>(null);
+
+  const handleSelectIntervencion = (id: number) => {
+    setSelectedIntervencionId(id);
+    setCurrentView('intervenciones');
+  };
 
   return (
     <div className="dev-layout">
@@ -18,7 +25,10 @@ export function Dashboard({ onLogout }: DashboardProps) {
         <nav className="dev-nav">
           <button 
             className={currentView === 'intervenciones' ? 'active' : ''} 
-            onClick={() => setCurrentView('intervenciones')}
+            onClick={() => {
+              setSelectedIntervencionId(null);
+              setCurrentView('intervenciones');
+            }}
           >
             Intervenciones / Fallas
           </button>
@@ -41,11 +51,29 @@ export function Dashboard({ onLogout }: DashboardProps) {
         </nav>
       </aside>
       
-      <main className="dev-main">
-        {currentView === 'intervenciones' && <Intervenciones />}
-        {currentView === 'sectores' && <Sectores />}
-        {currentView === 'maquinas' && <Maquinas />}
-      </main>
+      <div className="dev-content-wrapper">
+        <header className="dev-header">
+          <div className="dev-header-title">
+            <span>
+              {currentView === 'intervenciones' && 'Intervenciones y Registro de Fallas'}
+              {currentView === 'maquinas' && 'Catálogo de Máquinas y Estado'}
+              {currentView === 'sectores' && 'Sectores de Planta'}
+            </span>
+          </div>
+          <div className="dev-header-actions">
+            <NotificacionesBell onSelectIntervencion={handleSelectIntervencion} />
+          </div>
+        </header>
+
+        <main className="dev-main">
+          {currentView === 'intervenciones' && (
+            <Intervenciones initialIntervencionId={selectedIntervencionId} />
+          )}
+          {currentView === 'sectores' && <Sectores />}
+          {currentView === 'maquinas' && <Maquinas />}
+        </main>
+      </div>
     </div>
   );
 }
+

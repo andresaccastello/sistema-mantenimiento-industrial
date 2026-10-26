@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { registrarNotificaciones as registrarNotificacionesMotor } from './notificaciones.ts';
 
 export interface AuditoriaOpciones {
   intervencionId: number;
@@ -38,11 +39,12 @@ export async function registrarAuditoria(
 
 /**
  * Punto de enganche para generación de notificaciones (Etapa 7).
- * En la Etapa 4A solo recibe los eventos del dominio sin emitir mensajes.
+ * Delega en el motor de notificaciones pasando actorId y eventos.
  */
 export async function registrarNotificaciones(
-  _client: pg.PoolClient,
-  _eventos: Array<{ tipo: string; payload: any }>
+  client: pg.PoolClient,
+  eventos: Array<{ tipo: string; payload: any }>,
+  opts?: { actorId?: number | null }
 ): Promise<void> {
-  // Punto de enganche reservado para la Etapa 7
+  return registrarNotificacionesMotor(client, eventos, opts);
 }
