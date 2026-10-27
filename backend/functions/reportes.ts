@@ -40,7 +40,7 @@ reportesApp.get('/inactividad', requirePermission('REPORTES_CONSULTAR'), async (
     const params: any[] = [desde, hasta];
     let paramIndex = 3;
 
-    if (scope === 'SECTORES') {
+    if (scope !== 'TODAS') {
       if (usuario.sectores.length === 0) {
         return c.json([]);
       }
@@ -56,8 +56,8 @@ reportesApp.get('/inactividad', requirePermission('REPORTES_CONSULTAR'), async (
         throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El sector_id debe ser un entero válido');
       }
 
-      // Con alcance SECTORES, si pide un sector no asignado -> simplemente no aparece
-      if (scope === 'SECTORES' && !usuario.sectores.includes(sectorId)) {
+      // Con alcance no TODAS (SECTORES o PROPIAS), si pide un sector no asignado -> simplemente no aparece
+      if (scope !== 'TODAS' && !usuario.sectores.includes(sectorId)) {
         return c.json([]);
       }
 
@@ -85,7 +85,7 @@ reportesApp.get('/inactividad', requirePermission('REPORTES_CONSULTAR'), async (
           JOIN intervenciones i ON i.id = p.intervencion_id
           WHERE p.maquina_id = m.id
             AND i.eliminado_en IS NULL
-            AND tstzrange(p.desde, COALESCE(p.hasta, NOW())) && tstzrange($1::timestamptz, $2::timestamptz)
+            AND tstzrange(p.desde, GREATEST(p.desde, COALESCE(p.hasta, NOW()))) && tstzrange($1::timestamptz, $2::timestamptz)
         ) AS intervenciones_con_detencion
       FROM maquinas m
       JOIN sectores s ON s.id = m.sector_id
@@ -154,7 +154,7 @@ reportesApp.get('/tiempos', requirePermission('REPORTES_CONSULTAR'), async (c) =
     ];
     const params: any[] = [desde, hasta];
 
-    if (scope === 'SECTORES') {
+    if (scope !== 'TODAS') {
       if (usuario.sectores.length === 0) {
         return c.json([]);
       }

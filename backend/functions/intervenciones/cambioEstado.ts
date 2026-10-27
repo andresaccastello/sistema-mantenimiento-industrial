@@ -8,6 +8,7 @@ export interface CambioEstadoOpciones {
   usuarioId: number;
   observacion?: string | null;
   camposExtra?: Record<string, any>;
+  fechaEfectiva?: Date | string | null;
 }
 
 /**
@@ -26,6 +27,7 @@ export async function registrarCambioEstado(
     usuarioId,
     observacion = null,
     camposExtra = {},
+    fechaEfectiva = null,
   } = opts;
 
   // Construir columnas adicionales para actualizar si las hay (ej. fecha_inicio, responsable_usuario_id)
@@ -58,9 +60,9 @@ export async function registrarCambioEstado(
   // Registrar en historial_estados_intervencion
   await client.query(
     `INSERT INTO historial_estados_intervencion (
-       intervencion_id, estado_anterior, estado_nuevo, cambiado_por_usuario_id, observacion, cambiado_en
+       intervencion_id, estado_anterior, estado_nuevo, cambiado_por_usuario_id, observacion, cambiado_en, fecha_efectiva
      )
-     VALUES ($1, $2, $3, $4, $5, NOW())`,
-    [intervencionId, estadoActual, estadoNuevo, usuarioId, observacion]
+     VALUES ($1, $2, $3, $4, $5, NOW(), $6)`,
+    [intervencionId, estadoActual, estadoNuevo, usuarioId, observacion, fechaEfectiva || null]
   );
 }

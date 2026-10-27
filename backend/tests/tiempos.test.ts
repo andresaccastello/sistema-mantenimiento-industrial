@@ -52,6 +52,8 @@ test('Etapa 8 — Tiempos de gestión e inactividad real de las máquinas', asyn
   let userSectoresToken = '';
   let userSectoresId = 0;
 
+  let userPropId = 0;
+
   let sector1Id = 0;
   let sector2Id = 0;
   let maquina1Id = 0;
@@ -380,11 +382,11 @@ test('Etapa 8 — Tiempos de gestión e inactividad real de las máquinas', asyn
 
       // Resolver ahora inserta exactamente dos filas en historial a la hora del registro
       await client.query(
-        `INSERT INTO historial_estados_intervencion (intervencion_id, estado_anterior, estado_nuevo, cambiado_por_usuario_id, cambiado_en)
+        `INSERT INTO historial_estados_intervencion (intervencion_id, estado_anterior, estado_nuevo, cambiado_por_usuario_id, cambiado_en, fecha_efectiva)
          VALUES
-           ($1, NULL, 'PENDIENTE', $2, '2026-01-01 09:50:00Z'),
-           ($1, 'PENDIENTE', 'EN_PROCESO', $2, '2026-01-01 10:20:00Z'),
-           ($1, 'EN_PROCESO', 'FINALIZADA', $2, '2026-01-01 10:20:00Z')`,
+           ($1, NULL, 'PENDIENTE', $2, '2026-01-01 09:50:00Z', NULL),
+           ($1, 'PENDIENTE', 'EN_PROCESO', $2, '2026-01-01 10:20:00Z', '2026-01-01 10:00:00Z'),
+           ($1, 'EN_PROCESO', 'FINALIZADA', $2, '2026-01-01 10:20:00Z', '2026-01-01 10:20:00Z')`,
         [intId, adminId]
       );
 
@@ -413,11 +415,11 @@ test('Etapa 8 — Tiempos de gestión e inactividad real de las máquinas', asyn
 
       // El cambio a EN_PROCESO se registró a las 10:00 (1 hora después del inicio real 09:00)
       await client.query(
-        `INSERT INTO historial_estados_intervencion (intervencion_id, estado_anterior, estado_nuevo, cambiado_por_usuario_id, cambiado_en)
+        `INSERT INTO historial_estados_intervencion (intervencion_id, estado_anterior, estado_nuevo, cambiado_por_usuario_id, cambiado_en, fecha_efectiva)
          VALUES
-           ($1, NULL, 'PENDIENTE', $2, '2026-01-01 08:00:00Z'),
-           ($1, 'PENDIENTE', 'EN_PROCESO', $2, '2026-01-01 10:00:00Z'),
-           ($1, 'EN_PROCESO', 'FINALIZADA', $2, '2026-01-01 12:00:00Z')`,
+           ($1, NULL, 'PENDIENTE', $2, '2026-01-01 08:00:00Z', NULL),
+           ($1, 'PENDIENTE', 'EN_PROCESO', $2, '2026-01-01 10:00:00Z', '2026-01-01 09:00:00Z'),
+           ($1, 'EN_PROCESO', 'FINALIZADA', $2, '2026-01-01 12:00:00Z', '2026-01-01 12:00:00Z')`,
         [intId, adminId]
       );
 
@@ -557,6 +559,230 @@ test('Etapa 8 — Tiempos de gestión e inactividad real de las máquinas', asyn
       assert.ok(elemT02, 'T-02 debe estar en el listado');
       assert.strictEqual(elemT02.tiempos.duracion_neta_minutos, 90);
       assert.strictEqual(elemT02.tiempos.duracion_bruta_minutos, 180);
+    });
+
+    // T-11: "Resolver ahora" registrado tiempo después de la finalización
+    await t.test('T-11: Resolver ahora registrado después de la finalización -> bruta 20, neta 20', async () => {
+      const resI = await client.query(
+        `INSERT INTO intervenciones (
+           maquina_id, tipo_intervencion_id, creado_por_usuario_id,
+           descripcion, estado, fecha_creacion
+         ) VALUES ($1, $2, $3, 'T-11 Test', 'PENDIENTE', NOW() - INTERVAL '60 minutes')
+         RETURNING id`,
+        [maquina1Id, tipoCorrectivoId, adminId]
+      );
+      const intId = Number(resI.rows[0].id);
+      createdIntervencionIds.push(intId);
+
+      await client.query(
+        `INSERT INTO historial_estados_intervencion (intervencion_id, estado_anterior, estado_nuevo, cambiado_por_usuario_id, cambiado_en)
+         VALUES ($1, NULL, 'PENDIENTE', $2, NOW() - INTERVAL '60 minutes')`,
+        [intId, adminId]
+      );
+
+      const fechaInicio = new Date(Date.now() - 40 * 60 * 1000).toISOString();
+      const fechaFin = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+
+      const resResolver = await app.request(`/api/intervenciones/${intId}/transiciones/RESOLVER_AHORA`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          estado_esperado: 'PENDIENTE',
+          fecha_inicio: fechaInicio,
+          fecha_finalizacion: fechaFin,
+          trabajo_realizado: 'Cambio de fusible',
+          ejecucion: 'INTERNA',
+        }),
+      });
+      assert.strictEqual(resResolver.status, 200);
+
+      const resp = await app.request(`/api/intervenciones/${intId}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resp.status, 200);
+      const json = await resp.json();
+
+      assert.strictEqual(json.tiempos.duracion_bruta_minutos, 20);
+      assert.strictEqual(json.tiempos.duracion_neta_minutos, 20);
+      assert.strictEqual(json.tiempos.espera_en_curso, false);
+      assert.strictEqual(json.tiempos.trabajo_en_curso, false);
+    });
+
+    // T-12: Caso de la sección 1.1 (falla viernes tarde, registrada lunes mañana)
+    await t.test('T-12: Falla viernes 17:00 finalizada 21:00 registrada lunes -> bruta 240, neta 240, espera 0, total 240', async () => {
+      const res = await client.query(
+        `INSERT INTO intervenciones (
+           maquina_id, tipo_intervencion_id, creado_por_usuario_id, responsable_usuario_id,
+           descripcion, estado, ejecucion, trabajo_realizado, fecha_creacion, fecha_inicio, fecha_finalizacion
+         ) VALUES ($1, $2, $3, $3, 'T-12 Test', 'FINALIZADA', 'INTERNA', 'Reparación fin de semana',
+           '2026-06-05 17:00:00Z', '2026-06-05 17:00:00Z', '2026-06-05 21:00:00Z')
+         RETURNING id`,
+        [maquina1Id, tipoCorrectivoId, adminId]
+      );
+      const intId = Number(res.rows[0].id);
+      createdIntervencionIds.push(intId);
+
+      await client.query(
+        `INSERT INTO historial_estados_intervencion (intervencion_id, estado_anterior, estado_nuevo, cambiado_por_usuario_id, cambiado_en, fecha_efectiva)
+         VALUES
+           ($1, NULL, 'PENDIENTE', $2, '2026-06-05 17:00:00Z', NULL),
+           ($1, 'PENDIENTE', 'EN_PROCESO', $2, '2026-06-08 09:00:00Z', '2026-06-05 17:00:00Z'),
+           ($1, 'EN_PROCESO', 'FINALIZADA', $2, '2026-06-08 09:00:00Z', '2026-06-05 21:00:00Z')`,
+        [intId, adminId]
+      );
+
+      const resp = await app.request(`/api/intervenciones/${intId}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resp.status, 200);
+      const json = await resp.json();
+
+      assert.strictEqual(json.tiempos.duracion_bruta_minutos, 240);
+      assert.strictEqual(json.tiempos.duracion_neta_minutos, 240);
+      assert.strictEqual(json.tiempos.espera_minutos, 0);
+      assert.strictEqual(json.tiempos.tiempo_total_minutos, 240);
+    });
+
+    // T-13: Flujo completo por API con fecha_inicio y fecha_finalizacion desfasadas y reapertura
+    await t.test('T-13: Flujo completo API: inicio hace 5h, fin hace 4h, reapertura y cierre NOW() -> bruta ≈ 300, neta ≈ 60', async () => {
+      // 1. Crear intervención de falla sin detención
+      const resCreate = await app.request('/api/intervenciones', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          maquina_id: maquina1Id,
+          tipo_intervencion_id: tipoCorrectivoId,
+          descripcion: 'Falla sin detencion T-13',
+          maquina_detenida: false,
+        }),
+      });
+      assert.strictEqual(resCreate.status, 201);
+      const intCreated = await resCreate.json();
+      const intId = Number(intCreated.id);
+      createdIntervencionIds.push(intId);
+
+      // Ajustar fecha_creacion en la base para que el inicio (hace 5 h) sea posterior a la creación (hace 6 h)
+      await client.query("UPDATE intervenciones SET fecha_creacion = NOW() - INTERVAL '6 hours' WHERE id = $1", [intId]);
+      await client.query("UPDATE historial_estados_intervencion SET cambiado_en = NOW() - INTERVAL '6 hours' WHERE intervencion_id = $1 AND estado_nuevo = 'PENDIENTE'", [intId]);
+
+      const hace5h = new Date(Date.now() - 5 * 3600 * 1000).toISOString();
+      const hace4h = new Date(Date.now() - 4 * 3600 * 1000).toISOString();
+
+      // 1) Iniciar con fecha_inicio = hace 5 h
+      const resIniciar = await app.request(`/api/intervenciones/${intId}/iniciar`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          estado_esperado: 'PENDIENTE',
+          fecha_inicio: hace5h,
+        }),
+      });
+      assert.strictEqual(resIniciar.status, 200);
+
+      // 2) Finalizar con fecha_finalizacion = hace 4 h
+      const resFin1 = await app.request(`/api/intervenciones/${intId}/finalizar`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          estado_esperado: 'EN_PROCESO',
+          fecha_finalizacion: hace4h,
+          trabajo_realizado: 'Ajuste inicial',
+          ejecucion: 'INTERNA',
+        }),
+      });
+      assert.strictEqual(resFin1.status, 200);
+
+      // Aserción intermedia después del paso 2: bruta = 60 y neta = 60
+      const resDetalleIntermedio = await app.request(`/api/intervenciones/${intId}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resDetalleIntermedio.status, 200);
+      const jsonIntermedio = await resDetalleIntermedio.json();
+      assert.ok(
+        Math.abs(jsonIntermedio.tiempos.duracion_bruta_minutos - 60) <= 1,
+        `Bruta intermedia debe ser ≈ 60, fue ${jsonIntermedio.tiempos.duracion_bruta_minutos}`
+      );
+      assert.ok(
+        Math.abs(jsonIntermedio.tiempos.duracion_neta_minutos - 60) <= 1,
+        `Neta intermedia debe ser ≈ 60, fue ${jsonIntermedio.tiempos.duracion_neta_minutos}`
+      );
+
+      // 3) Reabrir (maquina_detenida = false)
+      const resReabrir = await app.request(`/api/intervenciones/${intId}/reabrir`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          estado_esperado: 'FINALIZADA',
+          motivo: 'Reapertura para test T-13',
+          maquina_detenida: false,
+        }),
+      });
+      assert.strictEqual(resReabrir.status, 200);
+
+      // 4) Volver a finalizar SIN enviar fecha_finalizacion (queda en NOW())
+      const resFin2 = await app.request(`/api/intervenciones/${intId}/finalizar`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          estado_esperado: 'EN_PROCESO',
+          trabajo_realizado: 'Ajuste complementario final',
+          ejecucion: 'INTERNA',
+        }),
+      });
+      assert.strictEqual(resFin2.status, 200);
+
+      // Aserción principal después del paso 4:
+      // duracion_bruta_minutos ≈ 300 (NOW() - fecha_inicio) y duracion_neta_minutos ≈ 60 (tolerancia 1 min)
+      const resDetalleFinal = await app.request(`/api/intervenciones/${intId}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resDetalleFinal.status, 200);
+      const jsonFinal = await resDetalleFinal.json();
+
+      assert.ok(
+        Math.abs(jsonFinal.tiempos.duracion_bruta_minutos - 300) <= 1,
+        `Duración bruta final debe ser ≈ 300, fue ${jsonFinal.tiempos.duracion_bruta_minutos}`
+      );
+      assert.ok(
+        Math.abs(jsonFinal.tiempos.duracion_neta_minutos - 60) <= 1,
+        `Duración neta final debe ser ≈ 60, fue ${jsonFinal.tiempos.duracion_neta_minutos}`
+      );
+
+      // Verificación de historial_estados:
+      // - fila EN_PROCESO inicial: fecha_efectiva = hace 5h
+      // - primera FINALIZADA: fecha_efectiva = hace 4h
+      // - fila de reapertura (EN_PROCESO): fecha_efectiva = null
+      const hist = jsonFinal.historial_estados;
+      assert.ok(hist.length >= 5, 'Debe tener al menos 5 transiciones');
+      const enProceso1 = hist.find((h: any) => h.id === hist[1].id);
+      const finalizada1 = hist.find((h: any) => h.id === hist[2].id);
+      const reabierta = hist.find((h: any) => h.id === hist[3].id);
+
+      assert.ok(enProceso1.fecha_efectiva, 'Primer EN_PROCESO debe tener fecha_efectiva');
+      assert.strictEqual(new Date(enProceso1.fecha_efectiva).toISOString(), new Date(hace5h).toISOString());
+
+      assert.ok(finalizada1.fecha_efectiva, 'Primer FINALIZADA debe tener fecha_efectiva');
+      assert.strictEqual(new Date(finalizada1.fecha_efectiva).toISOString(), new Date(hace4h).toISOString());
+
+      assert.strictEqual(reabierta.fecha_efectiva, null, 'Fila de reapertura debe tener fecha_efectiva NULL');
     });
 
     // =========================================================================
@@ -888,6 +1114,41 @@ test('Etapa 8 — Tiempos de gestión e inactividad real de las máquinas', asyn
       assert.strictEqual(resSql.rows[0].total_minutos, expectedMinutos, `Función SQL (${resSql.rows[0].total_minutos}) debe coincidir con cálculo TypeScript (${expectedMinutos})`);
     });
 
+    // M-10: Período con fecha 'desde' levemente en el futuro (sección 3)
+    await t.test('M-10: Período abierto con desde en el futuro -> responde 200 con inactividad = 0, sin 500', async () => {
+      const resM = await client.query(
+        "INSERT INTO maquinas (nombre, codigo, sector_id, estado, activo) VALUES ('Maq M10 Futuro', $2, $1, 'OPERATIVA', TRUE) RETURNING id",
+        [sector1Id, 'MAQ-M10-' + testSuffix]
+      );
+      const maqId = Number(resM.rows[0].id);
+      createdMaquinaIds.push(maqId);
+
+      const resI = await client.query(
+        "INSERT INTO intervenciones (maquina_id, tipo_intervencion_id, creado_por_usuario_id, descripcion, estado, fecha_creacion) VALUES ($1, $2, $3, 'Interv M10', 'EN_PROCESO', NOW()) RETURNING id",
+        [maqId, tipoCorrectivoId, adminId]
+      );
+      const intId = Number(resI.rows[0].id);
+      createdIntervencionIds.push(intId);
+
+      // Período con desde 1 minuto en el futuro y hasta IS NULL
+      await client.query(
+        `INSERT INTO intervencion_periodos_detencion (intervencion_id, maquina_id, desde, hasta, abierto_por_usuario_id)
+         VALUES ($1, $2, NOW() + INTERVAL '1 minute', NULL, $3)`,
+        [intId, maqId, adminId]
+      );
+
+      const desdeISO = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+      const hastaISO = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+
+      const resp = await app.request(
+        `/api/maquinas/${maqId}/inactividad?desde=${encodeURIComponent(desdeISO)}&hasta=${encodeURIComponent(hastaISO)}`,
+        { headers: { Authorization: `Bearer ${adminToken}` } }
+      );
+      assert.strictEqual(resp.status, 200);
+      const json = await resp.json();
+      assert.strictEqual(json.inactividad_minutos, 0);
+    });
+
     // =========================================================================
     // 7.3 REPORTES, VALIDACIONES Y REGRESIÓN (R-01 a R-03)
     // =========================================================================
@@ -1091,6 +1352,68 @@ test('Etapa 8 — Tiempos de gestión e inactividad real de las máquinas', asyn
       assert.strictEqual(rAgruparFalta.status, 422);
       assert.strictEqual((await rAgruparFalta.json()).codigo, 'DATOS_INVALIDOS');
     });
+
+    // R-05: Usuario con REPORTES_CONSULTAR alcance PROPIAS (sección 2)
+    await t.test('R-05: Usuario con REPORTES_CONSULTAR alcance PROPIAS asignado a sector 1', async () => {
+      const legajoProp = 'USER_PROP_' + Date.now();
+      const resUserProp = await client.query(
+        `INSERT INTO usuarios (legajo, nombre, password_hash, perfil_id, activo, debe_cambiar_password)
+         VALUES ($1, 'Usuario Prop Reportes', $2, $3, TRUE, FALSE) RETURNING id`,
+        [legajoProp, hash, perfilMap['CONSULTA']]
+      );
+      userPropId = Number(resUserProp.rows[0].id);
+      createdUsuarioIds.push(userPropId);
+
+      // Asignar solo a sector 1
+      await client.query(
+        'INSERT INTO usuario_sector (usuario_id, sector_id) VALUES ($1, $2)',
+        [userPropId, sector1Id]
+      );
+
+      // Dar permiso REPORTES_CONSULTAR con alcance PROPIAS
+      const resPermRep = await client.query("SELECT id FROM permisos WHERE codigo = 'REPORTES_CONSULTAR'");
+      const permRepId = resPermRep.rows[0].id;
+      await client.query(
+        `INSERT INTO usuario_permiso (usuario_id, permiso_id, efecto, alcance, otorgado_por_usuario_id, motivo)
+         VALUES ($1, $2, 'CONCEDER', 'PROPIAS', $3, 'Override reportes propias para test')`,
+        [userPropId, permRepId, adminId]
+      );
+
+      const loginResp = await app.request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ legajo: legajoProp, password: 'pass123' }),
+      });
+      const propToken = (await loginResp.json()).token;
+
+      // 1. Consultar GET /api/maquinas/:id/inactividad para máquina de sector 1 -> responde 200
+      const respSec1 = await app.request(
+        `/api/maquinas/${maquina1Id}/inactividad?desde=2026-01-01T00:00:00Z&hasta=2026-01-02T00:00:00Z`,
+        { headers: { Authorization: `Bearer ${propToken}` } }
+      );
+      assert.strictEqual(respSec1.status, 200, 'Máquina de sector 1 debe devolver 200');
+
+      // 2. Consultar GET /api/maquinas/:id/inactividad para máquina de sector 2 -> responde 404
+      const respSec2 = await app.request(
+        `/api/maquinas/${maquina2Id}/inactividad?desde=2026-01-01T00:00:00Z&hasta=2026-01-02T00:00:00Z`,
+        { headers: { Authorization: `Bearer ${propToken}` } }
+      );
+      assert.strictEqual(respSec2.status, 404, 'Máquina de sector 2 debe devolver 404');
+
+      // 3. Consultar GET /api/reportes/inactividad -> devuelve únicamente máquinas de sector 1
+      const respRep = await app.request(
+        '/api/reportes/inactividad?desde=2026-01-01T00:00:00Z&hasta=2026-12-31T23:59:59Z',
+        { headers: { Authorization: `Bearer ${propToken}` } }
+      );
+      assert.strictEqual(respRep.status, 200);
+      const jsonRep = await respRep.json();
+      assert.ok(Array.isArray(jsonRep));
+
+      for (const m of jsonRep) {
+        assert.strictEqual(m.maquina.sector.id, sector1Id, `Máquina ${m.maquina.id} debe pertenecer al sector 1`);
+        assert.notStrictEqual(m.maquina.sector.id, sector2Id, `No debe incluir máquinas del sector 2`);
+      }
+    });
   } finally {
     try {
       if (createdIntervencionIds.length > 0) {
@@ -1110,6 +1433,10 @@ test('Etapa 8 — Tiempos de gestión e inactividad real de las máquinas', asyn
       if (userSectoresId) {
         await client.query('DELETE FROM usuario_permiso WHERE usuario_id = $1', [userSectoresId]);
         await client.query('DELETE FROM usuario_sector WHERE usuario_id = $1', [userSectoresId]);
+      }
+      if (userPropId) {
+        await client.query('DELETE FROM usuario_permiso WHERE usuario_id = $1', [userPropId]);
+        await client.query('DELETE FROM usuario_sector WHERE usuario_id = $1', [userPropId]);
       }
       if (createdUsuarioIds.length > 0) {
         await client.query('DELETE FROM usuarios WHERE id = ANY($1)', [createdUsuarioIds]);

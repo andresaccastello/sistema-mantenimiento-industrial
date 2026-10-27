@@ -411,7 +411,7 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
 
     // Historial de cambios de estado ordenado por cambiado_en ASC, id ASC
     const resHistorial = await pool.query(
-      `SELECT h.id, h.estado_anterior, h.estado_nuevo, h.observacion, h.cambiado_en,
+      `SELECT h.id, h.estado_anterior, h.estado_nuevo, h.observacion, h.cambiado_en, h.fecha_efectiva,
               u.id AS usuario_id, u.legajo AS usuario_legajo, u.nombre AS usuario_nombre
        FROM historial_estados_intervencion h
        JOIN usuarios u ON h.cambiado_por_usuario_id = u.id
@@ -493,6 +493,7 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
         estado_nuevo: h.estado_nuevo,
         observacion: h.observacion,
         cambiado_en: h.cambiado_en,
+        fecha_efectiva: h.fecha_efectiva ? (typeof h.fecha_efectiva === 'string' ? h.fecha_efectiva : new Date(h.fecha_efectiva).toISOString()) : null,
         cambiado_por: {
           id: Number(h.usuario_id),
           legajo: h.usuario_legajo,
@@ -841,7 +842,7 @@ intervencionesApp.post('/:id/finalizar', async (c) => {
 /**
  * 6.2 POST /api/intervenciones/:id/resolver-ahora (T2)
  */
-intervencionesApp.post('/:id/resolver-ahora', async (c) => {
+const resolverAhoraHandler = async (c: any) => {
   const id = parseId(c.req.param('id'));
   if (!id) return badRequest(c, 'ID inválido');
 
@@ -855,10 +856,7 @@ intervencionesApp.post('/:id/resolver-ahora', async (c) => {
   }
 
   try {
-    const estadoEsperado = parseString(body.estado_esperado);
-    if (!estadoEsperado) {
-      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
-    }
+    const estadoEsperado = parseString(body.estado_esperado) || 'PENDIENTE';
 
     const res = await conTransaccion(async (client) => {
       return resolverAhoraIntervencionServicio(client, id, usuario, {
@@ -877,7 +875,10 @@ intervencionesApp.post('/:id/resolver-ahora', async (c) => {
   } catch (error) {
     return responderError(c, error);
   }
-});
+};
+
+intervencionesApp.post('/:id/resolver-ahora', resolverAhoraHandler);
+intervencionesApp.post('/:id/transiciones/RESOLVER_AHORA', resolverAhoraHandler);
 
 /**
  * 6.3 POST /api/intervenciones/:id/cancelar (T3, T7, T8)

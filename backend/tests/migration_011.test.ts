@@ -94,6 +94,89 @@ test('Migración 011 — Tiempos de gestión e inactividad', async (t) => {
       assert.strictEqual(fila.preventivo_minutos, 0);
       assert.strictEqual(fila.fuera_de_servicio_minutos, 0);
     });
+
+    // 6. Verificación del backfill de fecha_efectiva e idempotencia
+    await t.test('M11-06: Verificación del backfill de fecha_efectiva e idempotencia', async () => {
+      // Obtener o crear entidades necesarias
+      const resUser = await client.query('SELECT id FROM usuarios WHERE activo = TRUE LIMIT 1');
+      const resMaq = await client.query('SELECT id FROM maquinas WHERE activo = TRUE LIMIT 1');
+      const resTipo = await client.query('SELECT id FROM tipos_intervencion LIMIT 1');
+
+      assert.ok(resUser.rows.length > 0, 'Debe existir al menos un usuario');
+      assert.ok(resMaq.rows.length > 0, 'Debe existir al menos una máquina');
+      assert.ok(resTipo.rows.length > 0, 'Debe existir al menos un tipo de intervención');
+
+      const userId = resUser.rows[0].id;
+      const maqId = resMaq.rows[0].id;
+      const tipoId = resTipo.rows[0].id;
+
+      let testIntId: number | null = null;
+      try {
+        const fechaInicio = '2026-01-01 09:00:00Z';
+        const fechaFin = '2026-01-01 12:00:00Z';
+
+        const resInt = await client.query(
+          `INSERT INTO intervenciones (
+             maquina_id, tipo_intervencion_id, creado_por_usuario_id, responsable_usuario_id,
+             descripcion, estado, ejecucion, trabajo_realizado, fecha_creacion, fecha_inicio, fecha_finalizacion
+           ) VALUES ($1, $2, $3, $3, 'M11-06 Backfill Test', 'FINALIZADA', 'INTERNA', 'Trabajo OK',
+             '2026-01-01 08:00:00Z', $4, $5)
+           RETURNING id`,
+          [maqId, tipoId, userId, fechaInicio, fechaFin]
+        );
+        testIntId = Number(resInt.rows[0].id);
+
+        // Insertar filas en historial con fecha_efectiva NULL
+        await client.query(
+          `INSERT INTO historial_estados_intervencion (
+             intervencion_id, estado_anterior, estado_nuevo, cambiado_por_usuario_id, cambiado_en, fecha_efectiva
+           ) VALUES
+             ($1, NULL, 'PENDIENTE', $2, '2026-01-01 08:00:00Z', NULL),
+             ($1, 'PENDIENTE', 'EN_PROCESO', $2, '2026-01-01 09:30:00Z', NULL),
+             ($1, 'EN_PROCESO', 'FINALIZADA', $2, '2026-01-01 12:30:00Z', NULL)`,
+          [testIntId, userId]
+        );
+
+        // Ejecutar la migración completa (que incluye el backfill)
+        await client.query(sqlContent);
+
+        // Verificar que fecha_efectiva fue asignada correctamente
+        const resHist = await client.query(
+          `SELECT estado_nuevo, fecha_efectiva
+           FROM historial_estados_intervencion
+           WHERE intervencion_id = $1
+           ORDER BY cambiado_en ASC, id ASC`,
+          [testIntId]
+        );
+
+        assert.strictEqual(resHist.rows.length, 3);
+        // PENDIENTE sigue NULL
+        assert.strictEqual(resHist.rows[0].fecha_efectiva, null);
+        // Primera EN_PROCESO tomó fecha_inicio
+        assert.strictEqual(new Date(resHist.rows[1].fecha_efectiva).toISOString(), new Date(fechaInicio).toISOString());
+        // Última FINALIZADA tomó fecha_finalizacion
+        assert.strictEqual(new Date(resHist.rows[2].fecha_efectiva).toISOString(), new Date(fechaFin).toISOString());
+
+        // Re-ejecutar la migración para verificar idempotencia
+        await client.query(sqlContent);
+
+        const resHist2 = await client.query(
+          `SELECT estado_nuevo, fecha_efectiva
+           FROM historial_estados_intervencion
+           WHERE intervencion_id = $1
+           ORDER BY cambiado_en ASC, id ASC`,
+          [testIntId]
+        );
+
+        assert.strictEqual(new Date(resHist2.rows[1].fecha_efectiva).toISOString(), new Date(fechaInicio).toISOString());
+        assert.strictEqual(new Date(resHist2.rows[2].fecha_efectiva).toISOString(), new Date(fechaFin).toISOString());
+      } finally {
+        if (testIntId) {
+          await client.query('DELETE FROM historial_estados_intervencion WHERE intervencion_id = $1', [testIntId]);
+          await client.query('DELETE FROM intervenciones WHERE id = $1', [testIntId]);
+        }
+      }
+    });
   } finally {
     client.release();
   }

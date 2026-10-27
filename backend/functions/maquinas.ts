@@ -313,8 +313,8 @@ maquinasApp.get('/:id/inactividad', requirePermission('REPORTES_CONSULTAR'), asy
 
     const m = maqRows[0];
 
-    // Con alcance SECTORES, si la máquina no pertenece a sus sectores -> 404 (no revelar que existe)
-    if (scope === 'SECTORES' && !usuario.sectores.includes(Number(m.sector_id))) {
+    // Con alcance no TODAS (SECTORES o PROPIAS), si la máquina no pertenece a sus sectores -> 404 (no revelar que existe)
+    if (scope !== 'TODAS' && !usuario.sectores.includes(Number(m.sector_id))) {
       return c.json({ error: 'Máquina no encontrada' }, 404);
     }
 
@@ -348,7 +348,7 @@ maquinasApp.get('/:id/inactividad', requirePermission('REPORTES_CONSULTAR'), asy
        JOIN tipos_intervencion ti ON ti.id = i.tipo_intervencion_id
        WHERE p.maquina_id = $1
          AND i.eliminado_en IS NULL
-         AND tstzrange(p.desde, COALESCE(p.hasta, NOW())) && tstzrange($2::timestamptz, $3::timestamptz)
+         AND tstzrange(p.desde, GREATEST(p.desde, COALESCE(p.hasta, NOW()))) && tstzrange($2::timestamptz, $3::timestamptz)
        ORDER BY p.desde ASC, p.id ASC`,
       [m.id, desde, hasta]
     );

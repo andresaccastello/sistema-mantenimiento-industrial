@@ -12,45 +12,93 @@ if (!fs.existsSync(logDir)) {
   fs.mkdirSync(logDir, { recursive: true });
 }
 
-// Argumento de etapa: npm run test:todo -- etapa-8 -> process.argv[2] = 'etapa-8'
+// Argumento de etapa: npm run test:todo -- etapa-8.1 -> process.argv[2] = 'etapa-8.1'
 const etapaArg = process.argv[2]?.trim();
 const logFileName = etapaArg ? `${etapaArg}-pruebas.log` : 'ultima-corrida.log';
 const logFile = path.join(logDir, logFileName);
 const logStream = fs.createWriteStream(logFile, { flags: 'w' });
 
-// Descubrimiento automático de todas las suites en backend/tests/*.test.ts ordenadas alfabéticamente
+// Descubrimiento automático de suites en backend/tests/*.test.ts
+// Regla: Las suites de migración (migration_*.test.ts) se ejecutan primero en orden numérico/alfabético,
+// seguidas por el resto de las suites de negocio ordenadas alfabéticamente.
 const testsDir = path.join(rootDir, 'backend', 'tests');
-const testFiles = fs
+const allTestFiles = fs
   .readdirSync(testsDir)
-  .filter((f) => f.endsWith('.test.ts'))
+  .filter((f) => f.endsWith('.test.ts'));
+
+const migrationTestFiles = allTestFiles
+  .filter((f) => f.startsWith('migration_'))
   .sort()
   .map((f) => path.join('backend', 'tests', f).replace(/\\/g, '/'));
 
-const cmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-const args = ['tsx', '--env-file=.env', '--test', '--test-concurrency=1', ...testFiles];
+const standardTestFiles = allTestFiles
+  .filter((f) => !f.startsWith('migration_'))
+  .sort()
+  .map((f) => path.join('backend', 'tests', f).replace(/\\/g, '/'));
 
-console.log(`[test:todo] Suites descubiertas (${testFiles.length}):\n${testFiles.map((f) => `  - ${f}`).join('\n')}\n`);
-console.log(`[test:todo] Iniciando corrida completa en serie (--test-concurrency=1)...`);
-console.log(`[test:todo] Salida en tiempo real y registro en: ${logFile}\n`);
+const testFiles = [...migrationTestFiles, ...standardTestFiles];
 
-const child = spawn(cmd, args, {
-  cwd: rootDir,
-  shell: process.platform === 'win32',
-});
+const headerMessage = `[test:todo] Suites descubiertas (${testFiles.length}) en orden de ejecución:\n` +
+  testFiles.map((f, i) => `  ${i + 1}. ${f}`).join('\n') +
+  `\n\n[test:todo] Iniciando corrida completa en serie (--test-concurrency=1)...\n` +
+  `[test:todo] Salida en tiempo real y registro en: ${logFile}\n\n`;
 
-child.stdout.on('data', (chunk) => {
-  process.stdout.write(chunk);
-  logStream.write(chunk);
-});
+process.stdout.write(headerMessage);
+logStream.write(headerMessage);
 
-child.stderr.on('data', (chunk) => {
-  process.stderr.write(chunk);
-  logStream.write(chunk);
-});
+function runGroup(groupFiles, groupName) {
+  return new Promise((resolve, reject) => {
+    if (groupFiles.length === 0) {
+      return resolve(0);
+    }
+    const cmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+    const args = ['tsx', '--env-file=.env', '--test', '--test-concurrency=1', ...groupFiles];
 
-child.on('close', (code) => {
-  logStream.end(() => {
-    console.log(`\n[test:todo] Finalizado con código de salida: ${code ?? 0}`);
-    process.exit(code ?? 0);
+    const child = spawn(cmd, args, {
+      cwd: rootDir,
+      shell: process.platform === 'win32',
+    });
+
+    child.stdout.on('data', (chunk) => {
+      process.stdout.write(chunk);
+      logStream.write(chunk);
+    });
+
+    child.stderr.on('data', (chunk) => {
+      process.stderr.write(chunk);
+      logStream.write(chunk);
+    });
+
+    child.on('close', (code) => {
+      resolve(code ?? 0);
+    });
+
+    child.on('error', (err) => {
+      reject(err);
+    });
   });
+}
+
+async function main() {
+  // 1. Ejecutar grupo de migraciones
+  const codeMig = await runGroup(migrationTestFiles, 'migraciones');
+  if (codeMig !== 0) {
+    logStream.end(() => {
+      console.log(`\n[test:todo] Finalizado con fallos en migraciones (código: ${codeMig})`);
+      process.exit(codeMig);
+    });
+    return;
+  }
+
+  // 2. Ejecutar grupo de negocio
+  const codeStd = await runGroup(standardTestFiles, 'negocio');
+  logStream.end(() => {
+    console.log(`\n[test:todo] Finalizado con código de salida: ${codeStd}`);
+    process.exit(codeStd);
+  });
+}
+
+main().catch((err) => {
+  console.error('[test:todo] Error fatal:', err);
+  process.exit(1);
 });

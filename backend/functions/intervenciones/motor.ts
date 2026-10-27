@@ -574,6 +574,7 @@ export async function ejecutarTransicionServicio(
     usuarioId: usuario.id,
     observacion: params.observacion ? params.observacion.trim() : null,
     camposExtra,
+    fechaEfectiva: accion === 'INICIAR' ? (camposExtra.fecha_inicio || intervencion.fecha_inicio) : null,
   });
 
   // 5. Recalcular estado de la máquina
@@ -752,6 +753,7 @@ export async function finalizarIntervencionServicio(
       trabajo_realizado: trabajoRealizado,
       ejecucion: body.ejecucion,
     },
+    fechaEfectiva: fechaFinalizacion,
   });
 
   // 5.4 Auditoría de trabajo_realizado / ejecucion al volver a finalizar (tras reapertura)
@@ -990,6 +992,7 @@ export async function resolverAhoraIntervencionServicio(
     camposExtra: {
       fecha_inicio: fechaInicio,
     },
+    fechaEfectiva: fechaInicio,
   });
 
   // 2. EN_PROCESO -> FINALIZADA (transicion.hacia)
@@ -1004,6 +1007,7 @@ export async function resolverAhoraIntervencionServicio(
       trabajo_realizado: trabajoRealizado,
       ejecucion: body.ejecucion,
     },
+    fechaEfectiva: fechaFinalizacion,
   });
 
   const eventos: Array<{ tipo: string; payload: any }> = [

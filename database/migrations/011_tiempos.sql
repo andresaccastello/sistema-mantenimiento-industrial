@@ -1,43 +1,82 @@
 -- database/migrations/011_tiempos.sql
--- Etapa 8: Tiempos de gestión e inactividad real de las máquinas
+-- Etapa 8 y 8.1: Tiempos de gestión e inactividad real de las máquinas
 -- Requiere PostgreSQL 14 o superior (soporte nativo de tstzmultirange y range_agg).
 
+BEGIN;
+
 -- ----------------------------------------------------------------------------
--- 1. Vista v_intervencion_tiempos
+-- 1. Columna fecha_efectiva en historial_estados_intervencion (D-44 revisada)
+-- ----------------------------------------------------------------------------
+ALTER TABLE historial_estados_intervencion
+    ADD COLUMN IF NOT EXISTS fecha_efectiva TIMESTAMPTZ NULL;
+
+COMMENT ON COLUMN historial_estados_intervencion.fecha_efectiva IS
+    'Instante en que ocurrió efectivamente el cambio según el usuario (ej. fecha_inicio o fecha_finalizacion), diferenciada de cambiado_en que registra el instante de inserción en el sistema.';
+
+-- ----------------------------------------------------------------------------
+-- 2. Relleno idempotente de filas existentes (solo donde fecha_efectiva IS NULL)
+-- ----------------------------------------------------------------------------
+-- a) La primera fila EN_PROCESO de cada intervención toma intervenciones.fecha_inicio
+WITH primera_en_proceso AS (
+    SELECT DISTINCT ON (h.intervencion_id)
+        h.id,
+        i.fecha_inicio
+    FROM historial_estados_intervencion h
+    JOIN intervenciones i ON i.id = h.intervencion_id
+    WHERE h.estado_nuevo = 'EN_PROCESO'
+      AND h.fecha_efectiva IS NULL
+      AND i.fecha_inicio IS NOT NULL
+    ORDER BY h.intervencion_id, h.cambiado_en ASC, h.id ASC
+)
+UPDATE historial_estados_intervencion h
+SET fecha_efectiva = pep.fecha_inicio
+FROM primera_en_proceso pep
+WHERE h.id = pep.id;
+
+-- b) La última fila FINALIZADA de las intervenciones en estado FINALIZADA toma fecha_finalizacion
+WITH ultima_finalizada AS (
+    SELECT DISTINCT ON (h.intervencion_id)
+        h.id,
+        i.fecha_finalizacion
+    FROM historial_estados_intervencion h
+    JOIN intervenciones i ON i.id = h.intervencion_id
+    WHERE h.estado_nuevo = 'FINALIZADA'
+      AND h.fecha_efectiva IS NULL
+      AND i.estado = 'FINALIZADA'
+      AND i.fecha_finalizacion IS NOT NULL
+    ORDER BY h.intervencion_id, h.cambiado_en DESC, h.id DESC
+)
+UPDATE historial_estados_intervencion h
+SET fecha_efectiva = uf.fecha_finalizacion
+FROM ultima_finalizada uf
+WHERE h.id = uf.id;
+
+-- ----------------------------------------------------------------------------
+-- 3. Vista v_intervencion_tiempos (D-44 revisada)
 -- ----------------------------------------------------------------------------
 -- Proporciona los indicadores temporales derivados para cada intervención:
 -- - espera_minutos: tiempo transcurrido desde la creación hasta el inicio efectivo.
 -- - espera_en_curso: TRUE si la intervención aún no comenzó y no fue cancelada.
 -- - duracion_bruta_minutos: tiempo de calendario entre inicio y finalización (o hasta NOW() si está abierta).
--- - duracion_neta_minutos: tiempo real en EN_PROCESO acumulado en el historial (D-44).
+-- - duracion_neta_minutos: suma de tramos EN_PROCESO usando COALESCE(fecha_efectiva, cambiado_en) (D-44).
 -- - tiempo_total_minutos: tiempo total de ciclo (espera + trabajo) para finalizadas.
 -- - trabajo_en_curso: TRUE si está en EN_PROCESO o EN_ESPERA_REPUESTOS.
 -- - inactividad_minutos: suma acumulada de todos sus períodos de detención de máquina.
 -- - inactividad_en_curso: TRUE si posee un período de detención actualmente abierto.
 -- ----------------------------------------------------------------------------
 
-CREATE OR REPLACE VIEW v_intervencion_tiempos AS
+DROP VIEW IF EXISTS v_intervencion_tiempos;
+
+CREATE VIEW v_intervencion_tiempos AS
 WITH hist_seq AS (
   SELECT
     h.intervencion_id,
     h.estado_nuevo,
-    h.cambiado_en,
-    LEAD(h.cambiado_en) OVER (
+    COALESCE(h.fecha_efectiva, h.cambiado_en) AS punto_actual,
+    LEAD(COALESCE(h.fecha_efectiva, h.cambiado_en)) OVER (
       PARTITION BY h.intervencion_id
       ORDER BY h.cambiado_en ASC, h.id ASC
-    ) AS next_cambiado_en,
-    LEAD(h.cambiado_en, 2) OVER (
-      PARTITION BY h.intervencion_id
-      ORDER BY h.cambiado_en ASC, h.id ASC
-    ) AS next_next_cambiado_en,
-    LEAD(h.estado_nuevo) OVER (
-      PARTITION BY h.intervencion_id
-      ORDER BY h.cambiado_en ASC, h.id ASC
-    ) AS next_estado_nuevo,
-    ROW_NUMBER() OVER (
-      PARTITION BY h.intervencion_id, (h.estado_nuevo = 'EN_PROCESO')
-      ORDER BY h.cambiado_en ASC, h.id ASC
-    ) AS rn_en_proceso
+    ) AS punto_siguiente
   FROM historial_estados_intervencion h
 ),
 tramos_netos AS (
@@ -46,29 +85,17 @@ tramos_netos AS (
     ROUND(SUM(
       GREATEST(
         0,
-        EXTRACT(EPOCH FROM (
-          CASE
-            WHEN s.next_cambiado_en IS NULL THEN NOW()
-            WHEN s.next_estado_nuevo = 'FINALIZADA' AND s.next_next_cambiado_en IS NULL AND i.fecha_finalizacion IS NOT NULL THEN i.fecha_finalizacion
-            ELSE s.next_cambiado_en
-          END
-          -
-          CASE
-            WHEN s.rn_en_proceso = 1 THEN COALESCE(i.fecha_inicio, s.cambiado_en)
-            ELSE s.cambiado_en
-          END
-        ))
+        EXTRACT(EPOCH FROM (COALESCE(s.punto_siguiente, NOW()) - s.punto_actual))
       )
     ) / 60)::INTEGER AS neta_minutos
   FROM hist_seq s
-  JOIN intervenciones i ON i.id = s.intervencion_id
   WHERE s.estado_nuevo = 'EN_PROCESO'
   GROUP BY s.intervencion_id
 ),
 detenciones_agg AS (
   SELECT
     p.intervencion_id,
-    COALESCE(ROUND(SUM(EXTRACT(EPOCH FROM (COALESCE(p.hasta, NOW()) - p.desde)) / 60)), 0)::INTEGER AS inactividad_minutos,
+    COALESCE(ROUND(SUM(GREATEST(0, EXTRACT(EPOCH FROM (COALESCE(p.hasta, NOW()) - p.desde)))) / 60), 0)::INTEGER AS inactividad_minutos,
     COALESCE(BOOL_OR(p.hasta IS NULL), FALSE) AS inactividad_en_curso
   FROM intervencion_periodos_detencion p
   GROUP BY p.intervencion_id
@@ -124,13 +151,14 @@ SELECT
 FROM tiempos_base tb
 JOIN intervenciones i ON i.id = tb.intervencion_id;
 
-
 -- ----------------------------------------------------------------------------
--- 2. Función fn_inactividad_maquina(p_maquina_id, p_desde, p_hasta)
+-- 4. Función fn_inactividad_maquina(p_maquina_id, p_desde, p_hasta)
 -- ----------------------------------------------------------------------------
 -- Calcula la inactividad real de una máquina en un intervalo de tiempo.
 -- Paso 1: Obtener los períodos de detención de intervenciones válidas (no eliminadas).
 -- Paso 2: Unir los períodos usando multirangos (range_agg) evitando doble cómputo por solapamiento.
+--         Se utiliza GREATEST(p.desde, COALESCE(p.hasta, NOW())) para tolerar períodos con desde
+--         unos segundos en el futuro evitando error de límites en tstzrange.
 -- Paso 3: Identificar los períodos en que la máquina estuvo FUERA_DE_SERVICIO (D-07) y restarlos.
 -- Paso 4: Recortar la unión al intervalo [p_desde, p_hasta].
 -- Paso 5: Calcular la suma de minutos reales para el total, correctivos y preventivos,
@@ -191,11 +219,11 @@ BEGIN
     -- 3. Detenciones por tipo (D-45, D-46):
     -- Períodos de detención de la máquina asociados a intervenciones no eliminadas lógicamente.
     -- Los períodos abiertos (hasta IS NULL) se computan hasta NOW().
-    -- La función range_agg fusiona automáticamente solapamientos en un tstzmultirange.
+    -- Se utiliza GREATEST(p.desde, COALESCE(p.hasta, NOW())) para evitar cotas inconsistentes si desde está en el futuro.
     SELECT
-        COALESCE(range_agg(tstzrange(p.desde, COALESCE(p.hasta, NOW()))), '{}'::tstzmultirange),
-        COALESCE(range_agg(tstzrange(p.desde, COALESCE(p.hasta, NOW()))) FILTER (WHERE ti.codigo = 'CORRECTIVO'), '{}'::tstzmultirange),
-        COALESCE(range_agg(tstzrange(p.desde, COALESCE(p.hasta, NOW()))) FILTER (WHERE ti.codigo = 'PREVENTIVO'), '{}'::tstzmultirange)
+        COALESCE(range_agg(tstzrange(p.desde, GREATEST(p.desde, COALESCE(p.hasta, NOW())))), '{}'::tstzmultirange),
+        COALESCE(range_agg(tstzrange(p.desde, GREATEST(p.desde, COALESCE(p.hasta, NOW())))) FILTER (WHERE ti.codigo = 'CORRECTIVO'), '{}'::tstzmultirange),
+        COALESCE(range_agg(tstzrange(p.desde, GREATEST(p.desde, COALESCE(p.hasta, NOW())))) FILTER (WHERE ti.codigo = 'PREVENTIVO'), '{}'::tstzmultirange)
     INTO v_mr_detenciones_all, v_mr_correctivo, v_mr_preventivo
     FROM intervencion_periodos_detencion p
     JOIN intervenciones i ON i.id = p.intervencion_id
@@ -231,3 +259,5 @@ BEGIN
     RETURN NEXT;
 END;
 $$;
+
+COMMIT;
