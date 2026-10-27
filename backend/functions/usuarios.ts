@@ -67,29 +67,71 @@ async function validarAsignacionPerfil(
 }
 
 /**
- * Bloquea los administradores activos y verifica que no sea el último activo (Regla 3 sección 5.3)
+ * Bloquea primero a TODOS los administradores activos y al usuario afectado
+ * en una sola consulta ordenada por id (ORDER BY u.id ASC FOR UPDATE OF u).
+ * Esto previene deadlocks entre transacciones concurrentes (D-42, U.1).
  */
-async function verificarUltimoAdministrador(
+interface TargetYAdminsBloqueados {
+  target: {
+    id: number;
+    legajo: string;
+    nombre: string;
+    apellido: string | null;
+    perfil_id: number;
+    activo: boolean;
+    perfil_nombre: string;
+  } | null;
+  activeAdminIds: number[];
+  esUltimoAdmin: boolean;
+}
+
+async function bloquearUsuarioYAdministradores(
   client: pg.PoolClient,
   targetUserId: number
-): Promise<{ esUltimo: boolean }> {
-  const resAdmins = await client.query(`
-    SELECT u.id
+): Promise<TargetYAdminsBloqueados> {
+  const res = await client.query(`
+    SELECT 
+      u.id, 
+      u.legajo, 
+      u.nombre, 
+      u.apellido, 
+      u.perfil_id, 
+      u.activo,
+      p.nombre AS perfil_nombre
     FROM usuarios u
-    JOIN perfiles p ON u.perfil_id = p.id
-    WHERE p.nombre = 'ADMINISTRADOR' AND u.activo = TRUE
+    LEFT JOIN perfiles p ON u.perfil_id = p.id
+    WHERE u.id = $1 
+       OR (p.nombre = 'ADMINISTRADOR' AND u.activo = TRUE)
     ORDER BY u.id ASC
-    FOR UPDATE
-  `);
+    FOR UPDATE OF u
+  `, [targetUserId]);
 
-  const activeAdminIds = resAdmins.rows.map((r) => Number(r.id));
-  const isTargetAdmin = activeAdminIds.includes(targetUserId);
+  const targetRow = res.rows.find((r) => Number(r.id) === targetUserId) || null;
+  const activeAdminIds = res.rows
+    .filter((r) => r.perfil_nombre === 'ADMINISTRADOR' && r.activo)
+    .map((r) => Number(r.id));
 
-  if (isTargetAdmin && activeAdminIds.length <= 1) {
-    return { esUltimo: true };
-  }
+  const isTargetAdmin = targetRow
+    ? (targetRow.perfil_nombre === 'ADMINISTRADOR' && Boolean(targetRow.activo))
+    : false;
 
-  return { esUltimo: false };
+  const esUltimoAdmin = isTargetAdmin && activeAdminIds.length <= 1;
+
+  return {
+    target: targetRow
+      ? {
+          id: Number(targetRow.id),
+          legajo: targetRow.legajo,
+          nombre: targetRow.nombre,
+          apellido: targetRow.apellido,
+          perfil_id: Number(targetRow.perfil_id),
+          activo: Boolean(targetRow.activo),
+          perfil_nombre: targetRow.perfil_nombre,
+        }
+      : null,
+    activeAdminIds,
+    esUltimoAdmin,
+  };
 }
 
 /* =====================================================================
@@ -500,20 +542,13 @@ usuariosApp.patch('/:id', async (c) => {
   try {
     await client.query('BEGIN');
 
-    // Bloquear fila del usuario afectado
-    const resTarget = await client.query(`
-      SELECT u.id, u.legajo, u.nombre, u.apellido, u.perfil_id, u.activo
-      FROM usuarios u
-      WHERE u.id = $1
-      FOR UPDATE
-    `, [targetUserId]);
+    // Bloquear primero a TODOS los administradores activos y al usuario afectado en una sola consulta ordenada por id
+    const { target: current, esUltimoAdmin } = await bloquearUsuarioYAdministradores(client, targetUserId);
 
-    if (resTarget.rows.length === 0) {
+    if (!current) {
       await client.query('ROLLBACK');
       return c.json({ error: 'Usuario no encontrado', codigo: 'USUARIO_NO_ENCONTRADO' }, 404);
     }
-
-    const current = resTarget.rows[0];
 
     // Obtener sectores actuales del usuario
     const resCurrentSectores = await client.query(`
@@ -581,8 +616,7 @@ usuariosApp.patch('/:id', async (c) => {
         }
 
         // Protección 3: Siempre queda un administrador activo
-        const checkUltimo = await verificarUltimoAdministrador(client, targetUserId);
-        if (checkUltimo.esUltimo) {
+        if (current.perfil_nombre === 'ADMINISTRADOR' && current.activo && esUltimoAdmin) {
           await client.query('ROLLBACK');
           return c.json({ error: 'No se puede modificar el perfil del único administrador activo', codigo: 'ULTIMO_ADMINISTRADOR' }, 409);
         }
@@ -714,8 +748,11 @@ usuariosApp.patch('/:id', async (c) => {
       mensaje: 'Usuario actualizado exitosamente',
     });
 
-  } catch (error) {
+  } catch (error: any) {
     await client.query('ROLLBACK').catch(() => {});
+    if (error?.code === '40P01') {
+      return c.json({ error: 'Recurso ocupado por otra operación concurrente', codigo: 'RECURSO_OCUPADO' }, 409);
+    }
     console.error('Error al modificar usuario:', error);
     return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
   } finally {
@@ -756,25 +793,21 @@ usuariosApp.post('/:id/desactivar', async (c) => {
   try {
     await client.query('BEGIN');
 
-    // Bloquear fila del usuario a desactivar
-    const resTarget = await client.query(`
-      SELECT id, activo, perfil_id FROM usuarios WHERE id = $1 FOR UPDATE
-    `, [targetUserId]);
+    // Bloquear primero a TODOS los administradores activos y al usuario afectado en una sola consulta ordenada por id
+    const { target: current, esUltimoAdmin } = await bloquearUsuarioYAdministradores(client, targetUserId);
 
-    if (resTarget.rows.length === 0) {
+    if (!current) {
       await client.query('ROLLBACK');
       return c.json({ error: 'Usuario no encontrado', codigo: 'USUARIO_NO_ENCONTRADO' }, 404);
     }
 
-    const current = resTarget.rows[0];
     if (!current.activo) {
       await client.query('ROLLBACK');
       return c.json({ error: 'El usuario ya se encuentra inactivo', codigo: 'SIN_CAMBIOS' }, 422);
     }
 
     // Protección 3: Siempre queda un administrador activo
-    const checkUltimo = await verificarUltimoAdministrador(client, targetUserId);
-    if (checkUltimo.esUltimo) {
+    if (esUltimoAdmin) {
       await client.query('ROLLBACK');
       return c.json({ error: 'No se puede desactivar al único administrador activo', codigo: 'ULTIMO_ADMINISTRADOR' }, 409);
     }
@@ -789,10 +822,12 @@ usuariosApp.post('/:id/desactivar', async (c) => {
     `, [targetUserId]);
     const abiertas = Number(resAbiertas.rows[0].abiertas);
 
-    // Actualizar usuario a inactivo
+    // Actualizar usuario a inactivo e incrementar sesion_version
     await client.query(`
       UPDATE usuarios
-      SET activo = FALSE, actualizado_en = NOW()
+      SET activo = FALSE,
+          sesion_version = sesion_version + 1,
+          actualizado_en = NOW()
       WHERE id = $1
     `, [targetUserId]);
 
@@ -813,8 +848,11 @@ usuariosApp.post('/:id/desactivar', async (c) => {
       intervenciones_abiertas_como_responsable: abiertas,
     });
 
-  } catch (error) {
+  } catch (error: any) {
     await client.query('ROLLBACK').catch(() => {});
+    if (error?.code === '40P01') {
+      return c.json({ error: 'Recurso ocupado por otra operación concurrente', codigo: 'RECURSO_OCUPADO' }, 409);
+    }
     console.error('Error al desactivar usuario:', error);
     return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
   } finally {
@@ -954,12 +992,13 @@ usuariosApp.post('/:id/restablecer-password', async (c) => {
 
     const hash = await bcrypt.hash(password_temporal, 10);
 
-    // Actualizar usuario: debe_cambiar_password = TRUE, password_actualizado_en avanza para invalidar sesiones
+    // Actualizar usuario: debe_cambiar_password = TRUE, sesion_version incrementada para invalidar sesiones
     await client.query(`
       UPDATE usuarios
       SET password_hash = $1,
           debe_cambiar_password = TRUE,
-          password_actualizado_en = GREATEST(NOW(), COALESCE(password_actualizado_en, NOW()) + INTERVAL '1 second'),
+          password_actualizado_en = NOW(),
+          sesion_version = sesion_version + 1,
           actualizado_en = NOW()
       WHERE id = $2
     `, [hash, targetUserId]);

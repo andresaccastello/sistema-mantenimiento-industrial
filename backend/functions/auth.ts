@@ -24,7 +24,7 @@ authApp.post('/login', async (c) => {
     // Buscar usuario por legajo y verificar estado propio y de su perfil
     const { rows } = await pool.query(
       `SELECT u.id, u.legajo, u.password_hash, u.nombre, u.apellido, u.activo AS usuario_activo,
-              u.debe_cambiar_password, u.password_actualizado_en,
+              u.debe_cambiar_password, u.password_actualizado_en, u.sesion_version,
               p.id AS perfil_id, p.nombre AS perfil_nombre, p.activo AS perfil_activo
        FROM usuarios u
        JOIN perfiles p ON u.perfil_id = p.id
@@ -46,17 +46,14 @@ authApp.post('/login', async (c) => {
     // Resolver permisos efectivos (perfil + excepciones individuales)
     const info = await resolverPermisosEfectivos(pool, user.id);
 
-    // Generar JWT Token llevando solo sub, legajo, iat y exp (24h)
+    // Generar JWT Token llevando solo sub, legajo, sv, iat y exp (24h)
     const nowSec = Math.floor(Date.now() / 1000);
-    const tokenIat = user.password_actualizado_en
-      ? Math.max(nowSec, Math.floor(new Date(user.password_actualizado_en).getTime() / 1000))
-      : nowSec;
-
     const payload = {
       sub: user.id.toString(),
       legajo: user.legajo,
-      iat: tokenIat,
-      exp: tokenIat + 60 * 60 * 24, // 24 horas
+      sv: Number(user.sesion_version ?? 1),
+      iat: nowSec,
+      exp: nowSec + 60 * 60 * 24, // 24 horas
     };
 
     const token = await sign(payload, JWT_SECRET, 'HS256');
@@ -198,17 +195,16 @@ authApp.post('/cambiar-password', jwtVerify, dbVerify, async (c) => {
     // Iniciar transacción para actualizar contraseña y registrar auditoría
     await client.query('BEGIN');
 
-    const oldTokenIat = tokenPayload?.iat ?? Math.floor(Date.now() / 1000);
-
     const updateRes = await client.query(
       `UPDATE usuarios
        SET password_hash = $1,
            debe_cambiar_password = FALSE,
-           password_actualizado_en = GREATEST(NOW(), TO_TIMESTAMP($3 + 1)),
+           password_actualizado_en = NOW(),
+           sesion_version = sesion_version + 1,
            actualizado_en = NOW()
        WHERE id = $2
-       RETURNING password_actualizado_en`,
-      [newHash, userId, oldTokenIat]
+       RETURNING sesion_version`,
+      [newHash, userId]
     );
 
     const updatedRow = updateRes.rows[0];
@@ -222,12 +218,13 @@ authApp.post('/cambiar-password', jwtVerify, dbVerify, async (c) => {
     await client.query('COMMIT');
 
     // 4. Responder con token nuevo
-    const newIat = Math.floor(new Date(updatedRow.password_actualizado_en).getTime() / 1000);
+    const nowSec = Math.floor(Date.now() / 1000);
     const newTokenPayload = {
       sub: user.id.toString(),
       legajo: user.legajo,
-      iat: newIat,
-      exp: newIat + 60 * 60 * 24, // 24h
+      sv: Number(updatedRow.sesion_version),
+      iat: nowSec,
+      exp: nowSec + 60 * 60 * 24, // 24h
     };
 
     const newToken = await sign(newTokenPayload, JWT_SECRET, 'HS256');

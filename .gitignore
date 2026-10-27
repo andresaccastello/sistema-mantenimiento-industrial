@@ -4,6 +4,7 @@ dist/
 .env.*
 !.env.example
 *.log
+!docs/evidencia/*.log
 .DS_Store
 .vscode/
 .idea/

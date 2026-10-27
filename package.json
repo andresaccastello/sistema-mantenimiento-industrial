@@ -20,6 +20,7 @@
     "test:migration-007": "tsx --env-file=.env --test backend/tests/migration_007.test.ts",
     "test:migration-008": "tsx --env-file=.env --test backend/tests/migration_008.test.ts",
     "test:migration-009": "tsx --env-file=.env --test backend/tests/migration_009.test.ts",
+    "test:migration-010": "tsx --env-file=.env --test backend/tests/migration_010.test.ts",
     "test:permisos": "tsx --env-file=.env --test backend/tests/permisos_granulares.test.ts",
     "test:intervenciones": "tsx --env-file=.env --test backend/tests/intervenciones.test.ts",
     "test:motor": "tsx --env-file=.env --test backend/tests/motor_estados.test.ts",
@@ -28,6 +29,7 @@
     "test:notificaciones": "tsx --env-file=.env --test backend/tests/notificaciones.test.ts",
     "test:usuarios": "tsx --env-file=.env --test backend/tests/usuarios.test.ts",
     "test:e2e": "tsx --env-file=.env --test backend/tests/crud.test.ts",
+    "test:todo": "node scripts/run-all-tests.mjs",
     "build:frontend": "npm run build --workspace frontend"
   },
   "dependencies": {

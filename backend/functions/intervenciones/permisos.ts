@@ -7,6 +7,7 @@ export interface PermisosEfectivosUsuario {
   perfil_id: number | null;
   debe_cambiar_password: boolean;
   password_actualizado_en: Date | null;
+  sesion_version: number;
   permisos: Record<string, AlcancePermiso>;
   sectores: number[];
 }
@@ -16,7 +17,7 @@ export interface PermisosEfectivosUsuario {
  * 1. Permisos base de su perfil.
  * 2. Excepciones individuales (CONCEDER / DENEGAR, con estricta prevalencia de DENEGAR).
  * 3. Sectores asignados al usuario.
- * Además incluye estado del usuario y perfil, debe_cambiar_password y password_actualizado_en.
+ * Además incluye estado del usuario y perfil, debe_cambiar_password, password_actualizado_en y sesion_version.
  */
 export async function resolverPermisosEfectivos(
   db: pg.Pool | pg.PoolClient,
@@ -30,6 +31,7 @@ export async function resolverPermisosEfectivos(
        u.perfil_id,
        u.debe_cambiar_password,
        u.password_actualizado_en,
+       u.sesion_version,
        (
          SELECT COALESCE(json_agg(json_build_object('codigo', pe.codigo, 'alcance', pp.alcance)), '[]'::json)
          FROM perfil_permiso pp
@@ -59,6 +61,7 @@ export async function resolverPermisosEfectivos(
       perfil_id: null,
       debe_cambiar_password: false,
       password_actualizado_en: null,
+      sesion_version: 1,
       permisos: {},
       sectores: [],
     };
@@ -89,6 +92,7 @@ export async function resolverPermisosEfectivos(
     perfil_id: row.perfil_id ? Number(row.perfil_id) : null,
     debe_cambiar_password: Boolean(row.debe_cambiar_password),
     password_actualizado_en: row.password_actualizado_en ? new Date(row.password_actualizado_en) : null,
+    sesion_version: Number(row.sesion_version ?? 1),
     permisos,
     sectores,
   };

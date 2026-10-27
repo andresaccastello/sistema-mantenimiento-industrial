@@ -492,106 +492,187 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
 
     // U-09: Único administrador activo: otro usuario con USUARIOS_GESTIONAR intenta desactivarlo o cambiarle el perfil
     await t.test('U-09: Protección de último administrador activo', async () => {
-      // Aseguramos que solo ADMIN001 sea el único admin activo
-      await client.query(`
-        UPDATE usuarios SET activo = FALSE
-        WHERE perfil_id = $1 AND id != $2
-      `, [adminPerfilId, adminId]);
+      try {
+        // Aseguramos que solo ADMIN001 sea el único admin activo
+        await client.query(`
+          UPDATE usuarios SET activo = FALSE
+          WHERE perfil_id = $1 AND id != $2
+        `, [adminPerfilId, adminId]);
 
-      // Usuario gestor secundario
-      const legajoG = `GESTOR_${Date.now()}`;
-      const hash = await bcrypt.hash('claveGestor123', 10);
-      const insG = await client.query(`
-        INSERT INTO usuarios (legajo, nombre, password_hash, perfil_id, activo, debe_cambiar_password)
-        VALUES ($1, 'Gestor Secundario', $2, $3, TRUE, FALSE) RETURNING id
-      `, [legajoG, hash, responsablePerfilId]);
-      const gestorId = Number(insG.rows[0].id);
+        // Usuario gestor secundario
+        const legajoG = `GESTOR_${Date.now()}`;
+        const hash = await bcrypt.hash('claveGestor123', 10);
+        const insG = await client.query(`
+          INSERT INTO usuarios (legajo, nombre, password_hash, perfil_id, activo, debe_cambiar_password)
+          VALUES ($1, 'Gestor Secundario', $2, $3, TRUE, FALSE) RETURNING id
+        `, [legajoG, hash, responsablePerfilId]);
+        const gestorId = Number(insG.rows[0].id);
 
-      const resUg = await client.query("SELECT id FROM permisos WHERE codigo = 'USUARIOS_GESTIONAR'");
-      await client.query(`
-        INSERT INTO usuario_permiso (usuario_id, permiso_id, efecto, alcance, motivo, otorgado_por_usuario_id)
-        VALUES ($1, $2, 'CONCEDER', 'TODAS', 'Gestor U09', $3)
-      `, [gestorId, resUg.rows[0].id, adminId]);
+        const resUg = await client.query("SELECT id FROM permisos WHERE codigo = 'USUARIOS_GESTIONAR'");
+        await client.query(`
+          INSERT INTO usuario_permiso (usuario_id, permiso_id, efecto, alcance, motivo, otorgado_por_usuario_id)
+          VALUES ($1, $2, 'CONCEDER', 'TODAS', 'Gestor U09', $3)
+        `, [gestorId, resUg.rows[0].id, adminId]);
 
-      const loginG = await postJson('/api/auth/login', { legajo: legajoG, password: 'claveGestor123' });
-      const tokenG = (await loginG.json()).token;
+        const loginG = await postJson('/api/auth/login', { legajo: legajoG, password: 'claveGestor123' });
+        const tokenG = (await loginG.json()).token;
 
-      // 1. Intenta desactivar al único admin activo -> 409 ULTIMO_ADMINISTRADOR
-      const resDesact = await postJson(`/api/usuarios/${adminId}/desactivar`, {
-        motivo: 'Intento desactivar unico admin',
-      }, tokenG);
-      assert.strictEqual(resDesact.status, 409);
-      assert.strictEqual((await resDesact.json()).codigo, 'ULTIMO_ADMINISTRADOR');
+        // 1. Intenta desactivar al único admin activo -> 409 ULTIMO_ADMINISTRADOR
+        const resDesact = await postJson(`/api/usuarios/${adminId}/desactivar`, {
+          motivo: 'Intento desactivar unico admin',
+        }, tokenG);
+        assert.strictEqual(resDesact.status, 409);
+        assert.strictEqual((await resDesact.json()).codigo, 'ULTIMO_ADMINISTRADOR');
 
-      // 2. Intenta cambiarle el perfil al único admin activo -> 409 ULTIMO_ADMINISTRADOR
-      const resPatch = await patchJson(`/api/usuarios/${adminId}`, {
-        perfil_id: operarioPerfilId,
-      }, tokenG);
-      assert.strictEqual(resPatch.status, 409);
-      assert.strictEqual((await resPatch.json()).codigo, 'ULTIMO_ADMINISTRADOR');
+        // 2. Intenta cambiarle el perfil al único admin activo -> 409 ULTIMO_ADMINISTRADOR
+        const resPatch = await patchJson(`/api/usuarios/${adminId}`, {
+          perfil_id: operarioPerfilId,
+        }, tokenG);
+        assert.strictEqual(resPatch.status, 409);
+        assert.strictEqual((await resPatch.json()).codigo, 'ULTIMO_ADMINISTRADOR');
 
-      // 3. Con dos administradores activos, desactivar uno -> 200
-      const legajoA2 = `ADMIN2_${Date.now()}`;
-      const insA2 = await client.query(`
-        INSERT INTO usuarios (legajo, nombre, password_hash, perfil_id, activo, debe_cambiar_password)
-        VALUES ($1, 'Admin 2', $2, $3, TRUE, FALSE) RETURNING id
-      `, [legajoA2, hash, adminPerfilId]);
-      const admin2Id = Number(insA2.rows[0].id);
+        // 3. Con dos administradores activos, desactivar uno -> 200
+        const legajoA2 = `ADMIN2_${Date.now()}`;
+        const insA2 = await client.query(`
+          INSERT INTO usuarios (legajo, nombre, password_hash, perfil_id, activo, debe_cambiar_password)
+          VALUES ($1, 'Admin 2', $2, $3, TRUE, FALSE) RETURNING id
+        `, [legajoA2, hash, adminPerfilId]);
+        const admin2Id = Number(insA2.rows[0].id);
 
-      // Ahora hay 2 admins. Desactivar admin2Id -> 200
-      const resDesactOk = await postJson(`/api/usuarios/${admin2Id}/desactivar`, {
-        motivo: 'Desactivando admin 2 con exito',
-      }, adminToken);
-      assert.strictEqual(resDesactOk.status, 200);
+        // Ahora hay 2 admins. Desactivar admin2Id -> 200
+        const resDesactOk = await postJson(`/api/usuarios/${admin2Id}/desactivar`, {
+          motivo: 'Desactivando admin 2 con exito',
+        }, adminToken);
+        assert.strictEqual(resDesactOk.status, 200);
+      } finally {
+        // Revertir y asegurar que ADMIN001 quede activo pase o falle la prueba
+        await client.query('UPDATE usuarios SET activo = TRUE WHERE id = $1', [adminId]);
+      }
     });
 
     // U-10: Concurrencia: dos administradores, A1 y A2, se desactivan mutuamente a la vez
     await t.test('U-10: Concurrencia en desactivación de administradores', async () => {
-      const hash = await bcrypt.hash('adminMutuo123', 10);
-      const legajoA1 = `CONC_A1_${Date.now()}`;
-      const legajoA2 = `CONC_A2_${Date.now()}`;
+      try {
+        const hash = await bcrypt.hash('adminMutuo123', 10);
+        const legajoA1 = `CONC_A1_${Date.now()}`;
+        const legajoA2 = `CONC_A2_${Date.now()}`;
 
-      // Aseguramos que solo existan A1 y A2 como administradores activos
-      await client.query('UPDATE usuarios SET activo = FALSE WHERE perfil_id = $1', [adminPerfilId]);
+        // Aseguramos que solo existan A1 y A2 como administradores activos
+        await client.query('UPDATE usuarios SET activo = FALSE WHERE perfil_id = $1', [adminPerfilId]);
 
-      const insA1 = await client.query(`
-        INSERT INTO usuarios (legajo, nombre, password_hash, perfil_id, activo, debe_cambiar_password)
-        VALUES ($1, 'Admin Conc 1', $2, $3, TRUE, FALSE) RETURNING id
-      `, [legajoA1, hash, adminPerfilId]);
-      const idA1 = Number(insA1.rows[0].id);
+        const insA1 = await client.query(`
+          INSERT INTO usuarios (legajo, nombre, password_hash, perfil_id, activo, debe_cambiar_password)
+          VALUES ($1, 'Admin Conc 1', $2, $3, TRUE, FALSE) RETURNING id
+        `, [legajoA1, hash, adminPerfilId]);
+        const idA1 = Number(insA1.rows[0].id);
 
-      const insA2 = await client.query(`
-        INSERT INTO usuarios (legajo, nombre, password_hash, perfil_id, activo, debe_cambiar_password)
-        VALUES ($1, 'Admin Conc 2', $2, $3, TRUE, FALSE) RETURNING id
-      `, [legajoA2, hash, adminPerfilId]);
-      const idA2 = Number(insA2.rows[0].id);
+        const insA2 = await client.query(`
+          INSERT INTO usuarios (legajo, nombre, password_hash, perfil_id, activo, debe_cambiar_password)
+          VALUES ($1, 'Admin Conc 2', $2, $3, TRUE, FALSE) RETURNING id
+        `, [legajoA2, hash, adminPerfilId]);
+        const idA2 = Number(insA2.rows[0].id);
 
-      const login1 = await postJson('/api/auth/login', { legajo: legajoA1, password: 'adminMutuo123' });
-      const tokenA1 = (await login1.json()).token;
+        const login1 = await postJson('/api/auth/login', { legajo: legajoA1, password: 'adminMutuo123' });
+        const tokenA1 = (await login1.json()).token;
 
-      const login2 = await postJson('/api/auth/login', { legajo: legajoA2, password: 'adminMutuo123' });
-      const tokenA2 = (await login2.json()).token;
+        const login2 = await postJson('/api/auth/login', { legajo: legajoA2, password: 'adminMutuo123' });
+        const tokenA2 = (await login2.json()).token;
 
-      // Ejecutar desactivación mutua en simultáneo con Promise.all
-      const [res1, res2] = await Promise.all([
-        postJson(`/api/usuarios/${idA2}/desactivar`, { motivo: 'Desactivando A2 desde A1' }, tokenA1),
-        postJson(`/api/usuarios/${idA1}/desactivar`, { motivo: 'Desactivando A1 desde A2' }, tokenA2),
-      ]);
+        // Ejecutar desactivación mutua en simultáneo con Promise.all
+        const [res1, res2] = await Promise.all([
+          postJson(`/api/usuarios/${idA2}/desactivar`, { motivo: 'Desactivando A2 desde A1' }, tokenA1),
+          postJson(`/api/usuarios/${idA1}/desactivar`, { motivo: 'Desactivando A1 desde A2' }, tokenA2),
+        ]);
 
-      const statuses = [res1.status, res2.status].sort();
-      assert.deepStrictEqual(statuses, [200, 409], 'Exactamente una debe ser 200 y la otra 409');
+        assert.notStrictEqual(res1.status, 500, 'res1 no debe responder 500');
+        assert.notStrictEqual(res2.status, 500, 'res2 no debe responder 500');
 
-      const res409 = res1.status === 409 ? res1 : res2;
-      assert.strictEqual((await res409.json()).codigo, 'ULTIMO_ADMINISTRADOR');
+        const statuses = [res1.status, res2.status];
+        const winners = statuses.filter((s) => s === 200);
+        assert.strictEqual(winners.length, 1, 'Exactamente una solicitud debe responder 200');
 
-      // Verificar que queda exactamente un administrador activo
-      const resActivos = await client.query(`
-        SELECT COUNT(*)::integer AS total FROM usuarios WHERE perfil_id = $1 AND activo = TRUE
-      `, [adminPerfilId]);
-      assert.strictEqual(Number(resActivos.rows[0].total), 1);
+        // El perdedor puede recibir 409 (ULTIMO_ADMINISTRADOR o RECURSO_OCUPADO) o 401 (si su propio usuario ya fue desactivado)
+        const loserStatus = statuses.find((s) => s !== 200);
+        assert.ok(
+          loserStatus === 409 || loserStatus === 401,
+          `El perdedor debe recibir 409 o 401, pero recibió ${loserStatus}`
+        );
 
-      // Reactivar ADMIN001 para las siguientes pruebas
-      await client.query('UPDATE usuarios SET activo = TRUE WHERE id = $1', [adminId]);
+        // Aserción obligatoria: queda exactamente un administrador activo
+        const resActivos = await client.query(`
+          SELECT COUNT(*)::integer AS total FROM usuarios WHERE perfil_id = $1 AND activo = TRUE
+        `, [adminPerfilId]);
+        assert.strictEqual(Number(resActivos.rows[0].total), 1, 'Debe quedar exactamente un admin activo');
+
+        // Variante: forzar solapamiento con bloqueo previo de otra conexión
+        const legajoB1 = `SOLAP_B1_${Date.now()}`;
+        const legajoB2 = `SOLAP_B2_${Date.now()}`;
+
+        // Desactivar cualquier otro admin para tener exactamente B1 y B2
+        await client.query('UPDATE usuarios SET activo = FALSE WHERE perfil_id = $1', [adminPerfilId]);
+
+        const insB1 = await client.query(`
+          INSERT INTO usuarios (legajo, nombre, password_hash, perfil_id, activo, debe_cambiar_password)
+          VALUES ($1, 'Admin Solap 1', $2, $3, TRUE, FALSE) RETURNING id
+        `, [legajoB1, hash, adminPerfilId]);
+        const idB1 = Number(insB1.rows[0].id);
+
+        const insB2 = await client.query(`
+          INSERT INTO usuarios (legajo, nombre, password_hash, perfil_id, activo, debe_cambiar_password)
+          VALUES ($1, 'Admin Solap 2', $2, $3, TRUE, FALSE) RETURNING id
+        `, [legajoB2, hash, adminPerfilId]);
+        const idB2 = Number(insB2.rows[0].id);
+
+        const loginB1 = await postJson('/api/auth/login', { legajo: legajoB1, password: 'adminMutuo123' });
+        const tokenB1 = (await loginB1.json()).token;
+
+        const loginB2 = await postJson('/api/auth/login', { legajo: legajoB2, password: 'adminMutuo123' });
+        const tokenB2 = (await loginB2.json()).token;
+
+        // Otra conexión bloquea las dos filas con FOR UPDATE
+        const blockerClient = await pool.connect();
+        try {
+          await blockerClient.query('BEGIN');
+          await blockerClient.query(
+            'SELECT id FROM usuarios WHERE id IN ($1, $2) ORDER BY id ASC FOR UPDATE',
+            [idB1, idB2]
+          );
+
+          // Lanzar ambos pedidos
+          const p1 = postJson(`/api/usuarios/${idB2}/desactivar`, { motivo: 'Solapando B1 a B2' }, tokenB1);
+          const p2 = postJson(`/api/usuarios/${idB1}/desactivar`, { motivo: 'Solapando B2 a B1' }, tokenB2);
+
+          // Pequeña espera para asegurar que ambas peticiones estén en curso esperando el lock
+          await new Promise((resolve) => setTimeout(resolve, 80));
+
+          // Liberar el bloqueo
+          await blockerClient.query('COMMIT');
+
+          // Esperar los resultados
+          const [resB1, resB2] = await Promise.all([p1, p2]);
+
+          assert.notStrictEqual(resB1.status, 500, 'resB1 no debe ser 500');
+          assert.notStrictEqual(resB2.status, 500, 'resB2 no debe ser 500');
+
+          const bStatuses = [resB1.status, resB2.status];
+          assert.strictEqual(bStatuses.filter((s) => s === 200).length, 1, 'Exactamente una debe ser 200');
+          const bLoser = bStatuses.find((s) => s !== 200);
+          assert.ok(bLoser === 409 || bLoser === 401, `El perdedor solapado debe ser 409 o 401, fue ${bLoser}`);
+
+          // Debe quedar exactamente un admin activo entre B1 y B2
+          const resActivosB = await client.query(`
+            SELECT COUNT(*)::integer AS total FROM usuarios WHERE perfil_id = $1 AND activo = TRUE
+          `, [adminPerfilId]);
+          assert.strictEqual(Number(resActivosB.rows[0].total), 1);
+        } finally {
+          await blockerClient.query('ROLLBACK').catch(() => {});
+          blockerClient.release();
+        }
+
+      } finally {
+        // Revertir siempre y reactivar ADMIN001 para que la base nunca quede rota
+        await client.query('UPDATE usuarios SET activo = TRUE WHERE id = $1', [adminId]);
+      }
     });
 
     // U-11: Desactivar a un responsable con 2 intervenciones abiertas
@@ -880,6 +961,46 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
           DROP FUNCTION IF EXISTS trg_fn_test_fail_auditoria();
         `);
       }
+    });
+
+    // U-19: Cambiar contraseña y usar el token nuevo inmediatamente (sin esperas); token viejo 401 SESION_INVALIDADA
+    await t.test('U-19: Uso inmediato de nuevo token e invalidación determinista por versión de sesión', async () => {
+      const legajoU19 = `U19_${Date.now()}`;
+      const hash19 = await bcrypt.hash('inicial123456', 10);
+      const ins19 = await client.query(`
+        INSERT INTO usuarios (legajo, nombre, password_hash, perfil_id, activo, debe_cambiar_password)
+        VALUES ($1, 'Usuario U19', $2, $3, TRUE, FALSE) RETURNING id
+      `, [legajoU19, hash19, responsablePerfilId]);
+      const u19Id = Number(ins19.rows[0].id);
+
+      // Login inicial -> obtener token viejo
+      const loginRes = await postJson('/api/auth/login', {
+        legajo: legajoU19,
+        password: 'inicial123456',
+      });
+      assert.strictEqual(loginRes.status, 200);
+      const tokenViejo = (await loginRes.json()).token;
+
+      // Cambiar contraseña inmediatamente
+      const changeRes = await postJson('/api/auth/cambiar-password', {
+        password_actual: 'inicial123456',
+        password_nueva: 'nuevaClaveU19_2026',
+      }, tokenViejo);
+      assert.strictEqual(changeRes.status, 200);
+      const tokenNuevo = (await changeRes.json()).token;
+      assert.ok(tokenNuevo, 'Debe devolver un nuevo token');
+
+      // Usar inmediatamente el token nuevo, SIN ESPERAS: 200
+      const resNuevo = await getJson('/api/auth/me', tokenNuevo);
+      assert.strictEqual(resNuevo.status, 200, 'El token nuevo debe funcionar inmediatamente');
+      const meData = await resNuevo.json();
+      assert.strictEqual(meData.id, u19Id);
+
+      // Usar inmediatamente el token viejo: 401 SESION_INVALIDADA
+      const resViejo = await getJson('/api/auth/me', tokenViejo);
+      assert.strictEqual(resViejo.status, 401, 'El token viejo debe rechazarse inmediatamente con 401');
+      const viejoData = await resViejo.json();
+      assert.strictEqual(viejoData.codigo, 'SESION_INVALIDADA');
     });
 
   } finally {

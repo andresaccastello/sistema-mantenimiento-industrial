@@ -18,7 +18,7 @@ export const jwtVerify = jwt({
 });
 
 export const dbVerify = createMiddleware(async (c, next) => {
-  const payload = c.get('jwtPayload') as { sub?: string; legajo?: string; iat?: number; exp?: number } | undefined;
+  const payload = c.get('jwtPayload') as { sub?: string; legajo?: string; sv?: number; iat?: number; exp?: number } | undefined;
 
   if (!payload || !payload.sub) {
     return c.json({ error: 'No autorizado' }, 401);
@@ -36,13 +36,9 @@ export const dbVerify = createMiddleware(async (c, next) => {
       return c.json({ error: 'Usuario inactivo o no existe' }, 401);
     }
 
-    // 1. Sesión invalidada: si el token tiene iat anterior a password_actualizado_en -> 401 SESION_INVALIDADA
-    if (info.password_actualizado_en) {
-      const tokenIatSec = typeof payload.iat === 'number' ? Math.floor(payload.iat) : 0;
-      const pwdActualizadoSec = Math.floor(info.password_actualizado_en.getTime() / 1000);
-      if (tokenIatSec < pwdActualizadoSec) {
-        return c.json({ error: 'Sesión invalidada por cambio de contraseña', codigo: 'SESION_INVALIDADA' }, 401);
-      }
+    // 1. Sesión invalidada: todo token cuyo sv no coincida con el actual (o sin sv) -> 401 SESION_INVALIDADA
+    if (typeof payload.sv !== 'number' || payload.sv !== info.sesion_version) {
+      return c.json({ error: 'Sesión invalidada por cambio de contraseña o estado', codigo: 'SESION_INVALIDADA' }, 401);
     }
 
     // 2. Contraseña temporal: si debe_cambiar_password es TRUE, solo se permiten GET /api/auth/me y POST /api/auth/cambiar-password
