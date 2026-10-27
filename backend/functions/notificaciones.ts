@@ -197,7 +197,7 @@ notificacionesApp.get('/', async (c) => {
     }
 
     params.push(limite);
-    sql += ` ORDER BY creada_en DESC, id DESC LIMIT $${params.length}`;
+    sql += ` ORDER BY id DESC LIMIT $${params.length}`;
 
     const res = await pool.query(sql, params);
 

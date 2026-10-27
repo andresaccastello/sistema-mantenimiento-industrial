@@ -353,9 +353,10 @@ test('Etapa 7 — Notificaciones internas, reglas de destinatarios, bandeja y ca
     });
 
     // =========================================================================
-    // N-04: Excepciones y desactivación
     // =========================================================================
-    await t.test('N-04: R1 con DENEGAR; O con CONCEDER (sector 1); R2 desactivado', async () => {
+    // N-04: Excepciones y desactivación (con regla de visibilidad D-38 c)
+    // =========================================================================
+    await t.test('N-04: R1 con DENEGAR; O con CONCEDER (sector 1); R2 desactivado; O con VER PROPIAS vs SECTORES', async () => {
       // 1. R1: Excepción DENEGAR en NOTIFICACIONES_FALLAS_RECIBIR
       await client.query(
         `INSERT INTO usuario_permiso (usuario_id, permiso_id, efecto, alcance, motivo, otorgado_por_usuario_id)
@@ -378,32 +379,74 @@ test('Etapa 7 — Notificaciones internas, reglas de destinatarios, bandeja y ca
       await client.query('UPDATE usuarios SET activo = FALSE WHERE id = $1', [resp2Id]);
 
       try {
-        // Caso A: Admin registra falla en sector 1 (máquina 1)
-        const resA = await app.request('/api/intervenciones', {
+        // Caso A1: O tiene NOTIFICACIONES_FALLAS_RECIBIR pero su INTERVENCIONES_VER es solo PROPIAS (perfil OPERARIO).
+        // Admin registra falla en sector 1 (máquina 1). O NO debe recibirla porque no puede ver la intervención ajena.
+        const resA1 = await app.request('/api/intervenciones', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
           body: JSON.stringify({
             maquina_id: maquina1Id,
-            descripcion: 'Falla registrada por Admin en sector 1',
+            descripcion: 'Falla registrada por Admin en sector 1 (O solo tiene VER PROPIAS)',
             detiene_maquina: false,
           }),
         });
 
-        assert.strictEqual(resA.status, 201);
-        const intIdA = Number((await resA.json()).id);
-        createdIntervencionIds.push(intIdA);
+        assert.strictEqual(resA1.status, 201);
+        const intIdA1 = Number((await resA1.json()).id);
+        createdIntervencionIds.push(intIdA1);
 
-        const resNotifsA = await client.query(
+        const resNotifsA1 = await client.query(
           `SELECT usuario_id FROM notificaciones WHERE intervencion_id = $1`,
-          [intIdA]
+          [intIdA1]
         );
-        const destsA = resNotifsA.rows.map((r: any) => Number(r.usuario_id));
+        const destsA1 = resNotifsA1.rows.map((r: any) => Number(r.usuario_id));
 
-        assert.strictEqual(destsA.includes(resp1Id), false, 'R1 no debe recibir por DENEGAR');
-        assert.strictEqual(destsA.includes(resp2Id), false, 'R2 no debe recibir por inactivo');
-        assert.strictEqual(destsA.includes(operarioId), true, 'O sí recibe falla de sector 1 creada por otro');
-        assert.strictEqual(destsA.includes(resp3Id), true, 'R3 sí recibe');
-        assert.strictEqual(destsA.includes(adminId), false, 'A no recibe (es actor)');
+        assert.strictEqual(destsA1.includes(resp1Id), false, 'R1 no debe recibir por DENEGAR');
+        assert.strictEqual(destsA1.includes(resp2Id), false, 'R2 no debe recibir por inactivo');
+        assert.strictEqual(
+          destsA1.includes(operarioId),
+          false,
+          'O con NOTIFICACIONES_FALLAS_RECIBIR pero INTERVENCIONES_VER PROPIAS no recibe avisos de fallas ajenas'
+        );
+        assert.strictEqual(destsA1.includes(resp3Id), true, 'R3 sí recibe');
+        assert.strictEqual(destsA1.includes(adminId), false, 'A no recibe (es actor)');
+
+        // Caso A2: Se concede a O también INTERVENCIONES_VER con alcance SECTORES (sector 1)
+        await client.query(
+          `INSERT INTO usuario_permiso (usuario_id, permiso_id, efecto, alcance, motivo, otorgado_por_usuario_id)
+           VALUES ($1, $2, 'CONCEDER', 'SECTORES', 'Conceder ver sector 1 a O', $3)`,
+          [operarioId, permMap['INTERVENCIONES_VER'], adminId]
+        );
+
+        const resA2 = await app.request('/api/intervenciones', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+          body: JSON.stringify({
+            maquina_id: maquina1Id,
+            descripcion: 'Falla registrada por Admin en sector 1 (O tiene VER SECTORES)',
+            detiene_maquina: false,
+          }),
+        });
+
+        assert.strictEqual(resA2.status, 201);
+        const intIdA2 = Number((await resA2.json()).id);
+        createdIntervencionIds.push(intIdA2);
+
+        const resNotifsA2 = await client.query(
+          `SELECT usuario_id FROM notificaciones WHERE intervencion_id = $1`,
+          [intIdA2]
+        );
+        const destsA2 = resNotifsA2.rows.map((r: any) => Number(r.usuario_id));
+
+        assert.strictEqual(
+          destsA2.includes(operarioId),
+          true,
+          'O sí recibe aviso de falla de sector 1 al tener además INTERVENCIONES_VER con alcance SECTORES'
+        );
+        assert.strictEqual(destsA2.includes(resp1Id), false, 'R1 no debe recibir por DENEGAR');
+        assert.strictEqual(destsA2.includes(resp2Id), false, 'R2 no debe recibir por inactivo');
+        assert.strictEqual(destsA2.includes(resp3Id), true, 'R3 sí recibe');
+        assert.strictEqual(destsA2.includes(adminId), false, 'A no recibe (es actor)');
 
         // Caso B: O registra falla en sector 1
         const resO = await app.request('/api/intervenciones', {
@@ -417,7 +460,8 @@ test('Etapa 7 — Notificaciones internas, reglas de destinatarios, bandeja y ca
         });
 
         assert.strictEqual(resO.status, 201);
-        const intIdO = Number((await resO.json()).id);
+        const dataO = await resO.json();
+        const intIdO = Number(dataO.id);
         createdIntervencionIds.push(intIdO);
 
         const resNotifsO = await client.query(
@@ -429,12 +473,12 @@ test('Etapa 7 — Notificaciones internas, reglas de destinatarios, bandeja y ca
         assert.strictEqual(destsO.includes(operarioId), false, 'O no recibe falla creada por él mismo');
       } finally {
         // Restaurar estado
-        await client.query('DELETE FROM usuario_permiso WHERE usuario_id = $1 AND permiso_id = $2', [
-          resp1Id,
-          permMap['NOTIFICACIONES_FALLAS_RECIBIR'],
+        await client.query('DELETE FROM usuario_permiso WHERE usuario_id = $1 AND permiso_id = ANY($2)', [
+          operarioId,
+          [permMap['NOTIFICACIONES_FALLAS_RECIBIR'], permMap['INTERVENCIONES_VER']],
         ]);
         await client.query('DELETE FROM usuario_permiso WHERE usuario_id = $1 AND permiso_id = $2', [
-          operarioId,
+          resp1Id,
           permMap['NOTIFICACIONES_FALLAS_RECIBIR'],
         ]);
         await client.query('DELETE FROM usuario_sector WHERE usuario_id = $1 AND sector_id = $2', [
@@ -943,7 +987,7 @@ test('Etapa 7 — Notificaciones internas, reglas de destinatarios, bandeja y ca
       await app.request(`/api/intervenciones/${intId}/responsable`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
-        body: JSON.stringify({ destinatario_id: resp1Id, estado_esperado: 'PENDIENTE' }),
+        body: JSON.stringify({ usuario_id: resp1Id, estado_esperado: 'PENDIENTE' }),
       });
 
       const getCount = async () => {
@@ -1324,6 +1368,67 @@ test('Etapa 7 — Notificaciones internas, reglas de destinatarios, bandeja y ca
         [notifs2.rows.map((r: any) => Number(r.id))]
       );
       assert.strictEqual(envios2.rows.length, 0, 'No debe haber envíos con canales inactivos');
+    });
+
+    // =========================================================================
+    // N-17: Inserción en lote con al menos 20 destinatarios (Etapa 7.1)
+    // =========================================================================
+    await t.test('N-17: Inserción en lote: falla con al menos 20 destinatarios y todos reciben exactamente una notificación', async () => {
+      const loteTs = Date.now();
+      // Crear 20 usuarios con perfil RESPONSABLE_MANTENIMIENTO (tienen NOTIFICACIONES_FALLAS_RECIBIR TODAS e INTERVENCIONES_VER TODAS)
+      const res20 = await client.query(
+        `INSERT INTO usuarios (legajo, nombre, password_hash, perfil_id, activo)
+         SELECT 
+           'L20_' || $1 || '_' || i,
+           'Resp Lote ' || i,
+           $2,
+           $3,
+           TRUE
+         FROM generate_series(1, 20) AS s(i)
+         RETURNING id`,
+        [loteTs, hash, perfilMap['RESPONSABLE_MANTENIMIENTO']]
+      );
+      const user20Ids = res20.rows.map((r: any) => Number(r.id));
+      createdUsuarioIds.push(...user20Ids);
+
+      // Operario registra falla con detención en máquina 1
+      const resFalla = await app.request('/api/intervenciones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${operarioToken}` },
+        body: JSON.stringify({
+          maquina_id: maquina1Id,
+          descripcion: 'Falla para probar inserción en lote con más de 20 destinatarios',
+          detiene_maquina: true,
+        }),
+      });
+
+      assert.strictEqual(resFalla.status, 201);
+      const intIdLote = Number((await resFalla.json()).id);
+      createdIntervencionIds.push(intIdLote);
+
+      // Consultar notificaciones creadas para esta intervención
+      const resNotifs = await client.query(
+        `SELECT id, usuario_id, tipo_evento, prioridad, titulo FROM notificaciones WHERE intervencion_id = $1`,
+        [intIdLote]
+      );
+
+      // Verificar que cada uno de los 20 usuarios del lote recibió exactamente 1 notificación
+      const notifsPorUsuario = new Map<number, number>();
+      for (const row of resNotifs.rows) {
+        const uId = Number(row.usuario_id);
+        notifsPorUsuario.set(uId, (notifsPorUsuario.get(uId) || 0) + 1);
+      }
+
+      for (const uId of user20Ids) {
+        const count = notifsPorUsuario.get(uId);
+        assert.strictEqual(count, 1, `Usuario ${uId} debe recibir exactamente 1 notificación`);
+      }
+
+      // Total de notificaciones generadas debe ser al menos 20 (los 20 del lote + R1, R3, Admin existentes)
+      assert.ok(
+        resNotifs.rows.length >= 20,
+        `Debe haber al menos 20 notificaciones generadas (hubo ${resNotifs.rows.length})`
+      );
     });
 
   } finally {

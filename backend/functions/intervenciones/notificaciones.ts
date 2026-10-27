@@ -140,6 +140,18 @@ export async function registrarNotificaciones(
   // Cache de intervenciones consultadas
   const cacheIntervenciones = new Map<number, IntervencionDatosNotif>();
 
+  // Colección para inserción en lote (Etapa 7.1)
+  const notificacionesAInsertar: Array<{
+    usuarioId: number;
+    tipoEvento: string;
+    prioridad: 'ALTA' | 'NORMAL';
+    titulo: string;
+    mensaje: string;
+    intervencionId: number;
+    maquinaId: number;
+    actorId: number | null;
+  }> = [];
+
   for (const ev of eventosNotificables) {
     const intervencionId = Number(ev.payload?.intervencionId);
     if (!intervencionId || isNaN(intervencionId)) {
@@ -357,58 +369,85 @@ export async function registrarNotificaciones(
       }
 
       // 2 y 3. Quitar inactivos y quien no pueda ver la intervención según su propio INTERVENCIONES_VER (D-38 b, c)
+      // Visibilidad (D-38 c) se aplica a TODOS los eventos, incluida FALLA_REGISTRADA (Etapa 7.1)
       const uVer = mapaVer.get(cand.usuarioId);
       if (!uVer) {
         continue;
       }
 
-      // Para FALLA_REGISTRADA el alcance ya fue evaluado según NOTIFICACIONES_FALLAS_RECIBIR (Sección 4.4)
-      if (ev.tipo !== 'FALLA_REGISTRADA') {
-        const puedeVer = usuarioPuedeVerIntervencion(
-          uVer,
-          intervencion,
-          nuevoResponsableId,
-          responsableAnteriorId
-        );
-        if (!puedeVer) {
-          continue;
-        }
+      const puedeVer = usuarioPuedeVerIntervencion(
+        uVer,
+        intervencion,
+        nuevoResponsableId,
+        responsableAnteriorId
+      );
+      if (!puedeVer) {
+        continue;
       }
 
       procesadosEnEsteEvento.add(cand.usuarioId);
 
-      // Insertar notificación
-      const resIns = await client.query(
-        `INSERT INTO notificaciones (
-           usuario_id, tipo_evento, prioridad, titulo, mensaje,
-           intervencion_id, maquina_id, generada_por_usuario_id, creada_en
-         )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-         RETURNING id`,
-        [
-          cand.usuarioId,
-          ev.tipo,
-          cand.prioridad,
-          cand.titulo,
-          cand.mensaje,
-          intervencion.id,
-          intervencion.maquina_id,
-          actorId,
-        ]
-      );
-
-      const notificacionId = Number(resIns.rows[0].id);
-
-      // 5. Bandeja de salida para canales activos (D-36)
-      for (const canal of canalesActivos) {
-        await client.query(
-          `INSERT INTO notificacion_envios (
-             notificacion_id, canal, estado, intentos, creado_en
-           )
-           VALUES ($1, $2, 'PENDIENTE', 0, NOW())`,
-          [notificacionId, canal]
-        );
-      }
+      notificacionesAInsertar.push({
+        usuarioId: cand.usuarioId,
+        tipoEvento: ev.tipo,
+        prioridad: cand.prioridad,
+        titulo: cand.titulo,
+        mensaje: cand.mensaje,
+        intervencionId: intervencion.id,
+        maquinaId: intervencion.maquina_id,
+        actorId,
+      });
     }
+  }
+
+  if (notificacionesAInsertar.length === 0) {
+    return;
+  }
+
+  // Inserción en lote de todas las notificaciones con UN solo INSERT y RETURNING id (Etapa 7.1)
+  const resIns = await client.query(
+    `INSERT INTO notificaciones (
+       usuario_id, tipo_evento, prioridad, titulo, mensaje,
+       intervencion_id, maquina_id, generada_por_usuario_id, creada_en
+     )
+     SELECT 
+       u_id, t_ev, prio, tit, msg, int_id, maq_id, gen_id, NOW()
+     FROM UNNEST(
+       $1::bigint[],
+       $2::text[],
+       $3::text[],
+       $4::text[],
+       $5::text[],
+       $6::bigint[],
+       $7::bigint[],
+       $8::bigint[]
+     ) AS t(u_id, t_ev, prio, tit, msg, int_id, maq_id, gen_id)
+     RETURNING id`,
+    [
+      notificacionesAInsertar.map((n) => n.usuarioId),
+      notificacionesAInsertar.map((n) => n.tipoEvento),
+      notificacionesAInsertar.map((n) => n.prioridad),
+      notificacionesAInsertar.map((n) => n.titulo),
+      notificacionesAInsertar.map((n) => n.mensaje),
+      notificacionesAInsertar.map((n) => n.intervencionId),
+      notificacionesAInsertar.map((n) => n.maquinaId),
+      notificacionesAInsertar.map((n) => n.actorId),
+    ]
+  );
+
+  const insertedIds = resIns.rows.map((r: any) => Number(r.id));
+
+  // Inserción en lote de envíos de canales activos con UN solo INSERT ... SELECT (Etapa 7.1)
+  if (canalesActivos.length > 0 && insertedIds.length > 0) {
+    await client.query(
+      `INSERT INTO notificacion_envios (
+         notificacion_id, canal, estado, intentos, creado_en
+       )
+       SELECT n.id, c.canal, 'PENDIENTE', 0, NOW()
+       FROM UNNEST($1::bigint[]) AS n(id)
+       CROSS JOIN notificacion_canales c
+       WHERE c.activo = TRUE`,
+      [insertedIds]
+    );
   }
 }
