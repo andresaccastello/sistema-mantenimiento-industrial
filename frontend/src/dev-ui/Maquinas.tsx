@@ -113,6 +113,17 @@ export function Maquinas() {
   const [estadoAccion, setEstadoAccion] = useState<'FUERA_DE_SERVICIO' | 'REACTIVAR'>('FUERA_DE_SERVICIO');
   const [estadoMotivo, setEstadoMotivo] = useState('');
 
+  const [inactividadData, setInactividadData] = useState<any | null>(null);
+
+  const handleOpenInactividad = async (maquina: Maquina) => {
+    try {
+      const data = await fetchApi(`/api/maquinas/${maquina.id}/inactividad`);
+      setInactividadData(data);
+    } catch (err: any) {
+      alert(`Error al consultar inactividad: ${err.message}`);
+    }
+  };
+
   const handleOpenDetenciones = async (maquina: Maquina) => {
     setSelectedMaquina(maquina);
     setSelectedPeriodos([]);
@@ -259,6 +270,13 @@ export function Maquinas() {
                       onClick={() => handleOpenDetenciones(m)}
                     >
                       Detenciones
+                    </button>
+                    <button
+                      className="dev-action-btn"
+                      style={{ background: '#4f46e5', color: 'white', borderColor: '#4f46e5' }}
+                      onClick={() => handleOpenInactividad(m)}
+                    >
+                      ⏱️ Inactividad
                     </button>
                     {m.estado === 'FUERA_DE_SERVICIO' || m.estado === 'DETENIDA' ? (
                       <button
@@ -481,6 +499,64 @@ export function Maquinas() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {inactividadData && (
+        <div className="dev-modal">
+          <div className="dev-modal-content" style={{ maxWidth: '650px' }}>
+            <h3>⏱️ Inactividad (Últimos 30 días) — {inactividadData.maquina.nombre}</h3>
+            <p style={{ color: '#666', fontSize: '0.85rem' }}>
+              Período: {new Date(inactividadData.intervalo.desde).toLocaleString()} — {new Date(inactividadData.intervalo.hasta).toLocaleString()}
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem', margin: '1rem 0' }}>
+              <div style={{ background: '#fee2e2', padding: '0.75rem', borderRadius: '6px' }}>
+                <div style={{ fontSize: '0.75rem', color: '#991b1b', fontWeight: 600 }}>TOTAL</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#b91c1c' }}>
+                  {Math.floor(inactividadData.inactividad_minutos / 60)} h {inactividadData.inactividad_minutos % 60} min
+                </div>
+              </div>
+              <div style={{ background: '#fef3c7', padding: '0.75rem', borderRadius: '6px' }}>
+                <div style={{ fontSize: '0.75rem', color: '#92400e', fontWeight: 600 }}>CORRECTIVO</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#b45309' }}>
+                  {Math.floor(inactividadData.por_tipo.CORRECTIVO / 60)} h {inactividadData.por_tipo.CORRECTIVO % 60} min
+                </div>
+              </div>
+              <div style={{ background: '#e0e7ff', padding: '0.75rem', borderRadius: '6px' }}>
+                <div style={{ fontSize: '0.75rem', color: '#3730a3', fontWeight: 600 }}>PREVENTIVO</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#4338ca' }}>
+                  {Math.floor(inactividadData.por_tipo.PREVENTIVO / 60)} h {inactividadData.por_tipo.PREVENTIVO % 60} min
+                </div>
+              </div>
+              <div style={{ background: '#f3f4f6', padding: '0.75rem', borderRadius: '6px' }}>
+                <div style={{ fontSize: '0.75rem', color: '#4b5563', fontWeight: 600 }}>FDS DESCONTADO</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1f2937' }}>
+                  {Math.floor(inactividadData.fuera_de_servicio_descontado_minutos / 60)} h {inactividadData.fuera_de_servicio_descontado_minutos % 60} min
+                </div>
+              </div>
+            </div>
+
+            <h4>Períodos de Detención</h4>
+            {inactividadData.periodos.length === 0 ? (
+              <p style={{ color: '#666', fontSize: '0.9rem' }}>No registra detenciones en el intervalo.</p>
+            ) : (
+              <ul style={{ fontSize: '0.85rem', paddingLeft: '1.2rem', maxHeight: '200px', overflowY: 'auto' }}>
+                {inactividadData.periodos.map((p: any) => (
+                  <li key={p.id} style={{ marginBottom: '0.4rem' }}>
+                    <strong>[{p.tipo}]</strong> Intervención #{p.intervencion_id} |{' '}
+                    {new Date(p.desde).toLocaleString()} —{' '}
+                    {p.hasta ? new Date(p.hasta).toLocaleString() : <span style={{ color: '#b91c1c', fontWeight: 600 }}>Abierto</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div style={{ textAlign: 'right', marginTop: '1.5rem' }}>
+              <button className="dev-btn dev-btn-secondary" onClick={() => setInactividadData(null)}>
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       )}

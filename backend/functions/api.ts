@@ -7,6 +7,7 @@ import maquinasApp from './maquinas.ts';
 import intervencionesApp from './intervenciones.ts';
 import notificacionesApp from './notificaciones.ts';
 import { usuariosApp, perfilesApp } from './usuarios.ts';
+import reportesApp from './reportes.ts';
 
 import { JWT_SECRET } from './config.ts';
 
@@ -24,6 +25,7 @@ app.route('/api/intervenciones', intervencionesApp);
 app.route('/api/notificaciones', notificacionesApp);
 app.route('/api/usuarios', usuariosApp);
 app.route('/api/perfiles', perfilesApp);
+app.route('/api/reportes', reportesApp);
 
 app.get('/health', (c) => {
   return c.json({

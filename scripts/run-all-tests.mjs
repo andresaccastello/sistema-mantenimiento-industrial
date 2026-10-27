@@ -12,30 +12,24 @@ if (!fs.existsSync(logDir)) {
   fs.mkdirSync(logDir, { recursive: true });
 }
 
-const logFile = path.join(logDir, 'etapa-u1-pruebas.log');
+// Argumento de etapa: npm run test:todo -- etapa-8 -> process.argv[2] = 'etapa-8'
+const etapaArg = process.argv[2]?.trim();
+const logFileName = etapaArg ? `${etapaArg}-pruebas.log` : 'ultima-corrida.log';
+const logFile = path.join(logDir, logFileName);
 const logStream = fs.createWriteStream(logFile, { flags: 'w' });
 
-const testFiles = [
-  'backend/tests/migration_003.test.ts',
-  'backend/tests/migration_005.test.ts',
-  'backend/tests/migration_006.test.ts',
-  'backend/tests/migration_007.test.ts',
-  'backend/tests/migration_008.test.ts',
-  'backend/tests/migration_009.test.ts',
-  'backend/tests/migration_010.test.ts',
-  'backend/tests/permisos_granulares.test.ts',
-  'backend/tests/intervenciones.test.ts',
-  'backend/tests/motor_estados.test.ts',
-  'backend/tests/motor_cierres.test.ts',
-  'backend/tests/reapertura_eliminacion.test.ts',
-  'backend/tests/notificaciones.test.ts',
-  'backend/tests/usuarios.test.ts',
-  'backend/tests/crud.test.ts',
-];
+// Descubrimiento automático de todas las suites en backend/tests/*.test.ts ordenadas alfabéticamente
+const testsDir = path.join(rootDir, 'backend', 'tests');
+const testFiles = fs
+  .readdirSync(testsDir)
+  .filter((f) => f.endsWith('.test.ts'))
+  .sort()
+  .map((f) => path.join('backend', 'tests', f).replace(/\\/g, '/'));
 
 const cmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 const args = ['tsx', '--env-file=.env', '--test', '--test-concurrency=1', ...testFiles];
 
+console.log(`[test:todo] Suites descubiertas (${testFiles.length}):\n${testFiles.map((f) => `  - ${f}`).join('\n')}\n`);
 console.log(`[test:todo] Iniciando corrida completa en serie (--test-concurrency=1)...`);
 console.log(`[test:todo] Salida en tiempo real y registro en: ${logFile}\n`);
 

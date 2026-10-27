@@ -755,8 +755,8 @@ Las decisiones `[APROBADO]` (sección 0.3 y las marcadas en el texto) están cer
 | D-03 | **Definición de "propias"**. | A) creadas o asignadas · B) solo creadas | **A**. |
 | D-04 | **Operario sin acceso a costos** por defecto (`COSTOS_VER`). | Sí / No | **Sí**. |
 | D-05 | **Fechas obligatorias para finalizar**. | Sí / No | **Sí**. |
-| D-06 | **Duración neta** (tiempo en `EN_PROCESO`) además de la bruta. | A) solo bruta · B) bruta + neta | **B**. |
-| D-07 | **`FUERA_DE_SERVICIO` en inactividad**: excluir esas horas. | Excluir / Incluir | **Excluir**. |
+| D-06 | **Duración neta** (tiempo en `EN_PROCESO`) además de la bruta. | A) solo bruta · B) bruta + neta | **Aprobada:** opción B (bruta + neta). |
+| D-07 | **`FUERA_DE_SERVICIO` en inactividad**: excluir esas horas. | Excluir / Incluir | **Aprobada:** excluir esas horas de la inactividad por falla. |
 | D-08 | **Totales derivados**: mantener `costo_*` y `tiempo_inactividad_minutos` como lectura, actualizados en cada transacción, o calcularlos solo al consultar. | A) guardados · B) calculados | **A**. |
 | D-09 | **Detalle de la reapertura**: permiso propio `INTERVENCIONES_REABRIR`; limpia `fecha_finalizacion` (queda en auditoría); períodos nuevos solo si la máquina volvió a detenerse; duración bruta cubre el hueco. | Aprobar o ajustar | Aprobar. | El dato se guarda para el calculo correcto de las horas posteiormente
 | D-10 | **Alcance de notificaciones**: eventos y destinatarios de 8.6; solo bandeja interna; recordatorios por tiempo y vencimientos de preventivos para después. | A) bandeja interna · B) agregar correo/WhatsApp/push | **A**. | Empezemos por internas, pero deja todo listo para que en un futuro hagamos que mande whatsapp y mail, todo esto tiene que ser configurable como todo el sistema
@@ -793,6 +793,9 @@ Las decisiones `[APROBADO]` (sección 0.3 y las marcadas en el texto) están cer
 | D-41 | **Contraseña inicial** | Contraseña temporal y primer ingreso | **Aprobada:** el administrador define una contraseña **temporal**; el usuario debe cambiarla en su primer ingreso. Mientras no la cambie, solo puede consultar sus datos y cambiar la contraseña. |
 | D-42 | **Quién administra usuarios** | Reglas de administración y protecciones | **Aprobada:** solo quien tenga `USUARIOS_GESTIONAR` (por defecto, el administrador). Nadie se modifica a sí mismo (perfil, sectores, estado); nadie asigna un perfil con permisos que él no tiene; siempre queda al menos un administrador activo. |
 | D-43 | **Cambio de contraseña propio** | Cambio y restablecimiento de contraseña | **Aprobada:** cada usuario cambia su contraseña indicando la actual. Si la olvida, el administrador le asigna una temporal nueva. Al cambiar o restablecer una contraseña, las sesiones anteriores de ese usuario dejan de valer. |
+| D-44 | **Cómo se mide la duración neta** | Medición de duración neta | **Aprobada:** suma de los tramos en `EN_PROCESO` según el historial. El primer tramo empieza en `fecha_inicio` (que puede haberse cargado hacia atrás) y el tramo que termina en `FINALIZADA` cierra en `fecha_finalizacion`; los demás bordes salen de `cambiado_en` del historial. Nunca supera a la bruta. |
+| D-45 | **Qué detenciones cuentan como inactividad** | Criterio de inclusión de detenciones | **Aprobada:** cuentan los períodos de intervenciones no eliminadas, incluidas las canceladas (la máquina estuvo parada de verdad). Las eliminadas lógicamente no cuentan (registro equivocado, D-34). Un período abierto cuenta hasta el momento de la consulta. |
+| D-46 | **Inactividad por tipo** | Desglose correctivo y preventivo | **Aprobada:** además del total, se informa la inactividad de las detenciones `CORRECTIVO` y `PREVENTIVO` por separado, porque una parada planificada no es una falla. Si se solapan, el total es menor que la suma de los dos. |
 
 ---
 

@@ -269,7 +269,15 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
         ur.id AS responsable_id,
         ur.legajo AS responsable_legajo,
         ur.nombre AS responsable_nombre,
-        (pd.id IS NOT NULL) AS detiene_maquina_actualmente
+        (pd.id IS NOT NULL) AS detiene_maquina_actualmente,
+        vit.espera_minutos,
+        vit.espera_en_curso,
+        vit.duracion_bruta_minutos,
+        vit.duracion_neta_minutos,
+        vit.tiempo_total_minutos,
+        vit.trabajo_en_curso,
+        vit.inactividad_minutos AS vit_inactividad_minutos,
+        vit.inactividad_en_curso
       FROM intervenciones i
       JOIN maquinas m ON i.maquina_id = m.id
       JOIN sectores s ON m.sector_id = s.id
@@ -278,6 +286,8 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
       LEFT JOIN usuarios uel ON i.eliminado_por_usuario_id = uel.id
       LEFT JOIN intervencion_periodos_detencion pd 
         ON pd.intervencion_id = i.id AND pd.hasta IS NULL
+      LEFT JOIN v_intervencion_tiempos vit
+        ON vit.intervencion_id = i.id
       ${whereClause}
       ORDER BY 
         (pd.id IS NOT NULL) DESC,
@@ -328,6 +338,16 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
             nombre: r.responsable_nombre,
           }
         : null,
+      tiempos: {
+        espera_minutos: r.espera_minutos !== null ? Number(r.espera_minutos) : null,
+        espera_en_curso: Boolean(r.espera_en_curso),
+        duracion_bruta_minutos: r.duracion_bruta_minutos !== null ? Number(r.duracion_bruta_minutos) : null,
+        duracion_neta_minutos: r.duracion_neta_minutos !== null ? Number(r.duracion_neta_minutos) : null,
+        tiempo_total_minutos: r.tiempo_total_minutos !== null ? Number(r.tiempo_total_minutos) : null,
+        trabajo_en_curso: Boolean(r.trabajo_en_curso),
+        inactividad_minutos: Number(r.vit_inactividad_minutos ?? 0),
+        inactividad_en_curso: Boolean(r.inactividad_en_curso),
+      },
     }));
 
     return c.json(result);
@@ -358,12 +378,16 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
          m.id AS maquina_id, m.nombre AS maquina_nombre, m.codigo AS maquina_codigo, m.estado AS maquina_estado,
          m.sector_id, s.nombre AS sector_nombre,
          uc.legajo AS creador_legajo, uc.nombre AS creador_nombre,
-         ur.legajo AS responsable_legajo, ur.nombre AS responsable_nombre
+         ur.legajo AS responsable_legajo, ur.nombre AS responsable_nombre,
+         vit.espera_minutos, vit.espera_en_curso, vit.duracion_bruta_minutos,
+         vit.duracion_neta_minutos, vit.tiempo_total_minutos, vit.trabajo_en_curso,
+         vit.inactividad_minutos AS vit_inactividad_minutos, vit.inactividad_en_curso
        FROM intervenciones i
        JOIN maquinas m ON i.maquina_id = m.id
        JOIN sectores s ON m.sector_id = s.id
        JOIN usuarios uc ON i.creado_por_usuario_id = uc.id
        LEFT JOIN usuarios ur ON i.responsable_usuario_id = ur.id
+       LEFT JOIN v_intervencion_tiempos vit ON vit.intervencion_id = i.id
        WHERE i.id = $1`,
       [id]
     );
@@ -431,6 +455,16 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
       fecha_inicio: r.fecha_inicio,
       fecha_finalizacion: r.fecha_finalizacion,
       tiempo_inactividad_minutos: r.tiempo_inactividad_minutos,
+      tiempos: {
+        espera_minutos: r.espera_minutos !== null ? Number(r.espera_minutos) : null,
+        espera_en_curso: Boolean(r.espera_en_curso),
+        duracion_bruta_minutos: r.duracion_bruta_minutos !== null ? Number(r.duracion_bruta_minutos) : null,
+        duracion_neta_minutos: r.duracion_neta_minutos !== null ? Number(r.duracion_neta_minutos) : null,
+        tiempo_total_minutos: r.tiempo_total_minutos !== null ? Number(r.tiempo_total_minutos) : null,
+        trabajo_en_curso: Boolean(r.trabajo_en_curso),
+        inactividad_minutos: Number(r.vit_inactividad_minutos ?? 0),
+        inactividad_en_curso: Boolean(r.inactividad_en_curso),
+      },
       maquina: {
         id: Number(r.maquina_id),
         nombre: r.maquina_nombre,

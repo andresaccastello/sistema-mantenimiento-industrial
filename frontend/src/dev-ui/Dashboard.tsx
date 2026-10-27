@@ -3,6 +3,7 @@ import { Sectores } from './Sectores';
 import { Maquinas } from './Maquinas';
 import { Intervenciones } from './Intervenciones';
 import { Usuarios } from './Usuarios';
+import { Reportes } from './Reportes';
 import { NotificacionesBell } from './NotificacionesBell';
 import { CambiarPasswordModal } from './CambiarPasswordModal';
 import { fetchApi } from './api';
@@ -12,7 +13,7 @@ interface DashboardProps {
 }
 
 export function Dashboard({ onLogout }: DashboardProps) {
-  const [currentView, setCurrentView] = useState<'intervenciones' | 'maquinas' | 'sectores' | 'usuarios'>('intervenciones');
+  const [currentView, setCurrentView] = useState<'intervenciones' | 'maquinas' | 'sectores' | 'usuarios' | 'reportes'>('intervenciones');
   const [selectedIntervencionId, setSelectedIntervencionId] = useState<number | null>(null);
   const [currentUser, setCurrentUser] = useState<any | null>(null);
   const [isChangePassOpen, setIsChangePassOpen] = useState(false);
@@ -36,6 +37,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
   };
 
   const puedeGestionarUsuarios = Boolean(currentUser?.permisos && 'USUARIOS_GESTIONAR' in currentUser.permisos);
+  const puedeConsultarReportes = Boolean(currentUser?.permisos && 'REPORTES_CONSULTAR' in currentUser.permisos);
 
   return (
     <div className="dev-layout">
@@ -74,6 +76,15 @@ export function Dashboard({ onLogout }: DashboardProps) {
             </button>
           )}
 
+          {puedeConsultarReportes && (
+            <button
+              className={currentView === 'reportes' ? 'active' : ''}
+              onClick={() => setCurrentView('reportes')}
+            >
+              Reportes
+            </button>
+          )}
+
           <button className="dev-logout" onClick={onLogout}>
             Cerrar Sesión
           </button>
@@ -88,6 +99,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
               {currentView === 'maquinas' && 'Catálogo de Máquinas y Estado'}
               {currentView === 'sectores' && 'Sectores de Planta'}
               {currentView === 'usuarios' && 'Administración de Usuarios y Perfiles'}
+              {currentView === 'reportes' && 'Reportes de Gestión e Inactividad'}
             </span>
           </div>
           <div className="dev-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -114,6 +126,7 @@ export function Dashboard({ onLogout }: DashboardProps) {
           {currentView === 'sectores' && <Sectores />}
           {currentView === 'maquinas' && <Maquinas />}
           {currentView === 'usuarios' && <Usuarios />}
+          {currentView === 'reportes' && <Reportes />}
         </main>
       </div>
 

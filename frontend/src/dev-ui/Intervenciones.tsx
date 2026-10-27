@@ -111,11 +111,23 @@ interface Intervencion {
   } | null;
 }
 
+interface TiemposIntervencion {
+  espera_minutos: number | null;
+  espera_en_curso: boolean;
+  duracion_bruta_minutos: number | null;
+  duracion_neta_minutos: number | null;
+  tiempo_total_minutos: number | null;
+  trabajo_en_curso: boolean;
+  inactividad_minutos: number;
+  inactividad_en_curso: boolean;
+}
+
 interface IntervencionDetalle extends Intervencion {
   observaciones: string | null;
   historial_estados: HistorialItem[];
   periodos_detencion: PeriodoDetencion[];
   auditoria: AuditoriaItem[];
+  tiempos?: TiemposIntervencion;
 }
 
 interface IntervencionesProps {
@@ -1100,6 +1112,34 @@ export function Intervenciones({ initialIntervencionId }: IntervencionesProps = 
                 <p><strong>Tiempo de Inactividad Acumulado:</strong> {selectedIntervencion.tiempo_inactividad_minutos} minutos</p>
               )}
             </div>
+
+            {/* Bloque Tiempos (Etapa 8) */}
+            {selectedIntervencion.tiempos && (
+              <div style={{ margin: '1rem 0', background: '#eef2ff', padding: '1rem', borderRadius: '6px', border: '1px solid #c7d2fe' }}>
+                <h4 style={{ margin: '0 0 0.5rem 0', color: '#3730a3' }}>⏱️ Tiempos de Gestión e Inactividad Real</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.6rem', fontSize: '0.875rem' }}>
+                  <div>
+                    <strong>Espera:</strong> {selectedIntervencion.tiempos.espera_minutos !== null ? `${Math.floor(selectedIntervencion.tiempos.espera_minutos / 60)} h ${selectedIntervencion.tiempos.espera_minutos % 60} min` : '—'}
+                    {selectedIntervencion.tiempos.espera_en_curso && <span style={{ color: '#b45309', fontWeight: 600 }}> (en curso)</span>}
+                  </div>
+                  <div>
+                    <strong>Duración Bruta:</strong> {selectedIntervencion.tiempos.duracion_bruta_minutos !== null ? `${Math.floor(selectedIntervencion.tiempos.duracion_bruta_minutos / 60)} h ${selectedIntervencion.tiempos.duracion_bruta_minutos % 60} min` : '—'}
+                    {selectedIntervencion.tiempos.trabajo_en_curso && <span style={{ color: '#b45309', fontWeight: 600 }}> (en curso)</span>}
+                  </div>
+                  <div>
+                    <strong>Duración Neta:</strong> {selectedIntervencion.tiempos.duracion_neta_minutos !== null ? `${Math.floor(selectedIntervencion.tiempos.duracion_neta_minutos / 60)} h ${selectedIntervencion.tiempos.duracion_neta_minutos % 60} min` : '—'}
+                    {selectedIntervencion.tiempos.trabajo_en_curso && <span style={{ color: '#b45309', fontWeight: 600 }}> (en curso)</span>}
+                  </div>
+                  <div>
+                    <strong>Tiempo Total:</strong> {selectedIntervencion.tiempos.tiempo_total_minutos !== null ? `${Math.floor(selectedIntervencion.tiempos.tiempo_total_minutos / 60)} h ${selectedIntervencion.tiempos.tiempo_total_minutos % 60} min` : '—'}
+                  </div>
+                  <div>
+                    <strong>Inactividad:</strong> {`${Math.floor(selectedIntervencion.tiempos.inactividad_minutos / 60)} h ${selectedIntervencion.tiempos.inactividad_minutos % 60} min`}
+                    {selectedIntervencion.tiempos.inactividad_en_curso && <span style={{ color: '#b45309', fontWeight: 600 }}> (en curso)</span>}
+                  </div>
+                </div>
+              </div>
+            )}
 
             <h4>Períodos de Detención</h4>
             {selectedIntervencion.periodos_detencion.length === 0 ? (

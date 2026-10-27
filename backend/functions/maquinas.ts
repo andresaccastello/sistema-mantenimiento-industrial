@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { pool } from './db.ts';
-import { jwtVerify, dbVerify, requirePermission } from './middleware.ts';
+import { jwtVerify, dbVerify, requirePermission, getUserScope } from './middleware.ts';
 import { parseId, parseString, badRequest } from './validations.ts';
 import { responderError, ErrorNegocio } from './intervenciones/errores.ts';
+import { validarIntervaloReporte } from './intervalos.ts';
 import { conTransaccion } from './intervenciones/transaccion.ts';
 import { UsuarioVisibilidad } from './intervenciones/visibilidad.ts';
 import {
@@ -277,6 +278,110 @@ maquinasApp.post('/:id/estado', async (c) => {
       return cambiarEstadoManualMaquina(client, id, usuario, body);
     });
     return c.json(res);
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+/**
+ * 5.1 GET /api/maquinas/:id/inactividad?desde=&hasta=
+ * Inactividad real de una máquina en un intervalo de fechas.
+ * Permiso: REPORTES_CONSULTAR.
+ * Con alcance SECTORES: solo máquinas de sus sectores (404 si es de otro sector).
+ */
+maquinasApp.get('/:id/inactividad', requirePermission('REPORTES_CONSULTAR'), async (c) => {
+  try {
+    const id = parseId(c.req.param('id'));
+    if (!id) return badRequest(c, 'ID inválido');
+
+    const usuario = getUsuarioContext(c);
+    const scope = getUserScope(c, 'REPORTES_CONSULTAR');
+
+    // 1. Obtener la máquina con su sector
+    const { rows: maqRows } = await pool.query(
+      `SELECT m.id, m.nombre, m.codigo, m.activo,
+              s.id AS sector_id, s.nombre AS sector_nombre
+       FROM maquinas m
+       JOIN sectores s ON m.sector_id = s.id
+       WHERE m.id = $1`,
+      [id]
+    );
+
+    if (maqRows.length === 0) {
+      return c.json({ error: 'Máquina no encontrada' }, 404);
+    }
+
+    const m = maqRows[0];
+
+    // Con alcance SECTORES, si la máquina no pertenece a sus sectores -> 404 (no revelar que existe)
+    if (scope === 'SECTORES' && !usuario.sectores.includes(Number(m.sector_id))) {
+      return c.json({ error: 'Máquina no encontrada' }, 404);
+    }
+
+    // 2. Validar fechas desde y hasta
+    const { desde, hasta } = await validarIntervaloReporte(
+      pool,
+      c.req.query('desde'),
+      c.req.query('hasta')
+    );
+
+    // 3. Ejecutar función de inactividad
+    const { rows: inacRows } = await pool.query(
+      `SELECT total_minutos, correctivo_minutos, preventivo_minutos, fuera_de_servicio_minutos
+       FROM fn_inactividad_maquina($1, $2, $3)`,
+      [m.id, desde, hasta]
+    );
+
+    const inac = inacRows[0] || {
+      total_minutos: 0,
+      correctivo_minutos: 0,
+      preventivo_minutos: 0,
+      fuera_de_servicio_minutos: 0,
+    };
+
+    // 4. Períodos que se superponen con el intervalo (sin recortar) de intervenciones no eliminadas
+    const { rows: perRows } = await pool.query(
+      `SELECT p.id, p.intervencion_id, ti.codigo AS tipo, p.desde, p.hasta,
+              (p.hasta IS NULL) AS abierto
+       FROM intervencion_periodos_detencion p
+       JOIN intervenciones i ON i.id = p.intervencion_id
+       JOIN tipos_intervencion ti ON ti.id = i.tipo_intervencion_id
+       WHERE p.maquina_id = $1
+         AND i.eliminado_en IS NULL
+         AND tstzrange(p.desde, COALESCE(p.hasta, NOW())) && tstzrange($2::timestamptz, $3::timestamptz)
+       ORDER BY p.desde ASC, p.id ASC`,
+      [m.id, desde, hasta]
+    );
+
+    return c.json({
+      maquina: {
+        id: Number(m.id),
+        nombre: m.nombre,
+        codigo: m.codigo,
+        sector: {
+          id: Number(m.sector_id),
+          nombre: m.sector_nombre,
+        },
+      },
+      intervalo: {
+        desde,
+        hasta,
+      },
+      inactividad_minutos: Number(inac.total_minutos),
+      por_tipo: {
+        CORRECTIVO: Number(inac.correctivo_minutos),
+        PREVENTIVO: Number(inac.preventivo_minutos),
+      },
+      fuera_de_servicio_descontado_minutos: Number(inac.fuera_de_servicio_minutos),
+      periodos: perRows.map((p) => ({
+        id: Number(p.id),
+        intervencion_id: Number(p.intervencion_id),
+        tipo: p.tipo,
+        desde: p.desde,
+        hasta: p.hasta,
+        abierto: Boolean(p.abierto),
+      })),
+    });
   } catch (error) {
     return responderError(c, error);
   }
