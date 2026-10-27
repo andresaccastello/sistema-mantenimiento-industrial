@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { fetchApi } from './api';
 
 interface AuthProps {
-  onLogin: (token: string) => void;
+  onLogin: (token: string, debeCambiarPassword: boolean) => void;
 }
 
 export function Auth({ onLogin }: AuthProps) {
@@ -23,7 +23,7 @@ export function Auth({ onLogin }: AuthProps) {
       });
       
       if (data.token) {
-        onLogin(data.token);
+        onLogin(data.token, Boolean(data.debe_cambiar_password));
       } else {
         setError('Respuesta inválida del servidor');
       }

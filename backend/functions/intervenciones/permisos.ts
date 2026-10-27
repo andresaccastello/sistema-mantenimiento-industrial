@@ -5,6 +5,8 @@ export type AlcancePermiso = 'PROPIAS' | 'SECTORES' | 'TODAS';
 export interface PermisosEfectivosUsuario {
   activo: boolean;
   perfil_id: number | null;
+  debe_cambiar_password: boolean;
+  password_actualizado_en: Date | null;
   permisos: Record<string, AlcancePermiso>;
   sectores: number[];
 }
@@ -14,6 +16,7 @@ export interface PermisosEfectivosUsuario {
  * 1. Permisos base de su perfil.
  * 2. Excepciones individuales (CONCEDER / DENEGAR, con estricta prevalencia de DENEGAR).
  * 3. Sectores asignados al usuario.
+ * Además incluye estado del usuario y perfil, debe_cambiar_password y password_actualizado_en.
  */
 export async function resolverPermisosEfectivos(
   db: pg.Pool | pg.PoolClient,
@@ -22,8 +25,11 @@ export async function resolverPermisosEfectivos(
   const res = await db.query(
     `SELECT 
        u.id, 
-       u.activo, 
+       u.activo AS usuario_activo,
+       p.activo AS perfil_activo,
        u.perfil_id,
+       u.debe_cambiar_password,
+       u.password_actualizado_en,
        (
          SELECT COALESCE(json_agg(json_build_object('codigo', pe.codigo, 'alcance', pp.alcance)), '[]'::json)
          FROM perfil_permiso pp
@@ -42,6 +48,7 @@ export async function resolverPermisosEfectivos(
          WHERE us.usuario_id = u.id
        ) AS sectores
      FROM usuarios u
+     LEFT JOIN perfiles p ON u.perfil_id = p.id
      WHERE u.id = $1`,
     [usuarioId]
   );
@@ -50,6 +57,8 @@ export async function resolverPermisosEfectivos(
     return {
       activo: false,
       perfil_id: null,
+      debe_cambiar_password: false,
+      password_actualizado_en: null,
       permisos: {},
       sectores: [],
     };
@@ -76,8 +85,10 @@ export async function resolverPermisosEfectivos(
   const permisos = Object.fromEntries(permissionsMap);
 
   return {
-    activo: Boolean(row.activo),
+    activo: Boolean(row.usuario_activo && (row.perfil_activo ?? false)),
     perfil_id: row.perfil_id ? Number(row.perfil_id) : null,
+    debe_cambiar_password: Boolean(row.debe_cambiar_password),
+    password_actualizado_en: row.password_actualizado_en ? new Date(row.password_actualizado_en) : null,
     permisos,
     sectores,
   };
