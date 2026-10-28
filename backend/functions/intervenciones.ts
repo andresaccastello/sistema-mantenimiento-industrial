@@ -856,7 +856,10 @@ const resolverAhoraHandler = async (c: any) => {
   }
 
   try {
-    const estadoEsperado = parseString(body.estado_esperado) || 'PENDIENTE';
+    const estadoEsperado = parseString(body.estado_esperado);
+    if (!estadoEsperado) {
+      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
+    }
 
     const res = await conTransaccion(async (client) => {
       return resolverAhoraIntervencionServicio(client, id, usuario, {
@@ -878,7 +881,6 @@ const resolverAhoraHandler = async (c: any) => {
 };
 
 intervencionesApp.post('/:id/resolver-ahora', resolverAhoraHandler);
-intervencionesApp.post('/:id/transiciones/RESOLVER_AHORA', resolverAhoraHandler);
 
 /**
  * 6.3 POST /api/intervenciones/:id/cancelar (T3, T7, T8)

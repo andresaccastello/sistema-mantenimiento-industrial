@@ -111,7 +111,10 @@ test('Migración 011 — Tiempos de gestión e inactividad', async (t) => {
       const tipoId = resTipo.rows[0].id;
 
       let testIntId: number | null = null;
+      let testIntAId: number | null = null;
+      let testIntBId: number | null = null;
       try {
+        // --- Caso base original: intervención simple sin fecha_efectiva ---
         const fechaInicio = '2026-01-01 09:00:00Z';
         const fechaFin = '2026-01-01 12:00:00Z';
 
@@ -119,14 +122,13 @@ test('Migración 011 — Tiempos de gestión e inactividad', async (t) => {
           `INSERT INTO intervenciones (
              maquina_id, tipo_intervencion_id, creado_por_usuario_id, responsable_usuario_id,
              descripcion, estado, ejecucion, trabajo_realizado, fecha_creacion, fecha_inicio, fecha_finalizacion
-           ) VALUES ($1, $2, $3, $3, 'M11-06 Backfill Test', 'FINALIZADA', 'INTERNA', 'Trabajo OK',
+           ) VALUES ($1, $2, $3, $3, 'M11-06 Backfill Base', 'FINALIZADA', 'INTERNA', 'Trabajo OK',
              '2026-01-01 08:00:00Z', $4, $5)
            RETURNING id`,
           [maqId, tipoId, userId, fechaInicio, fechaFin]
         );
         testIntId = Number(resInt.rows[0].id);
 
-        // Insertar filas en historial con fecha_efectiva NULL
         await client.query(
           `INSERT INTO historial_estados_intervencion (
              intervencion_id, estado_anterior, estado_nuevo, cambiado_por_usuario_id, cambiado_en, fecha_efectiva
@@ -137,43 +139,138 @@ test('Migración 011 — Tiempos de gestión e inactividad', async (t) => {
           [testIntId, userId]
         );
 
-        // Ejecutar la migración completa (que incluye el backfill)
+        // --- Caso a: Intervención reabierta como la escribe el motor ---
+        const resIntA = await client.query(
+          `INSERT INTO intervenciones (
+             maquina_id, tipo_intervencion_id, creado_por_usuario_id, responsable_usuario_id,
+             descripcion, estado, ejecucion, trabajo_realizado, fecha_creacion, fecha_inicio, fecha_finalizacion
+           ) VALUES ($1, $2, $3, $3, 'M11-06 Caso A Reabierta Motor', 'FINALIZADA', 'INTERNA', 'Trabajo OK',
+             '2026-01-01 08:00:00Z', '2026-01-01 09:00:00Z', '2026-01-02 10:00:00Z')
+           RETURNING id`,
+          [maqId, tipoId, userId]
+        );
+        testIntAId = Number(resIntA.rows[0].id);
+
+        await client.query(
+          `INSERT INTO historial_estados_intervencion (
+             intervencion_id, estado_anterior, estado_nuevo, cambiado_por_usuario_id, cambiado_en, fecha_efectiva
+           ) VALUES
+             ($1, NULL, 'PENDIENTE', $2, '2026-01-01 08:00:00Z', NULL),
+             ($1, 'PENDIENTE', 'EN_PROCESO', $2, '2026-01-01 09:00:00Z', '2026-01-01 09:00:00Z'),
+             ($1, 'EN_PROCESO', 'FINALIZADA', $2, '2026-01-02 08:00:00Z', '2026-01-01 12:00:00Z'),
+             ($1, 'FINALIZADA', 'EN_PROCESO', $2, '2026-01-02 09:00:00Z', NULL),
+             ($1, 'EN_PROCESO', 'FINALIZADA', $2, '2026-01-02 10:00:00Z', '2026-01-02 10:00:00Z')`,
+          [testIntAId, userId]
+        );
+
+        // --- Caso b: El mismo historial, todo sin fecha_efectiva (dato viejo) ---
+        const resIntB = await client.query(
+          `INSERT INTO intervenciones (
+             maquina_id, tipo_intervencion_id, creado_por_usuario_id, responsable_usuario_id,
+             descripcion, estado, ejecucion, trabajo_realizado, fecha_creacion, fecha_inicio, fecha_finalizacion
+           ) VALUES ($1, $2, $3, $3, 'M11-06 Caso B Reabierta Viejo', 'FINALIZADA', 'INTERNA', 'Trabajo OK',
+             '2026-01-01 08:00:00Z', '2026-01-01 09:00:00Z', '2026-01-02 10:00:00Z')
+           RETURNING id`,
+          [maqId, tipoId, userId]
+        );
+        testIntBId = Number(resIntB.rows[0].id);
+
+        await client.query(
+          `INSERT INTO historial_estados_intervencion (
+             intervencion_id, estado_anterior, estado_nuevo, cambiado_por_usuario_id, cambiado_en, fecha_efectiva
+           ) VALUES
+             ($1, NULL, 'PENDIENTE', $2, '2026-01-01 08:00:00Z', NULL),
+             ($1, 'PENDIENTE', 'EN_PROCESO', $2, '2026-01-01 09:00:00Z', NULL),
+             ($1, 'EN_PROCESO', 'FINALIZADA', $2, '2026-01-02 08:00:00Z', NULL),
+             ($1, 'FINALIZADA', 'EN_PROCESO', $2, '2026-01-02 09:00:00Z', NULL),
+             ($1, 'EN_PROCESO', 'FINALIZADA', $2, '2026-01-02 10:00:00Z', NULL)`,
+          [testIntBId, userId]
+        );
+
+        // 1. Ejecutar la migración primera vez
         await client.query(sqlContent);
 
-        // Verificar que fecha_efectiva fue asignada correctamente
-        const resHist = await client.query(
+        // Verificaciones caso base
+        const resHistBase = await client.query(
           `SELECT estado_nuevo, fecha_efectiva
            FROM historial_estados_intervencion
            WHERE intervencion_id = $1
            ORDER BY cambiado_en ASC, id ASC`,
           [testIntId]
         );
+        assert.strictEqual(resHistBase.rows[0].fecha_efectiva, null);
+        assert.strictEqual(new Date(resHistBase.rows[1].fecha_efectiva).toISOString(), new Date(fechaInicio).toISOString());
+        assert.strictEqual(new Date(resHistBase.rows[2].fecha_efectiva).toISOString(), new Date(fechaFin).toISOString());
 
-        assert.strictEqual(resHist.rows.length, 3);
-        // PENDIENTE sigue NULL
-        assert.strictEqual(resHist.rows[0].fecha_efectiva, null);
-        // Primera EN_PROCESO tomó fecha_inicio
-        assert.strictEqual(new Date(resHist.rows[1].fecha_efectiva).toISOString(), new Date(fechaInicio).toISOString());
-        // Última FINALIZADA tomó fecha_finalizacion
-        assert.strictEqual(new Date(resHist.rows[2].fecha_efectiva).toISOString(), new Date(fechaFin).toISOString());
+        // Verificaciones caso b tras primera corrida:
+        // Solo la primera EN_PROCESO y la última FINALIZADA tienen fecha.
+        const resHistB1 = await client.query(
+          `SELECT estado_nuevo, fecha_efectiva
+           FROM historial_estados_intervencion
+           WHERE intervencion_id = $1
+           ORDER BY cambiado_en ASC, id ASC`,
+          [testIntBId]
+        );
+        assert.strictEqual(resHistB1.rows[0].fecha_efectiva, null);
+        assert.strictEqual(new Date(resHistB1.rows[1].fecha_efectiva).toISOString(), new Date('2026-01-01 09:00:00Z').toISOString());
+        assert.strictEqual(resHistB1.rows[2].fecha_efectiva, null); // FINALIZADA anterior sigue NULL
+        assert.strictEqual(resHistB1.rows[3].fecha_efectiva, null); // EN_PROCESO reapertura sigue NULL
+        assert.strictEqual(new Date(resHistB1.rows[4].fecha_efectiva).toISOString(), new Date('2026-01-02 10:00:00Z').toISOString());
 
-        // Re-ejecutar la migración para verificar idempotencia
+        // 2. Re-ejecutar la migración segunda vez
         await client.query(sqlContent);
 
-        const resHist2 = await client.query(
+        // Caso base sigue idéntico
+        const resHistBase2 = await client.query(
           `SELECT estado_nuevo, fecha_efectiva
            FROM historial_estados_intervencion
            WHERE intervencion_id = $1
            ORDER BY cambiado_en ASC, id ASC`,
           [testIntId]
         );
+        assert.strictEqual(new Date(resHistBase2.rows[1].fecha_efectiva).toISOString(), new Date(fechaInicio).toISOString());
+        assert.strictEqual(new Date(resHistBase2.rows[2].fecha_efectiva).toISOString(), new Date(fechaFin).toISOString());
 
-        assert.strictEqual(new Date(resHist2.rows[1].fecha_efectiva).toISOString(), new Date(fechaInicio).toISOString());
-        assert.strictEqual(new Date(resHist2.rows[2].fecha_efectiva).toISOString(), new Date(fechaFin).toISOString());
+        // Caso a tras dos corridas: ninguna fila cambia; reapertura sigue en NULL; vista bruta 1500 y neta 240
+        const resHistA = await client.query(
+          `SELECT estado_nuevo, fecha_efectiva
+           FROM historial_estados_intervencion
+           WHERE intervencion_id = $1
+           ORDER BY cambiado_en ASC, id ASC`,
+          [testIntAId]
+        );
+        assert.strictEqual(resHistA.rows[0].fecha_efectiva, null);
+        assert.strictEqual(new Date(resHistA.rows[1].fecha_efectiva).toISOString(), new Date('2026-01-01 09:00:00Z').toISOString());
+        assert.strictEqual(new Date(resHistA.rows[2].fecha_efectiva).toISOString(), new Date('2026-01-01 12:00:00Z').toISOString());
+        assert.strictEqual(resHistA.rows[3].fecha_efectiva, null); // Reapertura sigue NULL
+        assert.strictEqual(new Date(resHistA.rows[4].fecha_efectiva).toISOString(), new Date('2026-01-02 10:00:00Z').toISOString());
+
+        const resVistaA = await client.query(
+          `SELECT duracion_bruta_minutos, duracion_neta_minutos
+           FROM v_intervencion_tiempos
+           WHERE intervencion_id = $1`,
+          [testIntAId]
+        );
+        assert.strictEqual(resVistaA.rows[0].duracion_bruta_minutos, 1500);
+        assert.strictEqual(resVistaA.rows[0].duracion_neta_minutos, 240);
+
+        // Caso b tras segunda corrida: todo igual (la FINALIZADA anterior y EN_PROCESO reapertura siguen en NULL)
+        const resHistB2 = await client.query(
+          `SELECT estado_nuevo, fecha_efectiva
+           FROM historial_estados_intervencion
+           WHERE intervencion_id = $1
+           ORDER BY cambiado_en ASC, id ASC`,
+          [testIntBId]
+        );
+        assert.strictEqual(new Date(resHistB2.rows[1].fecha_efectiva).toISOString(), new Date('2026-01-01 09:00:00Z').toISOString());
+        assert.strictEqual(resHistB2.rows[2].fecha_efectiva, null);
+        assert.strictEqual(resHistB2.rows[3].fecha_efectiva, null);
+        assert.strictEqual(new Date(resHistB2.rows[4].fecha_efectiva).toISOString(), new Date('2026-01-02 10:00:00Z').toISOString());
       } finally {
-        if (testIntId) {
-          await client.query('DELETE FROM historial_estados_intervencion WHERE intervencion_id = $1', [testIntId]);
-          await client.query('DELETE FROM intervenciones WHERE id = $1', [testIntId]);
+        const idsToClean = [testIntId, testIntAId, testIntBId].filter((id): id is number => id !== null);
+        if (idsToClean.length > 0) {
+          await client.query('DELETE FROM historial_estados_intervencion WHERE intervencion_id = ANY($1)', [idsToClean]);
+          await client.query('DELETE FROM intervenciones WHERE id = ANY($1)', [idsToClean]);
         }
       }
     });

@@ -18,38 +18,34 @@ COMMENT ON COLUMN historial_estados_intervencion.fecha_efectiva IS
 -- ----------------------------------------------------------------------------
 -- a) La primera fila EN_PROCESO de cada intervención toma intervenciones.fecha_inicio
 WITH primera_en_proceso AS (
-    SELECT DISTINCT ON (h.intervencion_id)
-        h.id,
-        i.fecha_inicio
-    FROM historial_estados_intervencion h
-    JOIN intervenciones i ON i.id = h.intervencion_id
-    WHERE h.estado_nuevo = 'EN_PROCESO'
-      AND h.fecha_efectiva IS NULL
-      AND i.fecha_inicio IS NOT NULL
-    ORDER BY h.intervencion_id, h.cambiado_en ASC, h.id ASC
+  SELECT DISTINCT ON (h.intervencion_id) h.id, i.fecha_inicio
+  FROM historial_estados_intervencion h
+  JOIN intervenciones i ON i.id = h.intervencion_id
+  WHERE h.estado_nuevo = 'EN_PROCESO'
+  ORDER BY h.intervencion_id, h.cambiado_en ASC, h.id ASC
 )
 UPDATE historial_estados_intervencion h
-SET fecha_efectiva = pep.fecha_inicio
-FROM primera_en_proceso pep
-WHERE h.id = pep.id;
+SET fecha_efectiva = p.fecha_inicio
+FROM primera_en_proceso p
+WHERE h.id = p.id
+  AND h.fecha_efectiva IS NULL
+  AND p.fecha_inicio IS NOT NULL;
 
 -- b) La última fila FINALIZADA de las intervenciones en estado FINALIZADA toma fecha_finalizacion
 WITH ultima_finalizada AS (
-    SELECT DISTINCT ON (h.intervencion_id)
-        h.id,
-        i.fecha_finalizacion
-    FROM historial_estados_intervencion h
-    JOIN intervenciones i ON i.id = h.intervencion_id
-    WHERE h.estado_nuevo = 'FINALIZADA'
-      AND h.fecha_efectiva IS NULL
-      AND i.estado = 'FINALIZADA'
-      AND i.fecha_finalizacion IS NOT NULL
-    ORDER BY h.intervencion_id, h.cambiado_en DESC, h.id DESC
+  SELECT DISTINCT ON (h.intervencion_id) h.id, i.fecha_finalizacion
+  FROM historial_estados_intervencion h
+  JOIN intervenciones i ON i.id = h.intervencion_id
+  WHERE h.estado_nuevo = 'FINALIZADA'
+    AND i.estado = 'FINALIZADA'
+  ORDER BY h.intervencion_id, h.cambiado_en DESC, h.id DESC
 )
 UPDATE historial_estados_intervencion h
 SET fecha_efectiva = uf.fecha_finalizacion
 FROM ultima_finalizada uf
-WHERE h.id = uf.id;
+WHERE h.id = uf.id
+  AND h.fecha_efectiva IS NULL
+  AND uf.fecha_finalizacion IS NOT NULL;
 
 -- ----------------------------------------------------------------------------
 -- 3. Vista v_intervencion_tiempos (D-44 revisada)

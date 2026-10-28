@@ -49,28 +49,45 @@ logStream.write(headerMessage);
 function runGroup(groupFiles, groupName) {
   return new Promise((resolve, reject) => {
     if (groupFiles.length === 0) {
-      return resolve(0);
+      return resolve({ code: 0, tests: 0, pass: 0, fail: 0 });
     }
     const cmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-    const args = ['tsx', '--env-file=.env', '--test', '--test-concurrency=1', ...groupFiles];
+    const args = ['tsx', '--env-file=.env', '--test', '--test-concurrency=1', '--test-reporter=spec', ...groupFiles];
 
     const child = spawn(cmd, args, {
       cwd: rootDir,
       shell: process.platform === 'win32',
     });
 
+    let groupOutput = '';
+
     child.stdout.on('data', (chunk) => {
       process.stdout.write(chunk);
       logStream.write(chunk);
+      groupOutput += chunk.toString();
     });
 
     child.stderr.on('data', (chunk) => {
       process.stderr.write(chunk);
       logStream.write(chunk);
+      groupOutput += chunk.toString();
     });
 
     child.on('close', (code) => {
-      resolve(code ?? 0);
+      const testsMatches = [...groupOutput.matchAll(/ℹ\s+tests\s+(\d+)/g)];
+      const passMatches = [...groupOutput.matchAll(/ℹ\s+pass\s+(\d+)/g)];
+      const failMatches = [...groupOutput.matchAll(/ℹ\s+fail\s+(\d+)/g)];
+
+      const tests = testsMatches.length > 0 ? parseInt(testsMatches[testsMatches.length - 1][1], 10) : 0;
+      const pass = passMatches.length > 0 ? parseInt(passMatches[passMatches.length - 1][1], 10) : 0;
+      const fail = failMatches.length > 0 ? parseInt(failMatches[failMatches.length - 1][1], 10) : 0;
+
+      resolve({
+        code: code ?? 0,
+        tests,
+        pass,
+        fail,
+      });
     });
 
     child.on('error', (err) => {
@@ -81,20 +98,32 @@ function runGroup(groupFiles, groupName) {
 
 async function main() {
   // 1. Ejecutar grupo de migraciones
-  const codeMig = await runGroup(migrationTestFiles, 'migraciones');
-  if (codeMig !== 0) {
+  const resMig = await runGroup(migrationTestFiles, 'migraciones');
+  if (resMig.code !== 0) {
+    const totalLine = `\n[test:todo] Total: ${resMig.tests} pruebas, ${resMig.pass} correctas, ${resMig.fail} fallidas (migraciones: ${resMig.tests}, negocio: 0)\n`;
+    process.stdout.write(totalLine);
+    logStream.write(totalLine);
     logStream.end(() => {
-      console.log(`\n[test:todo] Finalizado con fallos en migraciones (código: ${codeMig})`);
-      process.exit(codeMig);
+      console.log(`[test:todo] Finalizado con fallos en migraciones (código: ${resMig.code})`);
+      process.exit(resMig.code);
     });
     return;
   }
 
   // 2. Ejecutar grupo de negocio
-  const codeStd = await runGroup(standardTestFiles, 'negocio');
+  const resStd = await runGroup(standardTestFiles, 'negocio');
+
+  const totalTests = resMig.tests + resStd.tests;
+  const totalPass = resMig.pass + resStd.pass;
+  const totalFail = resMig.fail + resStd.fail;
+
+  const totalLine = `\n[test:todo] Total: ${totalTests} pruebas, ${totalPass} correctas, ${totalFail} fallidas (migraciones: ${resMig.tests}, negocio: ${resStd.tests})\n`;
+  process.stdout.write(totalLine);
+  logStream.write(totalLine);
+
   logStream.end(() => {
-    console.log(`\n[test:todo] Finalizado con código de salida: ${codeStd}`);
-    process.exit(codeStd);
+    console.log(`[test:todo] Finalizado con código de salida: ${resStd.code}`);
+    process.exit(resStd.code);
   });
 }
 

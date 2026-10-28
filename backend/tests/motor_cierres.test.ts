@@ -1983,6 +1983,29 @@ test('Etapa 4B — Motor de estados: cierres, recuperación de la máquina y est
       assert.strictEqual(dataBloqueado.codigo, 'RESPONSABLE_NO_HABILITADO');
     });
 
+    await t.test('B-40: resolver-ahora sin estado_esperado -> 422 DATOS_INVALIDOS y la intervención sigue PENDIENTE', async () => {
+      const { body: inv } = await crearIntervencion({ detiene_maquina: false });
+
+      const resSinEstado = await app.request(`/api/intervenciones/${inv.id}/resolver-ahora`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          trabajo_realizado: 'Se arregló sin estado esperado',
+          ejecucion: 'INTERNA',
+        }),
+      });
+
+      assert.strictEqual(resSinEstado.status, 422);
+      const dataError = await resSinEstado.json();
+      assert.strictEqual(dataError.codigo, 'DATOS_INVALIDOS');
+
+      const checkDb = await client.query('SELECT estado FROM intervenciones WHERE id = $1', [inv.id]);
+      assert.strictEqual(checkDb.rows[0].estado, 'PENDIENTE');
+    });
+
   } finally {
     // Limpieza general
     try {

@@ -583,7 +583,7 @@ test('Etapa 8 — Tiempos de gestión e inactividad real de las máquinas', asyn
       const fechaInicio = new Date(Date.now() - 40 * 60 * 1000).toISOString();
       const fechaFin = new Date(Date.now() - 20 * 60 * 1000).toISOString();
 
-      const resResolver = await app.request(`/api/intervenciones/${intId}/transiciones/RESOLVER_AHORA`, {
+      const resResolver = await app.request(`/api/intervenciones/${intId}/resolver-ahora`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${adminToken}`,
@@ -611,26 +611,34 @@ test('Etapa 8 — Tiempos de gestión e inactividad real de las máquinas', asyn
       assert.strictEqual(json.tiempos.trabajo_en_curso, false);
     });
 
-    // T-12: Caso de la sección 1.1 (falla viernes tarde, registrada lunes mañana)
-    await t.test('T-12: Falla viernes 17:00 finalizada 21:00 registrada lunes -> bruta 240, neta 240, espera 0, total 240', async () => {
+    // T-12: Intervención reabierta con cierre desfasado (Caso 1.a)
+    await t.test('T-12: Intervención reabierta armada por SQL con cierre desfasado -> bruta 1500, neta 240', async () => {
       const res = await client.query(
         `INSERT INTO intervenciones (
            maquina_id, tipo_intervencion_id, creado_por_usuario_id, responsable_usuario_id,
            descripcion, estado, ejecucion, trabajo_realizado, fecha_creacion, fecha_inicio, fecha_finalizacion
-         ) VALUES ($1, $2, $3, $3, 'T-12 Test', 'FINALIZADA', 'INTERNA', 'Reparación fin de semana',
-           '2026-06-05 17:00:00Z', '2026-06-05 17:00:00Z', '2026-06-05 21:00:00Z')
+         ) VALUES ($1, $2, $3, $3, 'T-12 Caso 1.a', 'FINALIZADA', 'INTERNA', 'Reparación con reapertura',
+           '2026-01-01 08:00:00Z', '2026-01-01 09:00:00Z', '2026-01-02 10:00:00Z')
          RETURNING id`,
         [maquina1Id, tipoCorrectivoId, adminId]
       );
       const intId = Number(res.rows[0].id);
       createdIntervencionIds.push(intId);
 
+      // Historial según Caso 1.a:
+      // PENDIENTE 01/01 08:00 sin fecha
+      // EN_PROCESO registrado 09:00 con fecha 09:00
+      // FINALIZADA registrado 02/01 08:00 con fecha 01/01 12:00
+      // EN_PROCESO registrado 02/01 09:00 sin fecha (reapertura)
+      // FINALIZADA registrado 02/01 10:00 con fecha 10:00
       await client.query(
         `INSERT INTO historial_estados_intervencion (intervencion_id, estado_anterior, estado_nuevo, cambiado_por_usuario_id, cambiado_en, fecha_efectiva)
          VALUES
-           ($1, NULL, 'PENDIENTE', $2, '2026-06-05 17:00:00Z', NULL),
-           ($1, 'PENDIENTE', 'EN_PROCESO', $2, '2026-06-08 09:00:00Z', '2026-06-05 17:00:00Z'),
-           ($1, 'EN_PROCESO', 'FINALIZADA', $2, '2026-06-08 09:00:00Z', '2026-06-05 21:00:00Z')`,
+           ($1, NULL, 'PENDIENTE', $2, '2026-01-01 08:00:00Z', NULL),
+           ($1, 'PENDIENTE', 'EN_PROCESO', $2, '2026-01-01 09:00:00Z', '2026-01-01 09:00:00Z'),
+           ($1, 'EN_PROCESO', 'FINALIZADA', $2, '2026-01-02 08:00:00Z', '2026-01-01 12:00:00Z'),
+           ($1, 'FINALIZADA', 'EN_PROCESO', $2, '2026-01-02 09:00:00Z', NULL),
+           ($1, 'EN_PROCESO', 'FINALIZADA', $2, '2026-01-02 10:00:00Z', '2026-01-02 10:00:00Z')`,
         [intId, adminId]
       );
 
@@ -640,10 +648,8 @@ test('Etapa 8 — Tiempos de gestión e inactividad real de las máquinas', asyn
       assert.strictEqual(resp.status, 200);
       const json = await resp.json();
 
-      assert.strictEqual(json.tiempos.duracion_bruta_minutos, 240);
+      assert.strictEqual(json.tiempos.duracion_bruta_minutos, 1500);
       assert.strictEqual(json.tiempos.duracion_neta_minutos, 240);
-      assert.strictEqual(json.tiempos.espera_minutos, 0);
-      assert.strictEqual(json.tiempos.tiempo_total_minutos, 240);
     });
 
     // T-13: Flujo completo por API con fecha_inicio y fecha_finalizacion desfasadas y reapertura
@@ -1147,6 +1153,17 @@ test('Etapa 8 — Tiempos de gestión e inactividad real de las máquinas', asyn
       assert.strictEqual(resp.status, 200);
       const json = await resp.json();
       assert.strictEqual(json.inactividad_minutos, 0);
+
+      const respRep = await app.request(
+        `/api/reportes/inactividad?desde=${encodeURIComponent(desdeISO)}&hasta=${encodeURIComponent(hastaISO)}`,
+        { headers: { Authorization: `Bearer ${adminToken}` } }
+      );
+      assert.strictEqual(respRep.status, 200);
+      const repJson = await respRep.json();
+      assert.ok(Array.isArray(repJson));
+      const itemMaq = repJson.find((item: any) => item.maquina.id === maqId);
+      assert.ok(itemMaq, 'La máquina debe aparecer en el reporte de inactividad');
+      assert.strictEqual(itemMaq.inactividad_minutos, 0);
     });
 
     // =========================================================================
@@ -1400,7 +1417,7 @@ test('Etapa 8 — Tiempos de gestión e inactividad real de las máquinas', asyn
       );
       assert.strictEqual(respSec2.status, 404, 'Máquina de sector 2 debe devolver 404');
 
-      // 3. Consultar GET /api/reportes/inactividad -> devuelve únicamente máquinas de sector 1
+      // 3. Consultar GET /api/reportes/inactividad -> devuelve únicamente máquinas de sector 1 e incluye maquina1Id
       const respRep = await app.request(
         '/api/reportes/inactividad?desde=2026-01-01T00:00:00Z&hasta=2026-12-31T23:59:59Z',
         { headers: { Authorization: `Bearer ${propToken}` } }
@@ -1408,11 +1425,47 @@ test('Etapa 8 — Tiempos de gestión e inactividad real de las máquinas', asyn
       assert.strictEqual(respRep.status, 200);
       const jsonRep = await respRep.json();
       assert.ok(Array.isArray(jsonRep));
+      assert.ok(jsonRep.length > 0, 'El ranking no debe estar vacío');
+
+      const tieneMaq1 = jsonRep.some((m: any) => m.maquina.id === maquina1Id);
+      assert.ok(tieneMaq1, 'El ranking debe incluir maquina1Id');
 
       for (const m of jsonRep) {
         assert.strictEqual(m.maquina.sector.id, sector1Id, `Máquina ${m.maquina.id} debe pertenecer al sector 1`);
         assert.notStrictEqual(m.maquina.sector.id, sector2Id, `No debe incluir máquinas del sector 2`);
       }
+
+      // 4. Consultar GET /api/reportes/tiempos con agrupar=sector:
+      // Crear por SQL una intervención finalizada en una máquina del sector 2 (y otra en sector 1) dentro del intervalo.
+      const resIntSec1 = await client.query(
+        `INSERT INTO intervenciones (
+           maquina_id, tipo_intervencion_id, creado_por_usuario_id, responsable_usuario_id,
+           descripcion, estado, ejecucion, trabajo_realizado, fecha_creacion, fecha_inicio, fecha_finalizacion
+         ) VALUES ($1, $2, $3, $3, 'R-05 Int Sec 1', 'FINALIZADA', 'INTERNA', 'Reparación Sec 1',
+           '2026-08-01 08:00:00Z', '2026-08-01 09:00:00Z', '2026-08-01 12:00:00Z') RETURNING id`,
+        [maquina1Id, tipoCorrectivoId, adminId]
+      );
+      const resIntSec2 = await client.query(
+        `INSERT INTO intervenciones (
+           maquina_id, tipo_intervencion_id, creado_por_usuario_id, responsable_usuario_id,
+           descripcion, estado, ejecucion, trabajo_realizado, fecha_creacion, fecha_inicio, fecha_finalizacion
+         ) VALUES ($1, $2, $3, $3, 'R-05 Int Sec 2', 'FINALIZADA', 'INTERNA', 'Reparación Sec 2',
+           '2026-08-01 08:00:00Z', '2026-08-01 10:00:00Z', '2026-08-01 14:00:00Z') RETURNING id`,
+        [maquina2Id, tipoCorrectivoId, adminId]
+      );
+      createdIntervencionIds.push(Number(resIntSec1.rows[0].id), Number(resIntSec2.rows[0].id));
+
+      const respTiempos = await app.request(
+        '/api/reportes/tiempos?desde=2026-08-01T00:00:00Z&hasta=2026-08-01T23:59:59Z&agrupar=sector',
+        { headers: { Authorization: `Bearer ${propToken}` } }
+      );
+      assert.strictEqual(respTiempos.status, 200);
+      const jsonTiempos = await respTiempos.json();
+      assert.ok(Array.isArray(jsonTiempos));
+      const tieneSec1 = jsonTiempos.some((g: any) => g.sector && g.sector.id === sector1Id);
+      const tieneSec2 = jsonTiempos.some((g: any) => g.sector && g.sector.id === sector2Id);
+      assert.ok(tieneSec1, 'La respuesta tiene que tener el grupo del sector 1');
+      assert.strictEqual(tieneSec2, false, 'La respuesta no debe tener el grupo del sector 2');
     });
   } finally {
     try {
