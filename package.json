@@ -1,0 +1,52 @@
+{
+  "name": "sistema-mantenimiento-industrial",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "dev:backend": "tsx watch --env-file=.env backend/server.ts",
+    "dev:frontend": "npm run dev --workspace frontend",
+    "typecheck:backend": "tsc --noEmit -p backend/tsconfig.json",
+    "typecheck": "npm run typecheck:backend && npm run typecheck --workspace frontend",
+    "test:migration": "tsx --env-file=.env --test backend/tests/migration_003.test.ts",
+    "test:migration-005": "tsx --env-file=.env --test backend/tests/migration_005.test.ts",
+    "test:migration-006": "tsx --env-file=.env --test backend/tests/migration_006.test.ts",
+    "test:migration-007": "tsx --env-file=.env --test backend/tests/migration_007.test.ts",
+    "test:migration-008": "tsx --env-file=.env --test backend/tests/migration_008.test.ts",
+    "test:migration-009": "tsx --env-file=.env --test backend/tests/migration_009.test.ts",
+    "test:migration-010": "tsx --env-file=.env --test backend/tests/migration_010.test.ts",
+    "test:migration-011": "tsx --env-file=.env --test backend/tests/migration_011.test.ts",
+    "test:permisos": "tsx --env-file=.env --test backend/tests/permisos_granulares.test.ts",
+    "test:intervenciones": "tsx --env-file=.env --test backend/tests/intervenciones.test.ts",
+    "test:tiempos": "tsx --env-file=.env --test backend/tests/tiempos.test.ts",
+    "test:motor": "tsx --env-file=.env --test backend/tests/motor_estados.test.ts",
+    "test:cierres": "tsx --env-file=.env --test backend/tests/motor_cierres.test.ts",
+    "test:etapa6": "tsx --env-file=.env --test backend/tests/reapertura_eliminacion.test.ts",
+    "test:notificaciones": "tsx --env-file=.env --test backend/tests/notificaciones.test.ts",
+    "test:usuarios": "tsx --env-file=.env --test backend/tests/usuarios.test.ts",
+    "test:pendientes": "tsx --env-file=.env --test backend/tests/pendientes.test.ts",
+    "test:e2e": "tsx --env-file=.env --test backend/tests/crud.test.ts",
+    "test:todo": "node scripts/run-all-tests.mjs",
+    "build:frontend": "npm run build --workspace frontend"
+  },
+  "dependencies": {
+    "@neon/config": "1.8.6",
+    "bcryptjs": "3.0.3",
+    "hono": "4.13.13",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@hono/node-server": "2.1.4",
+    "@types/bcryptjs": "2.4.6",
+    "@types/node": "26.6.4",
+    "@types/pg": "8.23.1",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  }
+}

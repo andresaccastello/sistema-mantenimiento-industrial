@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+*.log
+!docs/evidencia/*.log
+.DS_Store
+.vscode/
+.idea/

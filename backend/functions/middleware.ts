@@ -1,0 +1,109 @@
+import { createMiddleware } from 'hono/factory';
+import { verify } from 'hono/jwt';
+import { pool } from './db.ts';
+import { JWT_SECRET } from './config.ts';
+import { resolverPermisosEfectivos, AlcancePermiso } from './intervenciones/permisos.ts';
+
+export type { AlcancePermiso };
+
+const SCOPE_HIERARCHY: Record<AlcancePermiso, number> = {
+  PROPIAS: 1,
+  SECTORES: 2,
+  TODAS: 3,
+};
+
+export const jwtVerify = createMiddleware(async (c, next) => {
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return c.json({ error: 'No autorizado', codigo: 'NO_AUTENTICADO' }, 401);
+  }
+  const token = authHeader.slice(7).trim();
+  try {
+    const payload = await verify(token, JWT_SECRET, 'HS256');
+    c.set('jwtPayload', payload);
+  } catch {
+    return c.json({ error: 'No autorizado', codigo: 'NO_AUTENTICADO' }, 401);
+  }
+  await next();
+});
+
+export const dbVerify = createMiddleware(async (c, next) => {
+  const payload = c.get('jwtPayload') as { sub?: string; legajo?: string; sv?: number; iat?: number; exp?: number } | undefined;
+
+  if (!payload || !payload.sub) {
+    return c.json({ error: 'No autorizado', codigo: 'NO_AUTENTICADO' }, 401);
+  }
+
+  const userId = Number(payload.sub);
+  if (isNaN(userId)) {
+    return c.json({ error: 'Identificador de usuario inválido', codigo: 'NO_AUTENTICADO' }, 401);
+  }
+
+  try {
+    const info = await resolverPermisosEfectivos(pool, userId);
+
+    if (!info.activo) {
+      return c.json({ error: 'Usuario inactivo o no existe', codigo: 'NO_AUTENTICADO' }, 401);
+    }
+
+    // 1. Sesión invalidada: todo token cuyo sv no coincida con el actual (o sin sv) -> 401 SESION_INVALIDADA
+    if (typeof payload.sv !== 'number' || payload.sv !== info.sesion_version) {
+      return c.json({ error: 'Sesión invalidada por cambio de contraseña o estado', codigo: 'SESION_INVALIDADA' }, 401);
+    }
+
+    // 2. Contraseña temporal: si debe_cambiar_password es TRUE, solo se permiten GET /api/auth/me y POST /api/auth/cambiar-password
+    if (info.debe_cambiar_password) {
+      const path = c.req.path.replace(/\/+$/, '');
+      const method = c.req.method.toUpperCase();
+      const isAllowed = (method === 'GET' && path === '/api/auth/me') ||
+                        (method === 'POST' && path === '/api/auth/cambiar-password');
+
+      if (!isAllowed) {
+        return c.json({ error: 'Debe cambiar su contraseña antes de continuar', codigo: 'CAMBIO_PASSWORD_REQUERIDO' }, 403);
+      }
+    }
+
+    const permissionsList = Object.keys(info.permisos);
+
+    (c.set as any)('userId', userId);
+    (c.set as any)('userPermissions', permissionsList);
+    (c.set as any)('userPermissionsMap', info.permisos);
+    (c.set as any)('userSectores', info.sectores);
+
+  } catch (dbError) {
+    console.error('Error validando usuario y permisos en DB:', dbError);
+    return c.json({ error: 'Error interno de autorización', codigo: 'ERROR_INTERNO' }, 500);
+  }
+
+  await next();
+});
+
+export const requirePermission = (
+  requiredPermission: string,
+  minScope?: AlcancePermiso
+) => {
+  return createMiddleware(async (c, next) => {
+    const permissionsMap = (c.get as any)('userPermissionsMap') as Record<string, AlcancePermiso> | undefined;
+
+    if (!permissionsMap || !(requiredPermission in permissionsMap)) {
+      return c.json({ error: 'Permisos insuficientes o revocados', codigo: 'PERMISO_INSUFICIENTE' }, 403);
+    }
+
+    if (minScope) {
+      const userScope = permissionsMap[requiredPermission];
+      const userLevel = SCOPE_HIERARCHY[userScope] || 0;
+      const requiredLevel = SCOPE_HIERARCHY[minScope] || 0;
+
+      if (userLevel < requiredLevel) {
+        return c.json({ error: 'Alcance de permisos insuficiente', codigo: 'PERMISO_INSUFICIENTE' }, 403);
+      }
+    }
+
+    await next();
+  });
+};
+
+export const getUserScope = (c: any, permissionCode: string): AlcancePermiso | null => {
+  const permissionsMap = (c.get as any)('userPermissionsMap') as Record<string, AlcancePermiso> | undefined;
+  return permissionsMap ? permissionsMap[permissionCode] || null : null;
+};
