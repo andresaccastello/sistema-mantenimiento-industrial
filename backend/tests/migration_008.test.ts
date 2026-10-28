@@ -37,10 +37,23 @@ test('Migración 008 — Notificaciones internas, canales y bandeja de salida', 
       assert.ok(true, 'Migración 008 ejecutada exitosamente');
     });
 
+    const testSuffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
     // Setup de usuarios
-    const resUsers = await client.query('SELECT id FROM usuarios LIMIT 2');
-    usuario1Id = Number(resUsers.rows[0].id);
-    usuario2Id = Number(resUsers.rows[1].id);
+    const resAdmin = await client.query("SELECT id FROM usuarios WHERE legajo = 'ADMIN001' LIMIT 1");
+    assert.ok(resAdmin.rows.length > 0, 'Debe existir usuario ADMIN001 para pruebas');
+    usuario1Id = Number(resAdmin.rows[0].id);
+
+    const resPerfil = await client.query('SELECT id FROM perfiles LIMIT 1');
+    const perfilId = Number(resPerfil.rows[0].id);
+
+    const resUser2 = await client.query(
+      `INSERT INTO usuarios (legajo, nombre, password_hash, perfil_id, activo)
+       VALUES ($1, $2, 'dummy_hash', $3, TRUE)
+       RETURNING id`,
+      [`U8_${testSuffix}`, `Usuario Test 8 ${testSuffix}`, perfilId]
+    );
+    usuario2Id = Number(resUser2.rows[0].id);
 
     // 2. Canales iniciales
     await t.test('2. Los tres canales existen con activo = false', async () => {
@@ -153,6 +166,10 @@ test('Migración 008 — Notificaciones internas, canales y bandeja de salida', 
     if (notificacionId) {
       await client.query('DELETE FROM notificacion_envios WHERE notificacion_id = $1', [notificacionId]);
       await client.query('DELETE FROM notificaciones WHERE id = $1', [notificacionId]);
+    }
+    if (usuario2Id) {
+      await client.query('DELETE FROM notificaciones WHERE usuario_id = $1 OR generada_por_usuario_id = $1', [usuario2Id]);
+      await client.query('DELETE FROM usuarios WHERE id = $1', [usuario2Id]);
     }
     client.release();
   }

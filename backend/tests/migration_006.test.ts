@@ -23,6 +23,7 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 
 test('Migración 006 — Cierres, trabajo realizado y confirmación', async (t) => {
   const client = await pool.connect();
+  let sectorId = 0;
 
   try {
     // 1. Aplicación limpia e idempotente de la migración
@@ -50,24 +51,31 @@ test('Migración 006 — Cierres, trabajo realizado y confirmación', async (t) 
       assert.strictEqual(colObsConf.rows.length, 1);
     });
 
+    const testSuffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
     // Setup de datos de prueba
-    const resUser = await client.query('SELECT id FROM usuarios LIMIT 1');
-    const userId = resUser.rows[0].id;
-    const resSec = await client.query('SELECT id FROM sectores LIMIT 1');
-    const sectorId = resSec.rows[0].id;
+    const resUser = await client.query("SELECT id FROM usuarios WHERE legajo = 'ADMIN001' LIMIT 1");
+    assert.ok(resUser.rows.length > 0, 'Debe existir usuario ADMIN001 para pruebas');
+    const userId = Number(resUser.rows[0].id);
+
+    const resSec = await client.query(
+      'INSERT INTO sectores (nombre) VALUES ($1) RETURNING id',
+      [`Sector Mig006 ${testSuffix}`]
+    );
+    sectorId = Number(resSec.rows[0].id);
 
     const resM = await client.query(
-      `INSERT INTO maquinas (nombre, sector_id) VALUES ('Maq Test Mig006', $1) RETURNING id`,
-      [sectorId]
+      `INSERT INTO maquinas (nombre, sector_id, codigo) VALUES ($1, $2, $3) RETURNING id`,
+      [`Maq Test Mig006 ${testSuffix}`, sectorId, `M006-${testSuffix}`]
     );
-    const maquinaId = resM.rows[0].id;
+    const maquinaId = Number(resM.rows[0].id);
 
     const resI = await client.query(
       `INSERT INTO intervenciones (maquina_id, tipo_intervencion_id, creado_por_usuario_id, descripcion)
        VALUES ($1, 1, $2, 'Intervención prueba migración 006') RETURNING id`,
       [maquinaId, userId]
     );
-    const intervencionId = resI.rows[0].id;
+    const intervencionId = Number(resI.rows[0].id);
 
     // 3. ck_intervenciones_finalizada_datos rechaza FINALIZADA sin trabajo_realizado
     await t.test('3. ck_intervenciones_finalizada_datos rechaza FINALIZADA sin trabajo_realizado', async () => {
@@ -137,11 +145,16 @@ test('Migración 006 — Cierres, trabajo realizado y confirmación', async (t) 
       assert.strictEqual(check.rows[0].trabajo_realizado, 'Reparación de motor y calibración');
     });
 
-    // Cleanup
-    await client.query('DELETE FROM intervenciones WHERE id = $1', [intervencionId]);
-    await client.query('DELETE FROM maquinas WHERE id = $1', [maquinaId]);
-
   } finally {
+    if (sectorId) {
+      await client.query(`
+        DELETE FROM intervenciones WHERE maquina_id IN (
+          SELECT id FROM maquinas WHERE sector_id = ${sectorId}
+        )
+      `);
+      await client.query(`DELETE FROM maquinas WHERE sector_id = ${sectorId}`);
+      await client.query(`DELETE FROM sectores WHERE id = ${sectorId}`);
+    }
     client.release();
   }
 });

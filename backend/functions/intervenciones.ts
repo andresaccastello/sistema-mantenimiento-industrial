@@ -21,6 +21,7 @@ import {
   editarIntervencionServicio,
 } from './intervenciones/motor.ts';
 import { registrarDetencionIntervencion } from './intervenciones/detenciones.ts';
+import { usuariosConPermiso } from './intervenciones/notificaciones.ts';
 
 const intervencionesApp = new Hono();
 
@@ -565,21 +566,41 @@ intervencionesApp.get('/:id/responsables-habilitados', requirePermission('INTERV
       throw new ErrorNegocio(404, 'INTERVENCION_NO_ENCONTRADA', 'Intervención no encontrada');
     }
 
-    // 2. Consultar todos los usuarios activos
-    const resUsers = await pool.query(
-      'SELECT id, legajo, nombre FROM usuarios WHERE activo = TRUE ORDER BY nombre ASC'
-    );
+    // 2. Obtener usuarios activos con INTERVENCIONES_RECIBIR_ASIGNACION e INTERVENCIONES_VER
+    const [usuariosRecibir, usuariosVer] = await Promise.all([
+      usuariosConPermiso(pool, 'INTERVENCIONES_RECIBIR_ASIGNACION'),
+      usuariosConPermiso(pool, 'INTERVENCIONES_VER'),
+    ]);
 
-    const habilitados: Array<{ id: number; legajo: string; nombre: string }> = [];
+    const setRecibir = new Set(usuariosRecibir.map((u) => u.usuario_id));
+    const sectorId = Number(rowI.sector_id);
 
-    for (const u of resUsers.rows) {
-      try {
-        const uHabilitado = await validarResponsableHabilitado(pool, Number(u.id), Number(rowI.sector_id));
-        habilitados.push(uHabilitado);
-      } catch {
-        // No es responsable habilitado para esta intervención
+    const idsHabilitados: number[] = [];
+    for (const u of usuariosVer) {
+      if (!setRecibir.has(u.usuario_id)) {
+        continue;
+      }
+      if (u.alcance === 'TODAS' || u.alcance === 'PROPIAS') {
+        idsHabilitados.push(u.usuario_id);
+      } else if (u.alcance === 'SECTORES' && u.sectores.includes(sectorId)) {
+        idsHabilitados.push(u.usuario_id);
       }
     }
+
+    if (idsHabilitados.length === 0) {
+      return c.json([]);
+    }
+
+    const resUsers = await pool.query(
+      'SELECT id, legajo, nombre FROM usuarios WHERE id = ANY($1::int[]) ORDER BY nombre ASC',
+      [idsHabilitados]
+    );
+
+    const habilitados = resUsers.rows.map((u: any) => ({
+      id: Number(u.id),
+      legajo: u.legajo,
+      nombre: u.nombre,
+    }));
 
     return c.json(habilitados);
   } catch (error) {

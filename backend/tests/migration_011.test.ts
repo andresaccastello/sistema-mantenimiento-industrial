@@ -98,17 +98,26 @@ test('Migración 011 — Tiempos de gestión e inactividad', async (t) => {
     // 6. Verificación del backfill de fecha_efectiva e idempotencia
     await t.test('M11-06: Verificación del backfill de fecha_efectiva e idempotencia', async () => {
       // Obtener o crear entidades necesarias
-      const resUser = await client.query('SELECT id FROM usuarios WHERE activo = TRUE LIMIT 1');
-      const resMaq = await client.query('SELECT id FROM maquinas WHERE activo = TRUE LIMIT 1');
+      const testSuffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const resUser = await client.query("SELECT id FROM usuarios WHERE legajo = 'ADMIN001' LIMIT 1");
+      assert.ok(resUser.rows.length > 0, 'Debe existir usuario ADMIN001');
+      const userId = Number(resUser.rows[0].id);
+
+      const resSec = await client.query(
+        'INSERT INTO sectores (nombre) VALUES ($1) RETURNING id',
+        [`Sector Mig011 ${testSuffix}`]
+      );
+      const sectorId = Number(resSec.rows[0].id);
+
+      const resMaq = await client.query(
+        'INSERT INTO maquinas (nombre, sector_id, codigo) VALUES ($1, $2, $3) RETURNING id',
+        [`Máquina Mig011 ${testSuffix}`, sectorId, `M011-${testSuffix}`]
+      );
+      const maqId = Number(resMaq.rows[0].id);
+
       const resTipo = await client.query('SELECT id FROM tipos_intervencion LIMIT 1');
-
-      assert.ok(resUser.rows.length > 0, 'Debe existir al menos un usuario');
-      assert.ok(resMaq.rows.length > 0, 'Debe existir al menos una máquina');
       assert.ok(resTipo.rows.length > 0, 'Debe existir al menos un tipo de intervención');
-
-      const userId = resUser.rows[0].id;
-      const maqId = resMaq.rows[0].id;
-      const tipoId = resTipo.rows[0].id;
+      const tipoId = Number(resTipo.rows[0].id);
 
       let testIntId: number | null = null;
       let testIntAId: number | null = null;
@@ -271,6 +280,12 @@ test('Migración 011 — Tiempos de gestión e inactividad', async (t) => {
         if (idsToClean.length > 0) {
           await client.query('DELETE FROM historial_estados_intervencion WHERE intervencion_id = ANY($1)', [idsToClean]);
           await client.query('DELETE FROM intervenciones WHERE id = ANY($1)', [idsToClean]);
+        }
+        if (maqId) {
+          await client.query('DELETE FROM maquinas WHERE id = $1', [maqId]);
+        }
+        if (sectorId) {
+          await client.query('DELETE FROM sectores WHERE id = $1', [sectorId]);
         }
       }
     });

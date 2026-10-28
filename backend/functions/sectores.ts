@@ -15,7 +15,7 @@ sectoresApp.get('/', async (c) => {
     return c.json(rows);
   } catch (error) {
     console.error('Error obteniendo sectores:', error);
-    return c.json({ error: 'Error interno del servidor' }, 500);
+    return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
   }
 });
 
@@ -29,12 +29,12 @@ sectoresApp.get('/:id', async (c) => {
       [id]
     );
     if (rows.length === 0) {
-      return c.json({ error: 'Sector no encontrado' }, 404);
+      return c.json({ error: 'Sector no encontrado', codigo: 'SECTOR_NO_ENCONTRADO' }, 404);
     }
     return c.json(rows[0]);
   } catch (error) {
     console.error('Error obteniendo sector:', error);
-    return c.json({ error: 'Error interno del servidor' }, 500);
+    return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
   }
 });
 
@@ -57,7 +57,7 @@ sectoresApp.post('/', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
     if (error.code === '23505') {
       return badRequest(c, 'Ya existe un sector con ese nombre');
     }
-    return c.json({ error: 'Error interno del servidor' }, 500);
+    return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
   }
 });
 
@@ -77,7 +77,7 @@ sectoresApp.put('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
     );
 
     if (rows.length === 0) {
-      return c.json({ error: 'Sector no encontrado' }, 404);
+      return c.json({ error: 'Sector no encontrado', codigo: 'SECTOR_NO_ENCONTRADO' }, 404);
     }
     
     return c.json(rows[0]);
@@ -86,7 +86,7 @@ sectoresApp.put('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
     if (error.code === '23505') {
       return badRequest(c, 'Ya existe otro sector con ese nombre');
     }
-    return c.json({ error: 'Error interno del servidor' }, 500);
+    return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
   }
 });
 
@@ -101,13 +101,13 @@ sectoresApp.delete('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) =>
     );
 
     if (rows.length === 0) {
-      return c.json({ error: 'Sector no encontrado' }, 404);
+      return c.json({ error: 'Sector no encontrado', codigo: 'SECTOR_NO_ENCONTRADO' }, 404);
     }
     
     return c.json({ message: 'Sector desactivado correctamente' });
   } catch (error) {
     console.error('Error desactivando sector:', error);
-    return c.json({ error: 'Error interno del servidor' }, 500);
+    return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
   }
 });
 

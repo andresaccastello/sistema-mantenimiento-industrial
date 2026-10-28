@@ -1,5 +1,5 @@
 import { createMiddleware } from 'hono/factory';
-import { jwt } from 'hono/jwt';
+import { verify } from 'hono/jwt';
 import { pool } from './db.ts';
 import { JWT_SECRET } from './config.ts';
 import { resolverPermisosEfectivos, AlcancePermiso } from './intervenciones/permisos.ts';
@@ -12,28 +12,38 @@ const SCOPE_HIERARCHY: Record<AlcancePermiso, number> = {
   TODAS: 3,
 };
 
-export const jwtVerify = jwt({
-  secret: JWT_SECRET,
-  alg: 'HS256',
+export const jwtVerify = createMiddleware(async (c, next) => {
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return c.json({ error: 'No autorizado', codigo: 'NO_AUTENTICADO' }, 401);
+  }
+  const token = authHeader.slice(7).trim();
+  try {
+    const payload = await verify(token, JWT_SECRET, 'HS256');
+    c.set('jwtPayload', payload);
+  } catch {
+    return c.json({ error: 'No autorizado', codigo: 'NO_AUTENTICADO' }, 401);
+  }
+  await next();
 });
 
 export const dbVerify = createMiddleware(async (c, next) => {
   const payload = c.get('jwtPayload') as { sub?: string; legajo?: string; sv?: number; iat?: number; exp?: number } | undefined;
 
   if (!payload || !payload.sub) {
-    return c.json({ error: 'No autorizado' }, 401);
+    return c.json({ error: 'No autorizado', codigo: 'NO_AUTENTICADO' }, 401);
   }
 
   const userId = Number(payload.sub);
   if (isNaN(userId)) {
-    return c.json({ error: 'Identificador de usuario inválido' }, 401);
+    return c.json({ error: 'Identificador de usuario inválido', codigo: 'NO_AUTENTICADO' }, 401);
   }
 
   try {
     const info = await resolverPermisosEfectivos(pool, userId);
 
     if (!info.activo) {
-      return c.json({ error: 'Usuario inactivo o no existe' }, 401);
+      return c.json({ error: 'Usuario inactivo o no existe', codigo: 'NO_AUTENTICADO' }, 401);
     }
 
     // 1. Sesión invalidada: todo token cuyo sv no coincida con el actual (o sin sv) -> 401 SESION_INVALIDADA
@@ -62,7 +72,7 @@ export const dbVerify = createMiddleware(async (c, next) => {
 
   } catch (dbError) {
     console.error('Error validando usuario y permisos en DB:', dbError);
-    return c.json({ error: 'Error interno de autorización' }, 500);
+    return c.json({ error: 'Error interno de autorización', codigo: 'ERROR_INTERNO' }, 500);
   }
 
   await next();
@@ -76,7 +86,7 @@ export const requirePermission = (
     const permissionsMap = (c.get as any)('userPermissionsMap') as Record<string, AlcancePermiso> | undefined;
 
     if (!permissionsMap || !(requiredPermission in permissionsMap)) {
-      return c.json({ error: 'Permisos insuficientes o revocados' }, 403);
+      return c.json({ error: 'Permisos insuficientes o revocados', codigo: 'PERMISO_INSUFICIENTE' }, 403);
     }
 
     if (minScope) {
@@ -85,7 +95,7 @@ export const requirePermission = (
       const requiredLevel = SCOPE_HIERARCHY[minScope] || 0;
 
       if (userLevel < requiredLevel) {
-        return c.json({ error: 'Alcance de permisos insuficiente' }, 403);
+        return c.json({ error: 'Alcance de permisos insuficiente', codigo: 'PERMISO_INSUFICIENTE' }, 403);
       }
     }
 

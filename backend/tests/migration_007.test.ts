@@ -23,6 +23,7 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 
 test('Migración 007 — Reapertura, edición y permisos de operario', async (t) => {
   const client = await pool.connect();
+  let sectorId = 0;
 
   try {
     // 1. Aplicación limpia e idempotente de la migración
@@ -33,24 +34,31 @@ test('Migración 007 — Reapertura, edición y permisos de operario', async (t)
       assert.ok(true, 'Migración 007 ejecutada exitosamente');
     });
 
+    const testSuffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
     // Setup de datos de prueba
-    const resUser = await client.query('SELECT id FROM usuarios LIMIT 1');
-    const userId = resUser.rows[0].id;
-    const resSec = await client.query('SELECT id FROM sectores LIMIT 1');
-    const sectorId = resSec.rows[0].id;
+    const resUser = await client.query("SELECT id FROM usuarios WHERE legajo = 'ADMIN001' LIMIT 1");
+    assert.ok(resUser.rows.length > 0, 'Debe existir usuario ADMIN001 para pruebas');
+    const userId = Number(resUser.rows[0].id);
+
+    const resSec = await client.query(
+      'INSERT INTO sectores (nombre) VALUES ($1) RETURNING id',
+      [`Sector Mig007 ${testSuffix}`]
+    );
+    sectorId = Number(resSec.rows[0].id);
 
     const resM = await client.query(
-      `INSERT INTO maquinas (nombre, sector_id) VALUES ('Maq Test Mig007', $1) RETURNING id`,
-      [sectorId]
+      `INSERT INTO maquinas (nombre, sector_id, codigo) VALUES ($1, $2, $3) RETURNING id`,
+      [`Maq Test Mig007 ${testSuffix}`, sectorId, `M007-${testSuffix}`]
     );
-    const maquinaId = resM.rows[0].id;
+    const maquinaId = Number(resM.rows[0].id);
 
     const resI = await client.query(
       `INSERT INTO intervenciones (maquina_id, tipo_intervencion_id, creado_por_usuario_id, descripcion)
        VALUES ($1, 1, $2, 'Intervención prueba migración 007') RETURNING id`,
       [maquinaId, userId]
     );
-    const intervencionId = resI.rows[0].id;
+    const intervencionId = Number(resI.rows[0].id);
 
     // 2. ck_intervencion_auditoria_evento acepta 'EDICION'
     await t.test('2. ck_intervencion_auditoria_evento acepta tipo_evento EDICION', async () => {
@@ -93,12 +101,23 @@ test('Migración 007 — Reapertura, edición y permisos de operario', async (t)
       assert.strictEqual(resPerm.rows[0].alcance, 'PROPIAS');
     });
 
-    // Cleanup
-    await client.query('DELETE FROM intervencion_auditoria WHERE intervencion_id = $1', [intervencionId]);
-    await client.query('DELETE FROM intervenciones WHERE id = $1', [intervencionId]);
-    await client.query('DELETE FROM maquinas WHERE id = $1', [maquinaId]);
-
   } finally {
+    if (sectorId) {
+      await client.query(`
+        DELETE FROM intervencion_auditoria WHERE intervencion_id IN (
+          SELECT id FROM intervenciones WHERE maquina_id IN (
+            SELECT id FROM maquinas WHERE sector_id = ${sectorId}
+          )
+        )
+      `);
+      await client.query(`
+        DELETE FROM intervenciones WHERE maquina_id IN (
+          SELECT id FROM maquinas WHERE sector_id = ${sectorId}
+        )
+      `);
+      await client.query(`DELETE FROM maquinas WHERE sector_id = ${sectorId}`);
+      await client.query(`DELETE FROM sectores WHERE id = ${sectorId}`);
+    }
     client.release();
   }
 });

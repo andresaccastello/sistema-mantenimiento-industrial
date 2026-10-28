@@ -1181,8 +1181,10 @@ test('Etapa 6 — Reapertura de intervenciones, eliminación lógica y edición 
       assert.strictEqual(resElimEP.status, 409);
       const dElimEP = await resElimEP.json();
       assert.strictEqual(dElimEP.codigo, 'ELIMINACION_NO_PERMITIDA');
-      assert.ok(dElimEP.motivos.includes('ESTADO_NO_PENDIENTE'));
-      assert.ok(dElimEP.motivos.includes('TIENE_FECHA_INICIO'));
+      assert.deepStrictEqual(
+        dElimEP.motivos.slice().sort(),
+        ['ESTADO_NO_PENDIENTE', 'TIENE_FECHA_INICIO', 'TIENE_HISTORIAL'].sort()
+      );
 
       // 2. Con renglón de costo
       const resCost = await app.request('/api/intervenciones', {
@@ -1202,7 +1204,12 @@ test('Etapa 6 — Reapertura de intervenciones, eliminación lógica y edición 
         body: JSON.stringify({ motivo: 'Eliminar con costos' })
       });
       assert.strictEqual(resElimCost.status, 409);
-      assert.ok((await resElimCost.json()).motivos.includes('TIENE_COSTOS'));
+      const dElimCost = await resElimCost.json();
+      assert.strictEqual(dElimCost.codigo, 'ELIMINACION_NO_PERMITIDA');
+      assert.deepStrictEqual(
+        dElimCost.motivos.slice().sort(),
+        ['TIENE_COSTOS'].sort()
+      );
 
       // 3. Con repuesto
       const resRep = await app.request('/api/intervenciones', {
@@ -1228,7 +1235,12 @@ test('Etapa 6 — Reapertura de intervenciones, eliminación lógica y edición 
         body: JSON.stringify({ motivo: 'Eliminar con repuesto' })
       });
       assert.strictEqual(resElimRep.status, 409);
-      assert.ok((await resElimRep.json()).motivos.includes('TIENE_REPUESTOS'));
+      const dElimRep = await resElimRep.json();
+      assert.strictEqual(dElimRep.codigo, 'ELIMINACION_NO_PERMITIDA');
+      assert.deepStrictEqual(
+        dElimRep.motivos.slice().sort(),
+        ['TIENE_REPUESTOS'].sort()
+      );
 
       // 4. Con documento
       const resDoc = await app.request('/api/intervenciones', {
@@ -1248,7 +1260,12 @@ test('Etapa 6 — Reapertura de intervenciones, eliminación lógica y edición 
         body: JSON.stringify({ motivo: 'Eliminar con documento' })
       });
       assert.strictEqual(resElimDoc.status, 409);
-      assert.ok((await resElimDoc.json()).motivos.includes('TIENE_DOCUMENTOS'));
+      const dElimDoc = await resElimDoc.json();
+      assert.strictEqual(dElimDoc.codigo, 'ELIMINACION_NO_PERMITIDA');
+      assert.deepStrictEqual(
+        dElimDoc.motivos.slice().sort(),
+        ['TIENE_DOCUMENTOS'].sort()
+      );
 
       // 5. Con varias causas a la vez (Costos + Repuestos + Docs + Estado no pendiente)
       const resMult = await app.request('/api/intervenciones', {
@@ -1275,12 +1292,11 @@ test('Etapa 6 — Reapertura de intervenciones, eliminación lógica y edición 
       });
       assert.strictEqual(resElimMult.status, 409);
       const dMult = await resElimMult.json();
-      assert.ok(dMult.motivos.includes('ESTADO_NO_PENDIENTE'));
-      assert.ok(dMult.motivos.includes('TIENE_FECHA_INICIO'));
-      assert.ok(dMult.motivos.includes('TIENE_COSTOS'));
-      assert.ok(dMult.motivos.includes('TIENE_REPUESTOS'));
-      assert.ok(dMult.motivos.includes('TIENE_DOCUMENTOS'));
-      assert.ok(dMult.motivos.includes('TIENE_HISTORIAL'));
+      assert.strictEqual(dMult.codigo, 'ELIMINACION_NO_PERMITIDA');
+      assert.deepStrictEqual(
+        dMult.motivos.slice().sort(),
+        ['ESTADO_NO_PENDIENTE', 'TIENE_COSTOS', 'TIENE_DOCUMENTOS', 'TIENE_FECHA_INICIO', 'TIENE_HISTORIAL', 'TIENE_REPUESTOS'].sort()
+      );
     });
 
     // E-07: Sin motivo; sin permiso ELIMINAR

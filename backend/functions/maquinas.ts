@@ -30,7 +30,7 @@ maquinasApp.get('/', async (c) => {
     if (showAll) {
       const permisos = (c.get as any)('userPermissions') as string[] | undefined;
       if (!permisos || !permisos.includes('MAQUINAS_GESTIONAR')) {
-        return c.json({ error: 'No tienes permiso para ver máquinas desactivadas' }, 403);
+        return c.json({ error: 'No tienes permiso para ver máquinas desactivadas', codigo: 'PERMISO_INSUFICIENTE' }, 403);
       }
     }
     
@@ -60,7 +60,7 @@ maquinasApp.get('/', async (c) => {
     return c.json(result);
   } catch (error) {
     console.error('Error obteniendo máquinas:', error);
-    return c.json({ error: 'Error interno del servidor' }, 500);
+    return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
   }
 });
 
@@ -78,7 +78,7 @@ maquinasApp.get('/:id', async (c) => {
       [id]
     );
 
-    if (rows.length === 0) return c.json({ error: 'Máquina no encontrada' }, 404);
+    if (rows.length === 0) return c.json({ error: 'Máquina no encontrada', codigo: 'MAQUINA_NO_ENCONTRADA' }, 404);
     const r = rows[0];
     return c.json({
       id: r.id, nombre: r.nombre, tipo: r.tipo, estado: r.estado, 
@@ -87,7 +87,7 @@ maquinasApp.get('/:id', async (c) => {
     });
   } catch (error) {
     console.error('Error obteniendo máquina:', error);
-    return c.json({ error: 'Error interno del servidor' }, 500);
+    return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
   }
 });
 
@@ -137,7 +137,7 @@ maquinasApp.post('/', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
     console.error('Error creando máquina:', error);
     if (error.code === '23514') return badRequest(c, 'Estado de máquina inválido');
     if (error.code === '23505') return badRequest(c, 'El código de máquina ya se encuentra registrado');
-    return c.json({ error: 'Error interno del servidor' }, 500);
+    return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
   }
 });
 
@@ -187,12 +187,12 @@ maquinasApp.put('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
       [nombre, sector_id, tipo, ubicacion, observaciones, codigo, activo, id]
     );
 
-    if (rows.length === 0) return c.json({ error: 'Máquina no encontrada' }, 404);
+    if (rows.length === 0) return c.json({ error: 'Máquina no encontrada', codigo: 'MAQUINA_NO_ENCONTRADA' }, 404);
     return c.json(rows[0]);
   } catch (error: any) {
     console.error('Error actualizando máquina:', error);
     if (error.code === '23514') return badRequest(c, 'Estado de máquina inválido');
-    return c.json({ error: 'Error interno del servidor' }, 500);
+    return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
   }
 });
 
@@ -206,11 +206,11 @@ maquinasApp.delete('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) =>
       [id]
     );
 
-    if (rows.length === 0) return c.json({ error: 'Máquina no encontrada' }, 404);
+    if (rows.length === 0) return c.json({ error: 'Máquina no encontrada', codigo: 'MAQUINA_NO_ENCONTRADA' }, 404);
     return c.json({ message: 'Máquina desactivada correctamente' });
   } catch (error) {
     console.error('Error desactivando máquina:', error);
-    return c.json({ error: 'Error interno del servidor' }, 500);
+    return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
   }
 });
 
@@ -308,14 +308,14 @@ maquinasApp.get('/:id/inactividad', requirePermission('REPORTES_CONSULTAR'), asy
     );
 
     if (maqRows.length === 0) {
-      return c.json({ error: 'Máquina no encontrada' }, 404);
+      return c.json({ error: 'Máquina no encontrada', codigo: 'MAQUINA_NO_ENCONTRADA' }, 404);
     }
 
     const m = maqRows[0];
 
     // Con alcance no TODAS (SECTORES o PROPIAS), si la máquina no pertenece a sus sectores -> 404 (no revelar que existe)
     if (scope !== 'TODAS' && !usuario.sectores.includes(Number(m.sector_id))) {
-      return c.json({ error: 'Máquina no encontrada' }, 404);
+      return c.json({ error: 'Máquina no encontrada', codigo: 'MAQUINA_NO_ENCONTRADA' }, 404);
     }
 
     // 2. Validar fechas desde y hasta

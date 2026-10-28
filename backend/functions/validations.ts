@@ -12,5 +12,5 @@ export const parseString = (val: any): string | null => {
 };
 
 export const badRequest = (c: Context, message: string) => {
-  return c.json({ error: message }, 400);
+  return c.json({ error: message, codigo: 'DATOS_INVALIDOS' }, 400);
 };

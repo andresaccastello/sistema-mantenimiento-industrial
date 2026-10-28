@@ -23,6 +23,7 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 
 test('Migración 005 — Integridad compuesta y restricciones de estado', async (t) => {
   const client = await pool.connect();
+  let sectorId = 0;
 
   try {
     // 1. Aplicación limpia e idempotente de la migración
@@ -33,24 +34,31 @@ test('Migración 005 — Integridad compuesta y restricciones de estado', async 
       assert.ok(true, 'Migración 005 ejecutada exitosamente');
     });
 
+    const testSuffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
     // Setup de datos de prueba
-    const resUser = await client.query('SELECT id FROM usuarios LIMIT 1');
-    const userId = resUser.rows[0].id;
-    const resSec = await client.query('SELECT id FROM sectores LIMIT 1');
-    const sectorId = resSec.rows[0].id;
+    const resUser = await client.query("SELECT id FROM usuarios WHERE legajo = 'ADMIN001' LIMIT 1");
+    assert.ok(resUser.rows.length > 0, 'Debe existir usuario ADMIN001 para pruebas');
+    const userId = Number(resUser.rows[0].id);
+
+    const resSec = await client.query(
+      'INSERT INTO sectores (nombre) VALUES ($1) RETURNING id',
+      [`Sector Mig005 ${testSuffix}`]
+    );
+    sectorId = Number(resSec.rows[0].id);
 
     // Crear dos máquinas distintas para probar incoherencia
     const resM1 = await client.query(
-      `INSERT INTO maquinas (nombre, sector_id) VALUES ('Maq Test Mig005 A', $1) RETURNING id`,
-      [sectorId]
+      `INSERT INTO maquinas (nombre, sector_id, codigo) VALUES ($1, $2, $3) RETURNING id`,
+      [`Maq Test Mig005 A ${testSuffix}`, sectorId, `M005-A-${testSuffix}`]
     );
-    const m1Id = resM1.rows[0].id;
+    const m1Id = Number(resM1.rows[0].id);
 
     const resM2 = await client.query(
-      `INSERT INTO maquinas (nombre, sector_id) VALUES ('Maq Test Mig005 B', $1) RETURNING id`,
-      [sectorId]
+      `INSERT INTO maquinas (nombre, sector_id, codigo) VALUES ($1, $2, $3) RETURNING id`,
+      [`Maq Test Mig005 B ${testSuffix}`, sectorId, `M005-B-${testSuffix}`]
     );
-    const m2Id = resM2.rows[0].id;
+    const m2Id = Number(resM2.rows[0].id);
 
     // Crear intervención sobre m1
     const resI = await client.query(
@@ -58,7 +66,7 @@ test('Migración 005 — Integridad compuesta y restricciones de estado', async 
        VALUES ($1, 1, $2, 'Intervencion para test mig 005') RETURNING id`,
       [m1Id, userId]
     );
-    const intervencionId = resI.rows[0].id;
+    const intervencionId = Number(resI.rows[0].id);
 
     // 2. Probar fk_periodos_intervencion_maquina (coherencia de máquina)
     await t.test('2. fk_periodos_intervencion_maquina rechaza máquina discordante', async () => {
@@ -122,12 +130,33 @@ test('Migración 005 — Integridad compuesta y restricciones de estado', async 
       assert.ok(resH.rows[0].id);
     });
 
-    // Cleanup
-    await client.query('DELETE FROM historial_estados_intervencion WHERE intervencion_id = $1', [intervencionId]);
-    await client.query('DELETE FROM intervenciones WHERE id = $1', [intervencionId]);
-    await client.query('DELETE FROM maquinas WHERE id IN ($1, $2)', [m1Id, m2Id]);
-
   } finally {
+    if (sectorId) {
+      await client.query(`
+        DELETE FROM intervencion_periodos_detencion WHERE maquina_id IN (
+          SELECT id FROM maquinas WHERE sector_id = ${sectorId}
+        )
+      `);
+      await client.query(`
+        DELETE FROM historial_estados_intervencion WHERE intervencion_id IN (
+          SELECT id FROM intervenciones WHERE maquina_id IN (
+            SELECT id FROM maquinas WHERE sector_id = ${sectorId}
+          )
+        )
+      `);
+      await client.query(`
+        DELETE FROM intervenciones WHERE maquina_id IN (
+          SELECT id FROM maquinas WHERE sector_id = ${sectorId}
+        )
+      `);
+      await client.query(`
+        DELETE FROM historial_estados_maquina WHERE maquina_id IN (
+          SELECT id FROM maquinas WHERE sector_id = ${sectorId}
+        )
+      `);
+      await client.query(`DELETE FROM maquinas WHERE sector_id = ${sectorId}`);
+      await client.query(`DELETE FROM sectores WHERE id = ${sectorId}`);
+    }
     client.release();
   }
 });

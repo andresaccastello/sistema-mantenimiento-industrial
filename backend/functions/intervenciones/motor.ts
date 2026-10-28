@@ -543,7 +543,8 @@ export async function ejecutarTransicionServicio(
     } else {
       if (intervencion.fecha_inicio === null) {
         // Por defecto NOW()
-        camposExtra.fecha_inicio = new Date().toISOString();
+        const resNow = await client.query('SELECT NOW()::text AS ahora');
+        camposExtra.fecha_inicio = resNow.rows[0].ahora;
       }
     }
 
@@ -1610,15 +1611,17 @@ export async function eliminarIntervencionServicio(
   }
 
   // 5. Mutaciones
-  await client.query(
+  const resUpdate = await client.query(
     `UPDATE intervenciones
      SET eliminado_en = NOW(),
          eliminado_por_usuario_id = $1,
          motivo_eliminacion = $2,
          actualizado_en = NOW()
-     WHERE id = $3`,
+     WHERE id = $3
+     RETURNING eliminado_en`,
     [usuario.id, motivo, intervencionId]
   );
+  const eliminadoEn = resUpdate.rows[0]?.eliminado_en;
 
   // Auditoría ELIMINACION_LOGICA
   await registrarAuditoria(client, {
@@ -1626,7 +1629,7 @@ export async function eliminarIntervencionServicio(
     tipoEvento: 'ELIMINACION_LOGICA',
     campo: 'eliminado_en',
     valorAnterior: null,
-    valorNuevo: new Date().toISOString(),
+    valorNuevo: eliminadoEn instanceof Date ? eliminadoEn.toISOString() : String(eliminadoEn),
     motivo,
     usuarioId: usuario.id,
   });

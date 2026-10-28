@@ -119,7 +119,7 @@ test('Migración 009 — Usuarios, perfiles y contraseñas', async (t) => {
 
     // 5. Restricción CHECK en auditoria_permisos.accion
     await t.test('5. Restricción ck_auditoria_permisos_accion valida acciones permitidas y rechaza inválidas', async () => {
-      const resUser = await client.query('SELECT id FROM usuarios LIMIT 1');
+      const resUser = await client.query("SELECT id FROM usuarios WHERE legajo = 'ADMIN001' LIMIT 1");
       const userId = resUser.rows[0].id;
 
       // Acción válida

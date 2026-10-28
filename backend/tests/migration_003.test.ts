@@ -27,6 +27,7 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 
 test('Migración 003 — Intervenciones y Máquinas', async (t) => {
   const client = await pool.connect();
+  let sectorId = 0;
 
   try {
     // 1. Aplicación de la migración
@@ -37,14 +38,24 @@ test('Migración 003 — Intervenciones y Máquinas', async (t) => {
       assert.ok(true, 'Migración 003 ejecutada exitosamente');
     });
 
-    // Setup de datos base para pruebas de restricciones
-    const resUser = await client.query('SELECT id FROM usuarios LIMIT 1');
-    assert.ok(resUser.rows.length > 0, 'Debe existir al menos un usuario para pruebas');
-    const userId = resUser.rows[0].id;
+    const testSuffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
-    const resSector = await client.query('SELECT id FROM sectores LIMIT 1');
-    assert.ok(resSector.rows.length > 0, 'Debe existir al menos un sector para pruebas');
-    const sectorId = resSector.rows[0].id;
+    // Setup de datos base para pruebas de restricciones
+    const resUser = await client.query("SELECT id FROM usuarios WHERE legajo = 'ADMIN001' LIMIT 1");
+    assert.ok(resUser.rows.length > 0, 'Debe existir usuario ADMIN001 para pruebas');
+    const userId = Number(resUser.rows[0].id);
+
+    const resSector = await client.query(
+      'INSERT INTO sectores (nombre) VALUES ($1) RETURNING id',
+      [`Sector Mig003 ${testSuffix}`]
+    );
+    sectorId = Number(resSector.rows[0].id);
+
+    const resMaquina = await client.query(
+      'INSERT INTO maquinas (nombre, sector_id, codigo) VALUES ($1, $2, $3) RETURNING id',
+      [`Máquina Mig003 ${testSuffix}`, sectorId, `M003-${testSuffix}`]
+    );
+    const maquinaId = Number(resMaquina.rows[0].id);
 
     const resTipo = await client.query("SELECT id FROM tipos_intervencion WHERE codigo = 'CORRECTIVO' LIMIT 1");
     assert.ok(resTipo.rows.length > 0, 'Debe existir tipo CORRECTIVO');
@@ -53,25 +64,24 @@ test('Migración 003 — Intervenciones y Máquinas', async (t) => {
     // 2. Unicidad de codigo en maquinas
     await t.test('2. Restricción uq_maquinas_codigo en maquinas', async () => {
       const codigoTest = 'TEST-COD-' + Date.now();
-      await client.query(
-        'INSERT INTO maquinas (nombre, sector_id, codigo) VALUES ($1, $2, $3)',
-        ['Máquina Test 1', sectorId, codigoTest]
+      const resM1 = await client.query(
+        'INSERT INTO maquinas (nombre, sector_id, codigo) VALUES ($1, $2, $3) RETURNING id',
+        [`Máquina Test 1 ${testSuffix}`, sectorId, codigoTest]
       );
 
       await assert.rejects(
         client.query(
           'INSERT INTO maquinas (nombre, sector_id, codigo) VALUES ($1, $2, $3)',
-          ['Máquina Test 2', sectorId, codigoTest]
+          [`Máquina Test 2 ${testSuffix}`, sectorId, codigoTest]
         ),
         /uq_maquinas_codigo|duplicate key/i
       );
+
+      await client.query('DELETE FROM maquinas WHERE id = $1', [resM1.rows[0].id]);
     });
 
     // 3. Restricción de ejecucion en intervenciones
     await t.test('3. Restricción ck_intervenciones_ejecucion', async () => {
-      const resM = await client.query('SELECT id FROM maquinas LIMIT 1');
-      const maquinaId = resM.rows[0].id;
-
       await assert.rejects(
         client.query(
           `INSERT INTO intervenciones (maquina_id, tipo_intervencion_id, creado_por_usuario_id, descripcion, ejecucion)
@@ -91,9 +101,6 @@ test('Migración 003 — Intervenciones y Máquinas', async (t) => {
 
     // 4. Restricción ck_intervenciones_finalizada_fechas
     await t.test('4. Restricción ck_intervenciones_finalizada_fechas', async () => {
-      const resM = await client.query('SELECT id FROM maquinas LIMIT 1');
-      const maquinaId = resM.rows[0].id;
-
       // FINALIZADA sin fechas debe fallar
       await assert.rejects(
         client.query(
@@ -107,9 +114,6 @@ test('Migración 003 — Intervenciones y Máquinas', async (t) => {
 
     // 5. Restricción ck_historial_cancelada_observacion
     await t.test('5. Restricción ck_historial_cancelada_observacion', async () => {
-      const resM = await client.query('SELECT id FROM maquinas LIMIT 1');
-      const maquinaId = resM.rows[0].id;
-
       const resI = await client.query(
         `INSERT INTO intervenciones (maquina_id, tipo_intervencion_id, creado_por_usuario_id, descripcion)
          VALUES ($1, $2, $3, 'Test cancelada') RETURNING id`,
@@ -137,9 +141,6 @@ test('Migración 003 — Intervenciones y Máquinas', async (t) => {
 
     // 6. Protección ON DELETE RESTRICT contra borrado físico accidental
     await t.test('6. Protección ON DELETE RESTRICT en intervenciones', async () => {
-      const resM = await client.query('SELECT id FROM maquinas LIMIT 1');
-      const maquinaId = resM.rows[0].id;
-
       const resI = await client.query(
         `INSERT INTO intervenciones (maquina_id, tipo_intervencion_id, creado_por_usuario_id, descripcion)
          VALUES ($1, $2, $3, 'Test restrict') RETURNING id`,
@@ -163,9 +164,6 @@ test('Migración 003 — Intervenciones y Máquinas', async (t) => {
 
     // 7. Períodos de detención: unicidad de período abierto
     await t.test('7. Períodos de detención: un solo período abierto por intervención', async () => {
-      const resM = await client.query('SELECT id FROM maquinas LIMIT 1');
-      const maquinaId = resM.rows[0].id;
-
       const resI = await client.query(
         `INSERT INTO intervenciones (maquina_id, tipo_intervencion_id, creado_por_usuario_id, descripcion)
          VALUES ($1, $2, $3, 'Test detencion') RETURNING id`,
@@ -208,9 +206,6 @@ test('Migración 003 — Intervenciones y Máquinas', async (t) => {
 
     // 8. Renglones de costos: tipos, importes y anulación
     await t.test('8. Renglones de costo: validaciones y anulación', async () => {
-      const resM = await client.query('SELECT id FROM maquinas LIMIT 1');
-      const maquinaId = resM.rows[0].id;
-
       const resI = await client.query(
         `INSERT INTO intervenciones (maquina_id, tipo_intervencion_id, creado_por_usuario_id, descripcion)
          VALUES ($1, $2, $3, 'Test costos') RETURNING id`,
@@ -247,6 +242,53 @@ test('Migración 003 — Intervenciones y Máquinas', async (t) => {
     });
 
   } finally {
+    if (sectorId) {
+      await client.query(`
+        DELETE FROM intervencion_costos WHERE intervencion_id IN (
+          SELECT id FROM intervenciones WHERE maquina_id IN (
+            SELECT id FROM maquinas WHERE sector_id = ${sectorId}
+          )
+        )
+      `);
+      await client.query(`
+        DELETE FROM intervencion_periodos_detencion WHERE maquina_id IN (
+          SELECT id FROM maquinas WHERE sector_id = ${sectorId}
+        )
+      `);
+      await client.query(`
+        DELETE FROM historial_estados_intervencion WHERE intervencion_id IN (
+          SELECT id FROM intervenciones WHERE maquina_id IN (
+            SELECT id FROM maquinas WHERE sector_id = ${sectorId}
+          )
+        )
+      `);
+      await client.query(`
+        DELETE FROM intervencion_auditoria WHERE intervencion_id IN (
+          SELECT id FROM intervenciones WHERE maquina_id IN (
+            SELECT id FROM maquinas WHERE sector_id = ${sectorId}
+          )
+        )
+      `);
+      await client.query(`
+        DELETE FROM notificaciones WHERE intervencion_id IN (
+          SELECT id FROM intervenciones WHERE maquina_id IN (
+            SELECT id FROM maquinas WHERE sector_id = ${sectorId}
+          )
+        )
+      `);
+      await client.query(`
+        DELETE FROM intervenciones WHERE maquina_id IN (
+          SELECT id FROM maquinas WHERE sector_id = ${sectorId}
+        )
+      `);
+      await client.query(`
+        DELETE FROM historial_estados_maquina WHERE maquina_id IN (
+          SELECT id FROM maquinas WHERE sector_id = ${sectorId}
+        )
+      `);
+      await client.query(`DELETE FROM maquinas WHERE sector_id = ${sectorId}`);
+      await client.query(`DELETE FROM sectores WHERE id = ${sectorId}`);
+    }
     client.release();
   }
 });

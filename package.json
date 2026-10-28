@@ -30,22 +30,23 @@
     "test:etapa6": "tsx --env-file=.env --test backend/tests/reapertura_eliminacion.test.ts",
     "test:notificaciones": "tsx --env-file=.env --test backend/tests/notificaciones.test.ts",
     "test:usuarios": "tsx --env-file=.env --test backend/tests/usuarios.test.ts",
+    "test:pendientes": "tsx --env-file=.env --test backend/tests/pendientes.test.ts",
     "test:e2e": "tsx --env-file=.env --test backend/tests/crud.test.ts",
     "test:todo": "node scripts/run-all-tests.mjs",
     "build:frontend": "npm run build --workspace frontend"
   },
   "dependencies": {
-    "@neon/config": "latest",
-    "bcryptjs": "^3.0.3",
-    "hono": "latest",
-    "pg": "latest"
+    "@neon/config": "1.8.6",
+    "bcryptjs": "3.0.3",
+    "hono": "4.13.13",
+    "pg": "8.23.1"
   },
   "devDependencies": {
-    "@hono/node-server": "^2.1.4",
-    "@types/bcryptjs": "^2.4.6",
-    "@types/node": "latest",
-    "@types/pg": "latest",
-    "tsx": "^4.23.15",
-    "typescript": "latest"
+    "@hono/node-server": "2.1.4",
+    "@types/bcryptjs": "2.4.6",
+    "@types/node": "26.6.4",
+    "@types/pg": "8.23.1",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
   }
 }
