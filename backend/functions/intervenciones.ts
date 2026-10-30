@@ -19,9 +19,11 @@ import {
   reabrirIntervencionServicio,
   eliminarIntervencionServicio,
   editarIntervencionServicio,
+  obtenerAccionesDisponibles,
 } from './intervenciones/motor.ts';
 import { registrarDetencionIntervencion } from './intervenciones/detenciones.ts';
 import { usuariosConPermiso } from './intervenciones/notificaciones.ts';
+import { validarFechaISO } from './intervenciones/fechas.ts';
 
 const intervencionesApp = new Hono();
 
@@ -220,17 +222,119 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
   }
 
   try {
+    // 1. Validación de parámetros de filtro y paginación
+    const estadoParam = c.req.query('estado');
+    let estadosFiltro: string[] | null = null;
+    if (estadoParam !== undefined && estadoParam !== null && estadoParam.trim() !== '') {
+      const tokens = estadoParam.split(',').map((s) => s.trim());
+      const estadosValidos = ['PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS', 'FINALIZADA', 'CANCELADA'];
+      for (const tok of tokens) {
+        if (!estadosValidos.includes(tok)) {
+          throw new ErrorNegocio(422, 'DATOS_INVALIDOS', `Estado de intervención inválido: ${tok}`);
+        }
+      }
+      estadosFiltro = tokens;
+    }
+
+    const maquinaIdParam = c.req.query('maquina_id');
+    let maquinaIdFiltro: number | null = null;
+    if (maquinaIdParam !== undefined && maquinaIdParam !== null && maquinaIdParam.trim() !== '') {
+      const parsed = parseId(maquinaIdParam);
+      if (!parsed) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El parámetro maquina_id debe ser un número entero positivo');
+      }
+      maquinaIdFiltro = parsed;
+    }
+
+    const sectorIdParam = c.req.query('sector_id');
+    let sectorIdFiltro: number | null = null;
+    if (sectorIdParam !== undefined && sectorIdParam !== null && sectorIdParam.trim() !== '') {
+      const parsed = parseId(sectorIdParam);
+      if (!parsed) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El parámetro sector_id debe ser un número entero positivo');
+      }
+      sectorIdFiltro = parsed;
+    }
+
+    const tipoParam = c.req.query('tipo');
+    let tipoFiltro: string | null = null;
+    if (tipoParam !== undefined && tipoParam !== null && tipoParam.trim() !== '') {
+      const tTrim = tipoParam.trim().toUpperCase();
+      if (tTrim !== 'CORRECTIVO' && tTrim !== 'PREVENTIVO') {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', `Tipo de intervención inválido: ${tipoParam}`);
+      }
+      tipoFiltro = tTrim;
+    }
+
+    const responsableIdParam = c.req.query('responsable_id');
+    let responsableIdFiltro: number | null = null;
+    if (responsableIdParam !== undefined && responsableIdParam !== null && responsableIdParam.trim() !== '') {
+      const parsed = parseId(responsableIdParam);
+      if (!parsed) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El parámetro responsable_id debe ser un número entero positivo');
+      }
+      responsableIdFiltro = parsed;
+    }
+
+    const miasParam = c.req.query('mias');
+    const filtrarMias = miasParam === 'true';
+
+    const desdeParam = c.req.query('desde');
+    let desdeFiltro: string | null = null;
+    if (desdeParam !== undefined && desdeParam !== null && desdeParam.trim() !== '') {
+      desdeFiltro = await validarFechaISO(pool, desdeParam.trim(), 'desde');
+    }
+
+    const hastaParam = c.req.query('hasta');
+    let hastaFiltro: string | null = null;
+    if (hastaParam !== undefined && hastaParam !== null && hastaParam.trim() !== '') {
+      hastaFiltro = await validarFechaISO(pool, hastaParam.trim(), 'hasta');
+    }
+
+    const qParam = c.req.query('q');
+    let qFiltro: string | null = null;
+    if (qParam !== undefined && qParam !== null) {
+      const qTrim = qParam.trim();
+      if (qTrim.length < 2 || qTrim.length > 100) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El parámetro de búsqueda q debe tener entre 2 y 100 caracteres');
+      }
+      qFiltro = qTrim;
+    }
+
+    const limitParam = c.req.query('limit');
+    let limitVal: number | null = null;
+    if (limitParam !== undefined && limitParam !== null && limitParam.trim() !== '') {
+      const parsedLimit = Number(limitParam);
+      if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 200) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El parámetro limit debe ser un entero entre 1 y 200');
+      }
+      limitVal = parsedLimit;
+    }
+
+    const offsetParam = c.req.query('offset');
+    let offsetVal = 0;
+    if (offsetParam !== undefined && offsetParam !== null && offsetParam.trim() !== '') {
+      const parsedOffset = Number(offsetParam);
+      if (!Number.isInteger(parsedOffset) || parsedOffset < 0) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El parámetro offset debe ser un entero mayor o igual a 0');
+      }
+      offsetVal = parsedOffset;
+    }
+
+    // 2. Construcción de condiciones WHERE
     const conditions: string[] = [];
+    const params: any[] = [];
+
     if (!incluirEliminadas) {
       conditions.push('i.eliminado_en IS NULL');
     }
-    const params: any[] = [];
 
     if (userScope === 'PROPIAS') {
       params.push(usuario.id);
       conditions.push(`(i.creado_por_usuario_id = $${params.length} OR i.responsable_usuario_id = $${params.length})`);
     } else if (userScope === 'SECTORES') {
       if (usuario.sectores.length === 0) {
+        c.header('X-Total-Count', '0');
         return c.json([]);
       }
       params.push(usuario.sectores);
@@ -241,7 +345,76 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
       conditions.push("i.responsable_usuario_id IS NULL AND i.estado = 'PENDIENTE'");
     }
 
+    if (estadosFiltro) {
+      params.push(estadosFiltro);
+      conditions.push(`i.estado = ANY($${params.length})`);
+    }
+
+    if (maquinaIdFiltro !== null) {
+      params.push(maquinaIdFiltro);
+      conditions.push(`i.maquina_id = $${params.length}`);
+    }
+
+    if (sectorIdFiltro !== null) {
+      params.push(sectorIdFiltro);
+      conditions.push(`m.sector_id = $${params.length}`);
+    }
+
+    if (tipoFiltro !== null) {
+      params.push(tipoFiltro);
+      conditions.push(`ti.codigo = $${params.length}`);
+    }
+
+    if (responsableIdFiltro !== null) {
+      params.push(responsableIdFiltro);
+      conditions.push(`i.responsable_usuario_id = $${params.length}`);
+    }
+
+    if (filtrarMias) {
+      params.push(usuario.id);
+      conditions.push(`i.responsable_usuario_id = $${params.length}`);
+    }
+
+    if (desdeFiltro !== null) {
+      params.push(desdeFiltro);
+      conditions.push(`i.fecha_creacion >= $${params.length}::timestamptz`);
+    }
+
+    if (hastaFiltro !== null) {
+      params.push(hastaFiltro);
+      conditions.push(`i.fecha_creacion <= $${params.length}::timestamptz`);
+    }
+
+    if (qFiltro !== null) {
+      params.push(`%${qFiltro}%`);
+      conditions.push(`(i.descripcion ILIKE $${params.length} OR m.nombre ILIKE $${params.length} OR m.codigo ILIKE $${params.length})`);
+    }
+
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    // 3. Consulta de conteo total para X-Total-Count
+    const countQuery = `
+      SELECT COUNT(*) AS total
+      FROM intervenciones i
+      JOIN maquinas m ON i.maquina_id = m.id
+      JOIN sectores s ON m.sector_id = s.id
+      JOIN tipos_intervencion ti ON i.tipo_intervencion_id = ti.id
+      ${whereClause}
+    `;
+    const resCount = await pool.query(countQuery, params);
+    const totalCount = parseInt(resCount.rows[0].total, 10);
+    c.header('X-Total-Count', String(totalCount));
+
+    // 4. Cláusula de paginación
+    let paginationClause = '';
+    const dataParams = [...params];
+    if (limitVal !== null) {
+      dataParams.push(limitVal);
+      const limitIdx = dataParams.length;
+      dataParams.push(offsetVal);
+      const offsetIdx = dataParams.length;
+      paginationClause = `LIMIT $${limitIdx} OFFSET $${offsetIdx}`;
+    }
 
     const query = `
       SELECT 
@@ -282,6 +455,7 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
       FROM intervenciones i
       JOIN maquinas m ON i.maquina_id = m.id
       JOIN sectores s ON m.sector_id = s.id
+      JOIN tipos_intervencion ti ON i.tipo_intervencion_id = ti.id
       JOIN usuarios uc ON i.creado_por_usuario_id = uc.id
       LEFT JOIN usuarios ur ON i.responsable_usuario_id = ur.id
       LEFT JOIN usuarios uel ON i.eliminado_por_usuario_id = uel.id
@@ -292,10 +466,12 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
       ${whereClause}
       ORDER BY 
         (pd.id IS NOT NULL) DESC,
-        i.fecha_creacion DESC
+        i.fecha_creacion DESC,
+        i.id DESC
+      ${paginationClause}
     `;
 
-    const { rows } = await pool.query(query, params);
+    const { rows } = await pool.query(query, dataParams);
 
     const result = rows.map((r) => ({
       id: Number(r.id),
@@ -361,7 +537,7 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
  * 7.3 GET /api/intervenciones/:id
  * Consulta de detalle: fuera de alcance devuelve 404 INTERVENCION_NO_ENCONTRADA.
  * Historial ordenado por cambiado_en ASC, id ASC.
- * Incluye lista de intervencion_auditoria.
+ * Incluye lista de intervencion_auditoria y acciones_disponibles (API-01).
  */
 intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c) => {
   const id = parseId(c.req.param('id'));
@@ -393,7 +569,9 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
       [id]
     );
 
-    if (resI.rows.length === 0 || resI.rows[0].eliminado_en !== null) {
+    const incluirEliminada = c.req.query('incluir_eliminada') === 'true' || c.req.query('incluir_eliminadas') === 'true';
+
+    if (resI.rows.length === 0 || (resI.rows[0].eliminado_en !== null && !incluirEliminada)) {
       throw new ErrorNegocio(404, 'INTERVENCION_NO_ENCONTRADA', 'Intervención no encontrada');
     }
 
@@ -445,6 +623,26 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
       [id]
     );
 
+    // Cálculo de acciones disponibles (API-01)
+    const tieneDetencionAbierta = resPeriodos.rows.some((p: any) => p.hasta === null);
+    const accionesDisponibles = await obtenerAccionesDisponibles(
+      pool,
+      {
+        id: Number(r.id),
+        estado: r.estado,
+        creado_por_usuario_id: Number(r.creado_por_usuario_id),
+        responsable_usuario_id: r.responsable_usuario_id ? Number(r.responsable_usuario_id) : null,
+        fecha_inicio: r.fecha_inicio,
+        eliminado_en: r.eliminado_en,
+      },
+      {
+        id: Number(r.maquina_id),
+        sector_id: Number(r.sector_id),
+      },
+      usuario,
+      tieneDetencionAbierta
+    );
+
     return c.json({
       id: Number(r.id),
       descripcion: r.descripcion,
@@ -456,6 +654,7 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
       fecha_inicio: r.fecha_inicio,
       fecha_finalizacion: r.fecha_finalizacion,
       tiempo_inactividad_minutos: r.tiempo_inactividad_minutos,
+      acciones_disponibles: accionesDisponibles,
       tiempos: {
         espera_minutos: r.espera_minutos !== null ? Number(r.espera_minutos) : null,
         espera_en_curso: Boolean(r.espera_en_curso),

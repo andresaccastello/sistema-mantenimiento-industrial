@@ -8,13 +8,19 @@ import intervencionesApp from './intervenciones.ts';
 import notificacionesApp from './notificaciones.ts';
 import { usuariosApp, perfilesApp } from './usuarios.ts';
 import reportesApp from './reportes.ts';
+import configuracionApp from './configuracion.ts';
+import tableroApp from './tablero.ts';
+import tiposIntervencionApp from './tipos_intervencion.ts';
 
 import { JWT_SECRET } from './config.ts';
 
 const app = new Hono();
 
 const allowedOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
-app.use('*', cors({ origin: allowedOrigin }));
+app.use('*', cors({
+  origin: allowedOrigin,
+  exposeHeaders: ['X-Total-Count'],
+}));
 
 
 // Montar endpoints
@@ -26,6 +32,9 @@ app.route('/api/notificaciones', notificacionesApp);
 app.route('/api/usuarios', usuariosApp);
 app.route('/api/perfiles', perfilesApp);
 app.route('/api/reportes', reportesApp);
+app.route('/api/configuracion', configuracionApp);
+app.route('/api/tablero', tableroApp);
+app.route('/api/tipos-intervencion', tiposIntervencionApp);
 
 app.get('/health', (c) => {
   return c.json({

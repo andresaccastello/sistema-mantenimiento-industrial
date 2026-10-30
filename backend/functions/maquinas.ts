@@ -38,9 +38,17 @@ maquinasApp.get('/', async (c) => {
 
     const query = `
       SELECT m.id, m.nombre, m.tipo, m.estado, m.ubicacion, m.observaciones, m.activo, m.creado_en,
-             s.id as sector_id, s.nombre as sector_nombre
+             s.id as sector_id, s.nombre as sector_nombre,
+             COALESCE(ia.abiertas, 0)::int as intervenciones_abiertas
       FROM maquinas m
       JOIN sectores s ON m.sector_id = s.id
+      LEFT JOIN (
+        SELECT maquina_id, COUNT(*) AS abiertas
+        FROM intervenciones
+        WHERE estado IN ('PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS')
+          AND eliminado_en IS NULL
+        GROUP BY maquina_id
+      ) ia ON ia.maquina_id = m.id
       ${activeFilter}
       ORDER BY m.nombre
     `;
@@ -55,7 +63,8 @@ maquinasApp.get('/', async (c) => {
       observaciones: r.observaciones,
       activo: r.activo,
       creado_en: r.creado_en,
-      sector: { id: r.sector_id, nombre: r.sector_nombre }
+      sector: { id: r.sector_id, nombre: r.sector_nombre },
+      intervenciones_abiertas: Number(r.intervenciones_abiertas || 0)
     }));
     return c.json(result);
   } catch (error) {

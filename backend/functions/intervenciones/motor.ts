@@ -341,6 +341,56 @@ export async function desasignarResponsableServicio(
 }
 
 /**
+ * Verificación sin efectos de la Regla de Actor (D-23, D-28).
+ * Valida los permisos, autorizaciones y habilitaciones sin modificar la base de datos ni emitir eventos.
+ */
+export async function verificarReglaActor(
+  db: pg.Pool | pg.PoolClient,
+  opts: {
+    intervencion: any;
+    maquina: any;
+    usuario: UsuarioVisibilidad;
+    validaHabilitacion?: boolean;
+  }
+): Promise<{ responsableId: number; requiereAutoAsignacion: boolean }> {
+  const { intervencion, maquina, usuario, validaHabilitacion } = opts;
+  const responsableId = intervencion.responsable_usuario_id
+    ? Number(intervencion.responsable_usuario_id)
+    : null;
+
+  if (responsableId === null) {
+    const tieneAsignarse = 'INTERVENCIONES_ASIGNARSE' in usuario.permisos;
+    if (!tieneAsignarse) {
+      throw new ErrorNegocio(
+        422,
+        'RESPONSABLE_REQUERIDO',
+        'La intervención no tiene responsable asignado y no posees permiso para asignártela'
+      );
+    }
+
+    await validarResponsableHabilitado(db, usuario.id, maquina.sector_id);
+    return { responsableId: usuario.id, requiereAutoAsignacion: true };
+  } else {
+    const esResponsable = responsableId === usuario.id;
+    const tieneAsignar = 'INTERVENCIONES_ASIGNAR' in usuario.permisos;
+
+    if (!esResponsable && !tieneAsignar) {
+      throw new ErrorNegocio(
+        403,
+        'NO_ES_RESPONSABLE',
+        'Solo el responsable asignado o un usuario con permiso de asignación puede realizar esta acción'
+      );
+    }
+
+    if (validaHabilitacion) {
+      await validarResponsableHabilitado(db, responsableId, maquina.sector_id);
+    }
+
+    return { responsableId, requiereAutoAsignacion: false };
+  }
+}
+
+/**
  * Implementación unificada de la Regla de Actor (D-23, D-28).
  * Se aplica cuando la transición tiene `requiereActor: true`.
  *
@@ -366,22 +416,15 @@ export async function aplicarReglaActor(
   }
 ): Promise<{ responsableId: number; autoAsignado: boolean }> {
   const { intervencionId, intervencion, maquina, usuario, validaHabilitacion, camposExtra, eventos, motivoAutoAsignacion } = opts;
-  const responsableId = intervencion.responsable_usuario_id
-    ? Number(intervencion.responsable_usuario_id)
-    : null;
 
-  if (responsableId === null) {
-    const tieneAsignarse = 'INTERVENCIONES_ASIGNARSE' in usuario.permisos;
-    if (!tieneAsignarse) {
-      throw new ErrorNegocio(
-        422,
-        'RESPONSABLE_REQUERIDO',
-        'La intervención no tiene responsable asignado y no posees permiso para asignártela'
-      );
-    }
+  const { responsableId, requiereAutoAsignacion } = await verificarReglaActor(client, {
+    intervencion,
+    maquina,
+    usuario,
+    validaHabilitacion,
+  });
 
-    await validarResponsableHabilitado(client, usuario.id, maquina.sector_id);
-
+  if (requiereAutoAsignacion) {
     if (camposExtra) {
       camposExtra.responsable_usuario_id = usuario.id;
     } else {
@@ -410,21 +453,6 @@ export async function aplicarReglaActor(
 
     return { responsableId: usuario.id, autoAsignado: true };
   } else {
-    const esResponsable = responsableId === usuario.id;
-    const tieneAsignar = 'INTERVENCIONES_ASIGNAR' in usuario.permisos;
-
-    if (!esResponsable && !tieneAsignar) {
-      throw new ErrorNegocio(
-        403,
-        'NO_ES_RESPONSABLE',
-        'Solo el responsable asignado o un usuario con permiso de asignación puede realizar esta acción'
-      );
-    }
-
-    if (validaHabilitacion) {
-      await validarResponsableHabilitado(client, responsableId, maquina.sector_id);
-    }
-
     return { responsableId, autoAsignado: false };
   }
 }
@@ -1465,6 +1493,63 @@ export async function reabrirIntervencionServicio(
 }
 
 /**
+ * Evalúa los motivos de bloqueo para la eliminación lógica de una intervención.
+ * Función compartida sin efectos colaterales entre el endpoint de eliminación y acciones_disponibles.
+ */
+export async function obtenerMotivosBloqueoEliminacion(
+  db: pg.Pool | pg.PoolClient,
+  intervencionId: number,
+  intervencion: { estado: string; fecha_inicio: any }
+): Promise<string[]> {
+  const motivosBloqueo: string[] = [];
+
+  if (intervencion.estado !== 'PENDIENTE') {
+    motivosBloqueo.push('ESTADO_NO_PENDIENTE');
+  }
+
+  if (intervencion.fecha_inicio !== null && intervencion.fecha_inicio !== undefined) {
+    motivosBloqueo.push('TIENE_FECHA_INICIO');
+  }
+
+  const resCostos = await db.query('SELECT 1 FROM intervencion_costos WHERE intervencion_id = $1 LIMIT 1', [intervencionId]);
+  if (resCostos.rows.length > 0) {
+    motivosBloqueo.push('TIENE_COSTOS');
+  }
+
+  const resRepuestos = await db.query('SELECT 1 FROM intervencion_repuestos WHERE intervencion_id = $1 LIMIT 1', [intervencionId]);
+  if (resRepuestos.rows.length > 0) {
+    motivosBloqueo.push('TIENE_REPUESTOS');
+  }
+
+  const resMovStock = await db.query('SELECT 1 FROM movimientos_stock WHERE intervencion_id = $1 LIMIT 1', [intervencionId]);
+  if (resMovStock.rows.length > 0) {
+    motivosBloqueo.push('TIENE_MOVIMIENTOS_STOCK');
+  }
+
+  const resDocs = await db.query('SELECT 1 FROM documentos WHERE intervencion_id = $1 LIMIT 1', [intervencionId]);
+  if (resDocs.rows.length > 0) {
+    motivosBloqueo.push('TIENE_DOCUMENTOS');
+  }
+
+  const resHist = await db.query('SELECT COUNT(*) AS total FROM historial_estados_intervencion WHERE intervencion_id = $1', [intervencionId]);
+  const totalHist = Number(resHist.rows[0]?.total || 0);
+  if (totalHist > 1) {
+    motivosBloqueo.push('TIENE_HISTORIAL');
+  } else if (totalHist === 1) {
+    const resSingleHist = await db.query(
+      'SELECT estado_anterior, estado_nuevo FROM historial_estados_intervencion WHERE intervencion_id = $1',
+      [intervencionId]
+    );
+    const single = resSingleHist.rows[0];
+    if (single && (single.estado_anterior !== null || single.estado_nuevo !== 'PENDIENTE')) {
+      motivosBloqueo.push('TIENE_HISTORIAL');
+    }
+  }
+
+  return motivosBloqueo;
+}
+
+/**
  * 6. POST /api/intervenciones/:id/eliminar (Eliminación lógica)
  */
 export async function eliminarIntervencionServicio(
@@ -1489,50 +1574,7 @@ export async function eliminarIntervencionServicio(
   }
 
   // 3. Evaluar condiciones de actividad relevante
-  const motivosBloqueo: string[] = [];
-
-  if (intervencion.estado !== 'PENDIENTE') {
-    motivosBloqueo.push('ESTADO_NO_PENDIENTE');
-  }
-
-  if (intervencion.fecha_inicio !== null && intervencion.fecha_inicio !== undefined) {
-    motivosBloqueo.push('TIENE_FECHA_INICIO');
-  }
-
-  const resCostos = await client.query('SELECT 1 FROM intervencion_costos WHERE intervencion_id = $1 LIMIT 1', [intervencionId]);
-  if (resCostos.rows.length > 0) {
-    motivosBloqueo.push('TIENE_COSTOS');
-  }
-
-  const resRepuestos = await client.query('SELECT 1 FROM intervencion_repuestos WHERE intervencion_id = $1 LIMIT 1', [intervencionId]);
-  if (resRepuestos.rows.length > 0) {
-    motivosBloqueo.push('TIENE_REPUESTOS');
-  }
-
-  const resMovStock = await client.query('SELECT 1 FROM movimientos_stock WHERE intervencion_id = $1 LIMIT 1', [intervencionId]);
-  if (resMovStock.rows.length > 0) {
-    motivosBloqueo.push('TIENE_MOVIMIENTOS_STOCK');
-  }
-
-  const resDocs = await client.query('SELECT 1 FROM documentos WHERE intervencion_id = $1 LIMIT 1', [intervencionId]);
-  if (resDocs.rows.length > 0) {
-    motivosBloqueo.push('TIENE_DOCUMENTOS');
-  }
-
-  const resHist = await client.query('SELECT COUNT(*) AS total FROM historial_estados_intervencion WHERE intervencion_id = $1', [intervencionId]);
-  const totalHist = Number(resHist.rows[0]?.total || 0);
-  if (totalHist > 1) {
-    motivosBloqueo.push('TIENE_HISTORIAL');
-  } else if (totalHist === 1) {
-    const resSingleHist = await client.query(
-      'SELECT estado_anterior, estado_nuevo FROM historial_estados_intervencion WHERE intervencion_id = $1',
-      [intervencionId]
-    );
-    const single = resSingleHist.rows[0];
-    if (single.estado_anterior !== null || single.estado_nuevo !== 'PENDIENTE') {
-      motivosBloqueo.push('TIENE_HISTORIAL');
-    }
-  }
+  const motivosBloqueo = await obtenerMotivosBloqueoEliminacion(client, intervencionId, intervencion);
 
   if (motivosBloqueo.length > 0) {
     throw new ErrorNegocio(
@@ -1802,4 +1844,218 @@ export async function editarIntervencionServicio(
     estado: row.estado,
     actualizado_en: row.actualizado_en,
   };
+}
+
+/**
+ * 8. API-01 — Calcula las acciones disponibles para un usuario sobre una intervención.
+ * Siempre en el orden canónico y sin repetidos:
+ * TOMAR, ASIGNAR, DESASIGNAR, INICIAR, ESPERAR_REPUESTOS, REANUDAR, FINALIZAR, RESOLVER_AHORA, CANCELAR, REABRIR, REGISTRAR_DETENCION, EDITAR, ELIMINAR.
+ */
+export async function obtenerAccionesDisponibles(
+  db: pg.Pool | pg.PoolClient,
+  intervencion: {
+    id: number;
+    estado: string;
+    creado_por_usuario_id: number;
+    responsable_usuario_id: number | null;
+    fecha_inicio: any;
+    eliminado_en: any;
+  },
+  maquina: { id: number; sector_id: number },
+  usuario: UsuarioVisibilidad,
+  tieneDetencionAbierta: boolean
+): Promise<string[]> {
+  if (intervencion.eliminado_en !== null && intervencion.eliminado_en !== undefined) {
+    return [];
+  }
+
+  const acciones: string[] = [];
+
+  const usuarioHabilitado = (usuarioId: number, maquinaSectorId: number): boolean | null => {
+    if (usuarioId === usuario.id) {
+      if (!('INTERVENCIONES_RECIBIR_ASIGNACION' in usuario.permisos)) return false;
+      if (!('INTERVENCIONES_VER' in usuario.permisos)) return false;
+      const alcanceVer = usuario.permisos['INTERVENCIONES_VER'];
+      if (alcanceVer === 'SECTORES' && !usuario.sectores.includes(Number(maquinaSectorId))) return false;
+      return true;
+    }
+    return null;
+  };
+
+  const verificarHabilitadoDestino = async (usuarioId: number, maquinaSectorId: number): Promise<boolean> => {
+    const quick = usuarioHabilitado(usuarioId, maquinaSectorId);
+    if (quick !== null) return quick;
+    try {
+      await validarResponsableHabilitado(db, usuarioId, maquinaSectorId);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  // 1. TOMAR
+  if (intervencion.estado === 'PENDIENTE' && intervencion.responsable_usuario_id === null) {
+    if ('INTERVENCIONES_ASIGNARSE' in usuario.permisos) {
+      if (await verificarHabilitadoDestino(usuario.id, maquina.sector_id)) {
+        acciones.push('TOMAR');
+      }
+    }
+  }
+
+  // 2. ASIGNAR (incluye reasignar)
+  if (['PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS'].includes(intervencion.estado)) {
+    if ('INTERVENCIONES_ASIGNAR' in usuario.permisos) {
+      acciones.push('ASIGNAR');
+    }
+  }
+
+  // 3. DESASIGNAR
+  if (intervencion.estado === 'PENDIENTE' && intervencion.responsable_usuario_id !== null) {
+    const respId = Number(intervencion.responsable_usuario_id);
+    const tieneAsignar = 'INTERVENCIONES_ASIGNAR' in usuario.permisos;
+    const esPropioConAsignarse = respId === usuario.id && 'INTERVENCIONES_ASIGNARSE' in usuario.permisos;
+    if (tieneAsignar || esPropioConAsignarse) {
+      acciones.push('DESASIGNAR');
+    }
+  }
+
+  // 4. INICIAR (T1: PENDIENTE -> EN_PROCESO)
+  if (intervencion.estado === 'PENDIENTE') {
+    if ('INTERVENCIONES_CAMBIAR_ESTADO' in usuario.permisos) {
+      const respId = intervencion.responsable_usuario_id ? Number(intervencion.responsable_usuario_id) : null;
+      if (respId === null) {
+        if ('INTERVENCIONES_ASIGNARSE' in usuario.permisos) {
+          if (await verificarHabilitadoDestino(usuario.id, maquina.sector_id)) {
+            acciones.push('INICIAR');
+          }
+        }
+      } else {
+        if (respId === usuario.id || 'INTERVENCIONES_ASIGNAR' in usuario.permisos) {
+          if (await verificarHabilitadoDestino(respId, maquina.sector_id)) {
+            acciones.push('INICIAR');
+          }
+        }
+      }
+    }
+  }
+
+  // 5. ESPERAR_REPUESTOS (T4: EN_PROCESO -> EN_ESPERA_REPUESTOS)
+  if (intervencion.estado === 'EN_PROCESO') {
+    if ('INTERVENCIONES_CAMBIAR_ESTADO' in usuario.permisos) {
+      const respId = intervencion.responsable_usuario_id ? Number(intervencion.responsable_usuario_id) : null;
+      if (respId !== null && (respId === usuario.id || 'INTERVENCIONES_ASIGNAR' in usuario.permisos)) {
+        acciones.push('ESPERAR_REPUESTOS');
+      }
+    }
+  }
+
+  // 6. REANUDAR (T5: EN_ESPERA_REPUESTOS -> EN_PROCESO)
+  if (intervencion.estado === 'EN_ESPERA_REPUESTOS') {
+    if ('INTERVENCIONES_CAMBIAR_ESTADO' in usuario.permisos) {
+      const respId = intervencion.responsable_usuario_id ? Number(intervencion.responsable_usuario_id) : null;
+      if (respId !== null && (respId === usuario.id || 'INTERVENCIONES_ASIGNAR' in usuario.permisos)) {
+        acciones.push('REANUDAR');
+      }
+    }
+  }
+
+  // 7. FINALIZAR (T6: EN_PROCESO -> FINALIZADA)
+  if (intervencion.estado === 'EN_PROCESO') {
+    if ('INTERVENCIONES_FINALIZAR' in usuario.permisos) {
+      const respId = intervencion.responsable_usuario_id ? Number(intervencion.responsable_usuario_id) : null;
+      if (respId !== null && (respId === usuario.id || 'INTERVENCIONES_ASIGNAR' in usuario.permisos)) {
+        acciones.push('FINALIZAR');
+      }
+    }
+  }
+
+  // 8. RESOLVER_AHORA (T2: PENDIENTE -> FINALIZADA)
+  if (intervencion.estado === 'PENDIENTE') {
+    if ('INTERVENCIONES_FINALIZAR' in usuario.permisos) {
+      const respId = intervencion.responsable_usuario_id ? Number(intervencion.responsable_usuario_id) : null;
+      if (respId === null) {
+        if ('INTERVENCIONES_ASIGNARSE' in usuario.permisos) {
+          if (await verificarHabilitadoDestino(usuario.id, maquina.sector_id)) {
+            acciones.push('RESOLVER_AHORA');
+          }
+        }
+      } else {
+        if (respId === usuario.id || 'INTERVENCIONES_ASIGNAR' in usuario.permisos) {
+          if (await verificarHabilitadoDestino(respId, maquina.sector_id)) {
+            acciones.push('RESOLVER_AHORA');
+          }
+        }
+      }
+    }
+  }
+
+  // 9. CANCELAR (T3, T7, T8: PENDIENTE/EN_PROCESO/EN_ESPERA_REPUESTOS -> CANCELADA)
+  if (['PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS'].includes(intervencion.estado)) {
+    if ('INTERVENCIONES_CANCELAR' in usuario.permisos) {
+      acciones.push('CANCELAR');
+    }
+  }
+
+  // 10. REABRIR (T9: FINALIZADA -> EN_PROCESO)
+  if (intervencion.estado === 'FINALIZADA') {
+    if ('INTERVENCIONES_REABRIR' in usuario.permisos) {
+      acciones.push('REABRIR');
+    }
+  }
+
+  // 11. REGISTRAR_DETENCION
+  if (['PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS'].includes(intervencion.estado)) {
+    if ('INTERVENCIONES_CAMBIAR_ESTADO' in usuario.permisos && !tieneDetencionAbierta) {
+      acciones.push('REGISTRAR_DETENCION');
+    }
+  }
+
+  // 12. EDITAR
+  if (['PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS'].includes(intervencion.estado)) {
+    if ('INTERVENCIONES_EDITAR' in usuario.permisos) {
+      const alcanceEditar = usuario.permisos['INTERVENCIONES_EDITAR'];
+      let puedeEditar = false;
+      if (alcanceEditar === 'PROPIAS') {
+        const esPropia = Number(intervencion.creado_por_usuario_id) === usuario.id;
+        const esPendiente = intervencion.estado === 'PENDIENTE';
+        const sinResponsable = intervencion.responsable_usuario_id === null;
+        if (esPropia && esPendiente && sinResponsable) {
+          puedeEditar = true;
+        }
+      } else if (alcanceEditar === 'SECTORES') {
+        if (usuario.sectores.includes(Number(maquina.sector_id))) {
+          puedeEditar = true;
+        }
+      } else if (alcanceEditar === 'TODAS') {
+        puedeEditar = true;
+      }
+      if (puedeEditar) {
+        acciones.push('EDITAR');
+      }
+    }
+  }
+
+  // 13. ELIMINAR
+  if (intervencion.estado === 'PENDIENTE') {
+    if ('INTERVENCIONES_ELIMINAR' in usuario.permisos) {
+      const alcanceEliminar = usuario.permisos['INTERVENCIONES_ELIMINAR'];
+      let puedeEliminar = false;
+      if (alcanceEliminar === 'PROPIAS') {
+        puedeEliminar = Number(intervencion.creado_por_usuario_id) === usuario.id;
+      } else if (alcanceEliminar === 'SECTORES') {
+        puedeEliminar = usuario.sectores.includes(Number(maquina.sector_id));
+      } else if (alcanceEliminar === 'TODAS') {
+        puedeEliminar = true;
+      }
+
+      if (puedeEliminar) {
+        const motivos = await obtenerMotivosBloqueoEliminacion(db, intervencion.id, intervencion);
+        if (motivos.length === 0) {
+          acciones.push('ELIMINAR');
+        }
+      }
+    }
+  }
+
+  return acciones;
 }

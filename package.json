@@ -22,6 +22,7 @@
     "test:migration-009": "tsx --env-file=.env --test backend/tests/migration_009.test.ts",
     "test:migration-010": "tsx --env-file=.env --test backend/tests/migration_010.test.ts",
     "test:migration-011": "tsx --env-file=.env --test backend/tests/migration_011.test.ts",
+    "test:migration-012": "tsx --env-file=.env --test backend/tests/migration_012.test.ts",
     "test:permisos": "tsx --env-file=.env --test backend/tests/permisos_granulares.test.ts",
     "test:intervenciones": "tsx --env-file=.env --test backend/tests/intervenciones.test.ts",
     "test:tiempos": "tsx --env-file=.env --test backend/tests/tiempos.test.ts",
@@ -31,8 +32,10 @@
     "test:notificaciones": "tsx --env-file=.env --test backend/tests/notificaciones.test.ts",
     "test:usuarios": "tsx --env-file=.env --test backend/tests/usuarios.test.ts",
     "test:pendientes": "tsx --env-file=.env --test backend/tests/pendientes.test.ts",
+    "test:api-front": "tsx --env-file=.env --test backend/tests/api_front.test.ts",
     "test:e2e": "tsx --env-file=.env --test backend/tests/crud.test.ts",
     "test:todo": "node scripts/run-all-tests.mjs",
+    "marca:cargar": "node scripts/cargar-marca.mjs",
     "build:frontend": "npm run build --workspace frontend"
   },
   "dependencies": {

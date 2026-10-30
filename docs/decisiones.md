@@ -90,3 +90,27 @@ El plan original (sección 12 del análisis de intervenciones) cubría solo ese 
 
 **Motivo:** priorizar lo que el sistema necesita para funcionar de punta a punta y para la defensa.
 
+---
+
+## D-009 — Sistema general, marca por instalación
+
+**Estado:** Aceptada
+
+El código no tiene nada específico de una empresa. El sistema se llama "Sistema de Mantenimiento Industrial"; el nombre de la empresa y el logo se configuran en cada instalación (tabla `configuracion_sistema`). Una instalación atiende a una empresa: varias empresas en una misma base (multiempresa) queda fuera de alcance y se evaluará si se integra con otro sistema.
+
+---
+
+## D-010 — Frontend
+
+**Estado:** Aceptada
+
+React con Mantine (licencia MIT), versiones exactas. Escritorio primero; en celular la pantalla se acomoda sola y, si se confirma el uso, habrá una vista propia para las pantallas del operario. Paleta tomada de SolGest como referencia visual.
+
+---
+
+## D-011 — Mapa de pantallas aprobado
+
+**Estado:** Aceptada
+
+Mapa de pantallas aprobado (`docs/front/mapa-pantallas.md`). Es la referencia de las etapas F0 a F5.
+
