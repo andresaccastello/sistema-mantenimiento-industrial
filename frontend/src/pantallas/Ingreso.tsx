@@ -131,7 +131,7 @@ export function Ingreso() {
             <Stack gap="md">
               <TextInput
                 label="Legajo"
-                placeholder="Ej: admin o número de legajo"
+                placeholder="Ej.: 1234"
                 value={legajo}
                 onChange={(e) => setLegajo(e.currentTarget.value)}
                 required

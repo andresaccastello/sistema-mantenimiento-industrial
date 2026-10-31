@@ -89,7 +89,7 @@ export function CambiarPassword() {
         titulo="Cambiar contraseña"
         subtitulo={
           esObligatorio
-            ? 'Por seguridad, tenés que cambiar la contraseña temporal antes de continuar.'
+            ? undefined
             : 'Modificá tu contraseña de acceso al sistema'
         }
       />

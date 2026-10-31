@@ -6,8 +6,12 @@ import {
   Text,
   NavLink,
   Button,
+  ActionIcon,
+  Tooltip,
   Image,
   Stack,
+  Box,
+  Divider,
   UnstyledButton,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
@@ -20,6 +24,7 @@ import {
   IconUsers,
   IconBuildingFactory2,
   IconLogout,
+  IconUser,
   IconQuestionMark,
 } from '@tabler/icons-react';
 import { useLocation, useNavigate, Outlet } from 'react-router';
@@ -27,6 +32,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
 import { clienteApi } from '../api/cliente';
 import { itemsMenu } from '../lib/menu';
+import { esRutaInicio } from '../lib/inicio';
+import { nombrePerfil } from '../lib/perfiles';
 import { Campana } from '../componentes/Campana';
 import type { ConfiguracionPublica } from '../api/tipos';
 
@@ -67,6 +74,8 @@ export function Layout() {
     close();
   };
 
+  const perfilLegible = nombrePerfil(usuario?.perfil?.nombre) || 'Usuario';
+
   return (
     <AppShell
       header={{ height: 56 }}
@@ -96,9 +105,9 @@ export function Layout() {
           padding: '0 1rem',
         }}
       >
-        <Group justify="space-between" style={{ width: '100%' }} wrap="nowrap">
+        <Group justify="space-between" style={{ width: '100%', minWidth: 0 }} wrap="nowrap">
           {/* Lado izquierdo */}
-          <Group gap="sm" wrap="nowrap">
+          <Group gap="sm" wrap="nowrap" style={{ minWidth: 0, flexShrink: 1, overflow: 'hidden' }}>
             {!esObligatorio && (
               <Burger
                 opened={opened}
@@ -116,10 +125,11 @@ export function Layout() {
                 h={32}
                 w="auto"
                 fit="contain"
+                style={{ flexShrink: 0 }}
               />
             )}
 
-            <Stack gap={0} justify="center">
+            <Stack gap={0} justify="center" style={{ minWidth: 0, overflow: 'hidden' }}>
               <Text fw={600} size="sm" c="#0f172a" lineClamp={1}>
                 {nombreSistema}
               </Text>
@@ -132,11 +142,12 @@ export function Layout() {
           </Group>
 
           {/* Lado derecho */}
-          <Group gap="sm" wrap="nowrap">
+          <Group gap="sm" wrap="nowrap" style={{ flexShrink: 0 }}>
             {!esObligatorio && <Campana />}
 
             {usuario && (
               <UnstyledButton
+                visibleFrom="sm"
                 onClick={() => handleNavegar('/mi-cuenta')}
                 style={{
                   padding: '4px 8px',
@@ -150,13 +161,15 @@ export function Layout() {
                     {usuario.nombre} {usuario.apellido}
                   </Text>
                   <Text size="xs" c="#64748b" lineClamp={1}>
-                    {usuario.perfil?.nombre || 'Usuario'}
+                    {perfilLegible}
                   </Text>
                 </Stack>
               </UnstyledButton>
             )}
 
+            {/* Salir en escritorio */}
             <Button
+              visibleFrom="sm"
               variant="subtle"
               color="red"
               size="xs"
@@ -165,6 +178,20 @@ export function Layout() {
             >
               Salir
             </Button>
+
+            {/* Salir en celular como botón de ícono con aria-label y tooltip */}
+            <Tooltip label="Salir" withArrow>
+              <ActionIcon
+                hiddenFrom="sm"
+                variant="subtle"
+                color="red"
+                size="md"
+                onClick={salir}
+                aria-label="Salir"
+              >
+                <IconLogout size={18} />
+              </ActionIcon>
+            </Tooltip>
           </Group>
         </Group>
       </AppShell.Header>
@@ -175,14 +202,17 @@ export function Layout() {
           style={{
             borderRight: '1px solid rgba(0, 0, 0, 0.08)',
             backgroundColor: '#ffffff',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
           }}
         >
-          <Stack gap={2}>
+          <Stack gap={2} style={{ flex: 1 }}>
             {menu.map((item) => {
               const Icono = ICONOS_MENU[item.icono] || IconQuestionMark;
               const activo =
                 item.ruta === '/'
-                  ? location.pathname === '/'
+                  ? esRutaInicio(location.pathname, usuario?.permisos)
                   : location.pathname.startsWith(item.ruta);
 
               return (
@@ -201,6 +231,29 @@ export function Layout() {
               );
             })}
           </Stack>
+
+          {/* En celular: separados por una línea, se agregan Mi cuenta y Salir */}
+          <Box hiddenFrom="sm">
+            <Divider my="xs" />
+            <NavLink
+              label="Mi cuenta"
+              leftSection={<IconUser size={18} />}
+              active={location.pathname === '/mi-cuenta'}
+              onClick={() => handleNavegar('/mi-cuenta')}
+              style={{ borderRadius: 4 }}
+            />
+            <NavLink
+              label="Salir"
+              leftSection={<IconLogout size={18} />}
+              color="red"
+              c="red"
+              onClick={() => {
+                close();
+                salir();
+              }}
+              style={{ borderRadius: 4 }}
+            />
+          </Box>
         </AppShell.Navbar>
       )}
 

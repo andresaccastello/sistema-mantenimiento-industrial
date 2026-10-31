@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
@@ -26,6 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const cerrandoSesionRef = useRef(false);
 
   const salir = useCallback(() => {
     eliminarToken();
@@ -47,6 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const u = await clienteApi.get<Usuario>('/api/auth/me');
       setUsuario(u);
       setToken(t);
+      cerrandoSesionRef.current = false;
     } catch (err) {
       console.error('Error al obtener usuario actual:', err);
       eliminarToken();
@@ -60,6 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async (nuevoToken: string, debeCambiarPassword?: boolean): Promise<void> => {
       guardarToken(nuevoToken);
       setToken(nuevoToken);
+      cerrandoSesionRef.current = false;
       try {
         const u = await clienteApi.get<Usuario>('/api/auth/me');
         setUsuario(u);
@@ -75,11 +78,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const handleReaccion = (reaccion: 'cerrar_sesion' | 'cambiar_password') => {
       if (reaccion === 'cerrar_sesion') {
+        if (cerrandoSesionRef.current) return;
+        cerrandoSesionRef.current = true;
+
         eliminarToken();
         setToken(null);
         setUsuario(null);
         queryClient.clear();
         notifications.show({
+          id: 'sesion-finalizada',
           color: 'yellow',
           title: 'Sesión finalizada',
           message: 'Tu sesión terminó. Volvé a ingresar.',

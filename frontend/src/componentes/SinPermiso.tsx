@@ -8,7 +8,7 @@ interface SinPermisoProps {
   permisoRequerido?: string;
 }
 
-export function SinPermiso({ permisoRequerido }: SinPermisoProps) {
+export function SinPermiso({ permisoRequerido: _permisoRequerido }: SinPermisoProps) {
   const navigate = useNavigate();
 
   return (
@@ -23,8 +23,7 @@ export function SinPermiso({ permisoRequerido }: SinPermisoProps) {
             Sin permiso suficiente
           </Text>
           <Text size="sm" c="#64748b" ta="center" maw={450}>
-            No tenés los permisos requeridos para acceder a esta pantalla
-            {permisoRequerido ? ` (${permisoRequerido})` : ''}.
+            No tenés permiso para ver esta pantalla.
           </Text>
           <Button variant="default" onClick={() => navigate('/')} mt="sm">
             Volver al inicio

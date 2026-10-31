@@ -13,6 +13,7 @@ import { IconKey, IconLogout, IconUser } from '@tabler/icons-react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { EncabezadoPagina } from '../componentes/EncabezadoPagina';
+import { nombrePerfil } from '../lib/perfiles';
 
 export function MiCuenta() {
   const { usuario, salir } = useAuth();
@@ -64,7 +65,7 @@ export function MiCuenta() {
             </Text>
             <Box>
               <Badge color="marca" variant="light" size="md">
-                {usuario?.perfil?.nombre || 'Sin perfil'}
+                {nombrePerfil(usuario?.perfil?.nombre) || 'Sin perfil'}
               </Badge>
             </Box>
           </Stack>

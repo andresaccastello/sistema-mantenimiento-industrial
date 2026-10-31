@@ -40,3 +40,15 @@ export function destinoInicio(permisos: PermisosAlcanceEntrada): '/tablero' | '/
 
   return '/mis-reportes';
 }
+
+/**
+ * Determina si una ruta corresponde a "Inicio" (sección 4 de docs/etapas/etapa-f0-1-correcciones.md).
+ * Devuelve true para '/' y para el destino que da destinoInicio(permisos).
+ */
+export function esRutaInicio(ruta: string, permisos: PermisosAlcanceEntrada): boolean {
+  if (ruta === '/') {
+    return true;
+  }
+  const destino = destinoInicio(permisos);
+  return ruta === destino;
+}
