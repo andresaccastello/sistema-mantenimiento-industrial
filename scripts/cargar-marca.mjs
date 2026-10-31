@@ -1,18 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import pg from 'pg';
-import dotenv from 'dotenv';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const rootDir = path.resolve(__dirname, '..');
-
-// Cargar .env
-const envPath = path.join(rootDir, '.env');
-if (fs.existsSync(envPath)) {
-  dotenv.config({ path: envPath });
-}
 
 const args = process.argv.slice(2);
 let empresa = null;
@@ -115,7 +103,12 @@ async function main() {
     updates.push('actualizado_en = NOW()');
 
     const query = `UPDATE configuracion_sistema SET ${updates.join(', ')} WHERE id = 1`;
-    await client.query(query, params);
+    const res = await client.query(query, params);
+
+    if (res.rowCount !== 1) {
+      console.error('Error: Falta aplicar la migración 012');
+      process.exit(1);
+    }
 
     console.log('Configuración de marca actualizada correctamente.');
   } finally {

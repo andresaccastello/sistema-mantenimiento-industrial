@@ -428,6 +428,39 @@ export async function cambiarEstadoManualMaquina(
 }
 
 /**
+ * Verificación sin efectos para REGISTRAR_DETENCION (API-01 / Etapa API.1).
+ * Comprueba: permiso, estado y que no tenga período de detención abierto.
+ */
+export async function verificarRegistrarDetencion(
+  client: pg.Pool | pg.PoolClient,
+  intervencion: any,
+  _maquina: any,
+  usuario: UsuarioVisibilidad
+): Promise<void> {
+  if (!('INTERVENCIONES_CAMBIAR_ESTADO' in usuario.permisos)) {
+    throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No posees permiso para registrar detenciones');
+  }
+
+  const estadosPermitidos = ['PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS'];
+  if (!estadosPermitidos.includes(intervencion.estado)) {
+    throw new ErrorNegocio(
+      409,
+      'TRANSICION_NO_PERMITIDA',
+      `No se permite registrar detención sobre una intervención en estado ${intervencion.estado}`
+    );
+  }
+
+  // Verificar si ya tiene período abierto
+  const resAbierto = await client.query(
+    'SELECT id FROM intervencion_periodos_detencion WHERE intervencion_id = $1 AND hasta IS NULL LIMIT 1',
+    [intervencion.id]
+  );
+  if (resAbierto.rows.length > 0) {
+    throw new ErrorNegocio(409, 'DETENCION_YA_ABIERTA', 'La intervención ya cuenta con un período de detención abierto');
+  }
+}
+
+/**
  * 6.4 POST /api/intervenciones/:id/registrar-detencion (D-27, RN-18)
  */
 export async function registrarDetencionIntervencion(
@@ -454,23 +487,7 @@ export async function registrarDetencionIntervencion(
     throw new ErrorNegocio(409, 'ESTADO_DESACTUALIZADO', 'El estado de la intervención ha cambiado concurrentemente');
   }
 
-  const estadosPermitidos = ['PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS'];
-  if (!estadosPermitidos.includes(intervencion.estado)) {
-    throw new ErrorNegocio(
-      409,
-      'TRANSICION_NO_PERMITIDA',
-      `No se permite registrar detención sobre una intervención en estado ${intervencion.estado}`
-    );
-  }
-
-  // Verificar si ya tiene período abierto
-  const resAbierto = await client.query(
-    'SELECT id FROM intervencion_periodos_detencion WHERE intervencion_id = $1 AND hasta IS NULL FOR UPDATE',
-    [intervencionId]
-  );
-  if (resAbierto.rows.length > 0) {
-    throw new ErrorNegocio(409, 'DETENCION_YA_ABIERTA', 'La intervención ya cuenta con un período de detención abierto');
-  }
+  await verificarRegistrarDetencion(client, intervencion, maquina, usuario);
 
   const observacion = typeof body.observacion === 'string' ? body.observacion.trim() : '';
   if (observacion.length < 5) {

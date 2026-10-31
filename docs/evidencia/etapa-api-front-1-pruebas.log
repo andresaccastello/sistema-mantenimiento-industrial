@@ -1,0 +1,658 @@
+[test:todo] Suites descubiertas (20) en orden de ejecución:
+  1. backend/tests/migration_003.test.ts
+  2. backend/tests/migration_005.test.ts
+  3. backend/tests/migration_006.test.ts
+  4. backend/tests/migration_007.test.ts
+  5. backend/tests/migration_008.test.ts
+  6. backend/tests/migration_009.test.ts
+  7. backend/tests/migration_010.test.ts
+  8. backend/tests/migration_011.test.ts
+  9. backend/tests/migration_012.test.ts
+  10. backend/tests/api_front.test.ts
+  11. backend/tests/crud.test.ts
+  12. backend/tests/intervenciones.test.ts
+  13. backend/tests/motor_cierres.test.ts
+  14. backend/tests/motor_estados.test.ts
+  15. backend/tests/notificaciones.test.ts
+  16. backend/tests/pendientes.test.ts
+  17. backend/tests/permisos_granulares.test.ts
+  18. backend/tests/reapertura_eliminacion.test.ts
+  19. backend/tests/tiempos.test.ts
+  20. backend/tests/usuarios.test.ts
+
+[test:todo] Iniciando corrida completa en serie (--test-concurrency=1)...
+[test:todo] Salida en tiempo real y registro en: C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\docs\evidencia\etapa-api-front-1-pruebas.log
+
+(node:5964) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Migración 003 — Intervenciones y Máquinas
+  ✔ 1. Aplicar migración 003_intervenciones_schema.sql (361.8523ms)
+  ✔ 2. Restricción uq_maquinas_codigo en maquinas (530.6392ms)
+  ✔ 3. Restricción ck_intervenciones_ejecucion (353.1779ms)
+  ✔ 4. Restricción ck_intervenciones_finalizada_fechas (176.1889ms)
+  ✔ 5. Restricción ck_historial_cancelada_observacion (529.7882ms)
+  ✔ 6. Protección ON DELETE RESTRICT en intervenciones (529.5293ms)
+  ✔ 7. Períodos de detención: un solo período abierto por intervención (885.0377ms)
+  ✔ 8. Renglones de costo: validaciones y anulación (704.9639ms)
+✔ Migración 003 — Intervenciones y Máquinas (7471.3679ms)
+(node:32060) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Migración 005 — Integridad compuesta y restricciones de estado
+  ✔ 1. Aplicar migración 005_motor_estados.sql (169.0656ms)
+  ✔ 2. fk_periodos_intervencion_maquina rechaza máquina discordante (493.3123ms)
+  ✔ 3. fk_historial_maquina_intervencion_maquina rechaza máquina discordante (164.1153ms)
+  ✔ 4. ck_historial_espera_observacion rechaza observación vacía o nula (493.7845ms)
+✔ Migración 005 — Integridad compuesta y restricciones de estado (4165.0707ms)
+(node:39376) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Migración 006 — Cierres, trabajo realizado y confirmación
+  ✔ 1. Aplicar migración 006_cierres.sql (188.3055ms)
+  ✔ 2. Columnas trabajo_realizado y observacion_confirmacion existen (380.9749ms)
+  ✔ 3. ck_intervenciones_finalizada_datos rechaza FINALIZADA sin trabajo_realizado (359.5043ms)
+  ✔ 4. ck_intervenciones_finalizada_datos rechaza FINALIZADA sin ejecucion (180.1288ms)
+  ✔ 5. Permite estado FINALIZADA con trabajo_realizado y ejecucion válidos (358.9809ms)
+✔ Migración 006 — Cierres, trabajo realizado y confirmación (3854.9111ms)
+(node:34352) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Migración 007 — Reapertura, edición y permisos de operario
+  ✔ 1. Aplicar migración 007_reapertura_edicion.sql (172.7296ms)
+  ✔ 2. ck_intervencion_auditoria_evento acepta tipo_evento EDICION (166.969ms)
+  ✔ 3. ck_intervencion_auditoria_evento rechaza un tipo de evento no permitido (179.2143ms)
+  ✔ 4. Perfil OPERARIO tiene permiso INTERVENCIONES_EDITAR con alcance PROPIAS (164.3041ms)
+✔ Migración 007 — Reapertura, edición y permisos de operario (3033.7662ms)
+(node:39284) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Migración 008 — Notificaciones internas, canales y bandeja de salida
+  ✔ 1. Aplicar migración 008_notificaciones.sql (184.5296ms)
+  ✔ 2. Los tres canales existen con activo = false (180.6105ms)
+  ✔ 3. ck_notificacion_canales_canal rechaza canal no permitido (179.4108ms)
+  ✔ 4. notificaciones: rechaza prioridad inválida y autonotificación (537.668ms)
+  ✔ 5. notificacion_envios: restricciones de canal, unicidad, estado e intentos (896.2531ms)
+✔ Migración 008 — Notificaciones internas, canales y bandeja de salida (4342.9984ms)
+(node:7324) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Migración 009 — Usuarios, perfiles y contraseñas
+  ✔ 1. Aplicar migración 009_usuarios.sql (188.0552ms)
+  ✔ 2. Columnas debe_cambiar_password y password_actualizado_en en usuarios (187.1267ms)
+  ✔ 3. Perfil I_D tiene exactamente los mismos permisos y alcance que RESPONSABLE_MANTENIMIENTO (363.587ms)
+  ✔ 4. Perfil DIRECCION tiene permisos de CONSULTA + NOTIFICACIONES_FALLAS_RECIBIR (TODAS) (360.5372ms)
+  ✔ 5. Restricción ck_auditoria_permisos_accion valida acciones permitidas y rechaza inválidas (543.3337ms)
+  ✔ 6. Idempotencia: ejecutar 009_usuarios.sql nuevamente sin error (181.6851ms)
+✔ Migración 009 — Usuarios, perfiles y contraseñas (2946.6916ms)
+(node:39588) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Migración 010 — Versión de sesión en usuarios
+  ✔ M10-01: Aplicar migración 010_sesion_version.sql (180.5516ms)
+  ✔ M10-02: Idempotencia: ejecutar la migración dos veces no falla (177.3879ms)
+  ✔ M10-03: Columna sesion_version existe con tipo integer, NOT NULL y default 1 (181.3166ms)
+  ✔ M10-04: Todos los usuarios existentes tienen sesion_version >= 1 (177.3138ms)
+✔ Migración 010 — Versión de sesión en usuarios (1818.9945ms)
+(node:37744) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Migración 011 — Tiempos de gestión e inactividad
+  ✔ M11-01: Versión de PostgreSQL es 14 o superior (server_version_num >= 140000) (184.7987ms)
+  ✔ M11-02: Aplicar migración 011_tiempos.sql (203.4252ms)
+  ✔ M11-03: Idempotencia: ejecutar la migración dos veces no falla (184.6164ms)
+  ✔ M11-04: La vista v_intervencion_tiempos existe con las columnas esperadas (181.9594ms)
+  ✔ M11-05: La función fn_inactividad_maquina existe y es ejecutable (369.9037ms)
+  ✔ M11-06: Verificación del backfill de fecha_efectiva e idempotencia (3964.5476ms)
+✔ Migración 011 — Tiempos de gestión e inactividad (6217.4427ms)
+(node:38144) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Migración 012 — Marca configurable por instalación
+  ✔ M12-01.1: Aplicar migración 012_configuracion.sql (178.1707ms)
+  ✔ M12-01.2: Idempotencia: ejecutar la migración dos veces no falla (174.1667ms)
+  ✔ M12-01.3: Tabla configuracion_sistema y fila id=1 existen (177.7963ms)
+  ✔ M12-01.4: Un segundo INSERT con id = 2 falla por restricción CHECK (id = 1) (175.9044ms)
+  ✔ M12-01.5: Logo de más de 300 KB (307201 bytes) falla por restricción de tamaño (871.1128ms)
+  ✔ M12-01.6: Tipo de logo image/svg+xml falla por restricción de tipo (175.6224ms)
+  ✔ M12-01.7: Coherencia logo y logo_tipo (351.9947ms)
+✔ Migración 012 — Marca configurable por instalación (3375.5474ms)
+ℹ tests 58
+ℹ suites 0
+ℹ pass 58
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 130322.0407
+(node:24836) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Etapa API — API para el frontend
+  ✔ AF-01: Tabla de acciones disponibles en las 7 situaciones x 4 usuarios (68276.1942ms)
+  ✔ AF-02: R2 ejecuta cada acción en S1, S3 y S5 sobre intervención nueva y 409 en inválidas (117678.6879ms)
+  ✔ AF-03: Intervención eliminada devuelve acciones_disponibles = [] (6048.3103ms)
+  ✔ AF-04: Filtros por estado, maquina_id, sector_id, tipo, responsable_id, mias, fechas y q (7511.9366ms)
+  ✔ AF-05: Paginación con limit=3, offset 0, 3, 6 y header X-Total-Count (3735.7892ms)
+  ✔ AF-06: Operario con alcance PROPIAS no ve intervenciones ajenas aunque coincidan con el filtro (4804.2275ms)
+  ✔ AF-07: Parámetros inválidos responden con 422 DATOS_INVALIDOS (1077.5117ms)
+  ✔ AF-08: Tablero consolida contadores y detenidas_ahora con tiempos en minutos (1948.5333ms)
+  ✔ AF-09: Tablero con alcance SECTORES solo cuenta máquinas e intervenciones de sus sectores (2364.9243ms)
+  ✔ AF-10: GET /api/tipos-intervencion incluye CORRECTIVO y PREVENTIVO; sin sesión responde 401 (360.0378ms)
+  ✔ AF-11: intervenciones_abiertas en GET /api/maquinas cuenta 1 pendiente, 1 en proceso, 1 finalizada y 1 eliminada -> 2 (1419.1409ms)
+  ✔ AF-12: GET /api/configuracion/publica sin sesión y logo -> 404 LOGO_NO_CONFIGURADO (355.3778ms)
+  ✔ AF-13: Cargar un PNG chico por SQL devuelve tiene_logo=true y logo responde 200 con headers correctos (707.2735ms)
+  ✔ AF-14: Responsable con CONCEDER INTERVENCIONES_ELIMINAR alcance PROPIAS sobre falla de otro usuario (8526.151ms)
+  ✔ AF-15: En S1 y S3, para OP, CON y R2 ejecutar acciones no disponibles no responde 2xx ni cambia estado (325090.7375ms)
+  ✔ AF-16: Detalle de una intervención eliminada con y sin ?incluir_eliminada=true (7468.7915ms)
+  ✔ AF-17: cargar-marca.mjs ejecutado como proceso aparte contra la base de pruebas (2644.3755ms)
+✔ Etapa API — API para el frontend (576742.6272ms)
+▶ Security, Auth & CRUD Tests
+  ✔ 1. Solicitud sin token debe fallar (401) (30.7833ms)
+  ✔ 2. Solicitud con token inválido debe fallar (401/403) (4.5615ms)
+(node:37740) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✔ 3. Login incorrecto (401) (1288.4857ms)
+  ✔ 4. Login correcto (580.9418ms)
+  ✔ 5. Creación inválida de sector (Nombre vacío) (175.1412ms)
+  ✔ 6. Asignar máquina a sector inactivo/inexistente (345.1242ms)
+✔ Security, Auth & CRUD Tests (2429.2134ms)
+(node:11488) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Etapa 3 — Registrar Falla y Consultar Intervenciones (E2E API)
+  ✔ 1. Operario registra falla sin detención (máquina permanece OPERATIVA) (2464.4149ms)
+  ✔ 2. Operario registra falla CON detención (máquina pasa a DETENIDA y abre período) (3503.3173ms)
+  ✔ 3. Validación de entradas (descripción corta y máquina inexistente) (870.3769ms)
+  ✔ 4. Alcance PROPIAS: Operario solo lista sus propias fallas reportadas (1790.7055ms)
+  ✔ 5. Vista Sin Asignar y detalle GET /api/intervenciones/:id (1415.4102ms)
+✔ Etapa 3 — Registrar Falla y Consultar Intervenciones (E2E API) (15937.8005ms)
+(node:10168) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Etapa 4B — Motor de estados: cierres, recuperación de la máquina y estado manual
+  ✔ B-01: Finalizar una intervención sin detención (9050.9857ms)
+  ✔ B-02: Validaciones de finalizar (10892.282ms)
+  ✔ B-03: Con período abierto y sin maquina_recuperada (8495.3279ms)
+  ✔ B-04: Con período abierto, maquina_recuperada = true, sin fecha_recuperacion (11130.4044ms)
+  ✔ B-05: maquina_recuperada = true con CONFIRMAR_RECUPERACION denegado por excepción (7957.338ms)
+  ✔ B-06: maquina_recuperada = false (era EN_MANTENIMIENTO) (11321.8908ms)
+  ✔ B-07: Finaliza alguien que no es el responsable y no tiene ASIGNAR (6343.4994ms)
+  ✔ B-08: Finalizar desde EN_ESPERA_REPUESTOS (8299.388ms)
+  ✔ B-09: Ejemplo 1 — A detiene, B no detiene (18419.6526ms)
+  ✔ B-10: Ejemplo 2 — A y B detienen la máquina (19392.2817ms)
+  ✔ B-11: Ejemplo 3 — Finalización administrativa sin recuperación y posterior confirmación (13937.8333ms)
+  ✔ B-12: Ejemplo 5 — Concurrencia en finalización con recuperación (19926.6597ms)
+  ✔ B-13: PENDIENTE sin responsable ni detención, usuario con ASIGNARSE (6457.4892ms)
+  ✔ B-14: Con detención y recuperación: DETENIDA -> OPERATIVA directo (8678.5523ms)
+  ✔ B-15: Validaciones de fechas en resolver-ahora (7118.6872ms)
+  ✔ B-16: Usuario sin FINALIZAR intenta resolver-ahora (2483.7897ms)
+  ✔ B-17: Cancelar desde PENDIENTE, EN_PROCESO y EN_ESPERA_REPUESTOS con motivo (22820.7555ms)
+  ✔ B-18: Sin motivo o con menos de 5 caracteres al cancelar (3969.6367ms)
+  ✔ B-19: T7 conserva lo cargado (7964.1106ms)
+  ✔ B-20: Cancela un usuario con CANCELAR que no es responsable ni tiene ASIGNAR (D-28) (7939.5808ms)
+  ✔ B-21: Con período abierto, maquina_recuperada = false al cancelar (12586.6969ms)
+  ✔ B-22: Cancelar una FINALIZADA o CANCELADA (12728.8558ms)
+  ✔ B-23: Dos períodos abiertos; se confirma uno y luego el otro (10795.5734ms)
+  ✔ B-24: periodo_ids con errores (rollback y nada se cierra) (13174.1396ms)
+  ✔ B-25: Usuario sin CONFIRMAR_RECUPERACION (4007.2344ms)
+  ✔ B-26: fecha_recuperacion anterior a desde o futura (6316.1005ms)
+  ✔ B-27: Confirmar con intervención todavía EN_PROCESO (D-31) y finalizarla después (12084.9778ms)
+  ✔ B-28: tiempo_inactividad_minutos acumulado (5523.6299ms)
+  ✔ B-29: GET /detenciones-abiertas con usuario de alcance SECTORES (6817.9583ms)
+  ✔ B-30: Registrar detención en EN_PROCESO y en PENDIENTE (12625.4154ms)
+  ✔ B-31: Registrar detención con período ya abierto y en FINALIZADA (13413.2822ms)
+  ✔ B-32: FUERA_DE_SERVICIO desde OPERATIVA con motivo; sin motivo; sin permiso (2512.8516ms)
+  ✔ B-33: Máquina FUERA_DE_SERVICIO con período abierto: iniciar y finalizar con recuperación (9122.3629ms)
+  ✔ B-34: REACTIVAR desde FUERA_DE_SERVICIO (a) espera repuestos, (b) EN_PROCESO, (c) sin períodos (17555.9088ms)
+  ✔ B-35: REACTIVAR desde DETENIDA (a) con períodos abiertos, (b) sin períodos (6005.8545ms)
+  ✔ B-36: Matriz estado × acción (131462.8236ms)
+Error no controlado en operación de intervenciones: error: Fallo forzado para prueba atomica B-37
+    at C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\node_modules\pg\lib\client.js:694:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async aplicarDecisionRecuperacion (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\intervenciones\recuperacion.ts:141:5)
+    at async finalizarIntervencionServicio (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\intervenciones\motor.ts:909:19)
+    at async conTransaccion (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\intervenciones\transaccion.ts:19:20)
+    at async <anonymous> (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\intervenciones.ts:1057:17)
+    at async dispatch (file:///C:/Users/andre/.gemini/antigravity-ide/scratch/sistema-mantenimiento-industrial/node_modules/hono/dist/compose.js:35:11)
+    at async <anonymous> (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\middleware.ts:78:3)
+    at async dispatch (file:///C:/Users/andre/.gemini/antigravity-ide/scratch/sistema-mantenimiento-industrial/node_modules/hono/dist/compose.js:35:11)
+    at async <anonymous> (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\middleware.ts:27:3) {
+  length: 162,
+  severity: 'ERROR',
+  code: 'P0001',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: 'PL/pgSQL function fail_update_periodo_test() line 3 at RAISE',
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'pl_exec.c',
+  line: '3909',
+  routine: 'exec_stmt_raise'
+}
+  ✔ B-37: Trigger temporal que falla al cerrar el período durante finalizar con recuperación (9835.0342ms)
+  ✔ B-38b: GET /api/intervenciones/:id devuelve trabajo_realizado y observacion_confirmacion (11780.5653ms)
+  ✔ B-39: Responsable desactivado a mitad del trabajo permite a usuario con ASIGNAR continuar y cerrar, pero bloquea iniciar nueva (16517.303ms)
+  ✔ B-40: resolver-ahora sin estado_esperado -> 422 DATOS_INVALIDOS y la intervención sigue PENDIENTE (2330.2168ms)
+✔ Etapa 4B — Motor de estados: cierres, recuperación de la máquina y estado manual (555238.4459ms)
+(node:29988) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Etapa 4A — Motor de estados: núcleo, asignación e inicio del trabajo
+  ✔ P-01: Responsable toma una PENDIENTE sin responsable (4754.6792ms)
+  ✔ P-02: Tomar una ya asignada a otro da 409 (5208.6362ms)
+  ✔ P-03: Operario sin ASIGNARSE intenta tomar da 403 (2523.9442ms)
+  ✔ P-04: Validar destinatario de asignación (6588.5977ms)
+  ✔ P-05: Asignar a usuario sin visibilidad de sector da 422 (4266.2997ms)
+  ✔ P-06: Reasignar en EN_PROCESO exige motivo (8573.4462ms)
+  ✔ P-07: Quitar responsable en PENDIENTE y bloqueo en EN_PROCESO (18674.6985ms)
+  ✔ P-08: Iniciar sin responsable asigna automáticamente al usuario (5215.8322ms)
+  ✔ P-09: Iniciar sin responsable y sin ASIGNARSE da 422 (3573.2487ms)
+  ✔ P-10: Iniciar intervención asignada a otro (regla de actor D-23) (8270.6692ms)
+  ✔ P-11: Validación de fecha_inicio al iniciar (8879.0774ms)
+  ✔ P-12: estado_esperado desactualizado da 409 (3025.1723ms)
+  ✔ P-13: Matriz completa estado x acción (21351.1539ms)
+  ✔ P-14: Pasar a espera exige observación mínima de 5 caracteres (9568.0636ms)
+  ✔ P-15: Reanudar preserva fecha_inicio original (9090.1232ms)
+  ✔ P-16 y P-17: Operación y GET /:id fuera de alcance devuelve 404 (6843.9787ms)
+  ✔ P-18: Ciclo completo con detención (DETENIDA -> EN_MANTENIMIENTO -> DETENIDA -> EN_MANTENIMIENTO) (13803.2616ms)
+  ✔ P-19: Intervención sin detención iniciada mantiene máquina OPERATIVA (7737.8524ms)
+  ✔ P-20: Registro concurrente de falla con detención preserva EN_MANTENIMIENTO (17339.0057ms)
+  ✔ P-21: Intervención sin detención no convierte máquina detenida a EN_MANTENIMIENTO (15990.7199ms)
+  ✔ P-22: Máquina FUERA_DE_SERVICIO no cambia de estado (7705.2989ms)
+  ✔ P-23: Período de intervención eliminada lógicamente no cuenta en recálculo (10583.5556ms)
+  ✔ P-24: recalcularEstadoMaquina directo con confirmación (1805.3063ms)
+Error no controlado en operación de intervenciones: error: Falla simulada en mitad de transaccion
+    at C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\node_modules\pg\lib\client.js:694:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async registrarCambioEstado (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\intervenciones\cambioEstado.ts:61:3)
+    at async ejecutarTransicionServicio (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\intervenciones\motor.ts:693:3)
+    at async conTransaccion (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\intervenciones\transaccion.ts:19:20)
+    at async <anonymous> (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\intervenciones.ts:950:17)
+    at async dispatch (file:///C:/Users/andre/.gemini/antigravity-ide/scratch/sistema-mantenimiento-industrial/node_modules/hono/dist/compose.js:35:11)
+    at async <anonymous> (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\middleware.ts:78:3)
+    at async dispatch (file:///C:/Users/andre/.gemini/antigravity-ide/scratch/sistema-mantenimiento-industrial/node_modules/hono/dist/compose.js:35:11)
+    at async <anonymous> (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\middleware.ts:27:3) {
+  length: 155,
+  severity: 'ERROR',
+  code: 'P0001',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: 'PL/pgSQL function trigger_falla_p25() line 4 at RAISE',
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'pl_exec.c',
+  line: '3909',
+  routine: 'exec_stmt_raise'
+}
+  ✔ P-25: Fallo a mitad de transacción hace rollback sin efectos secundarios (8827.2ms)
+  ✔ P-26: Concurrencia sobre la misma intervención (1 x 200, 1 x 409) (5581.5118ms)
+  ✔ P-27: Iniciar simultáneamente dos intervenciones con detención de la misma máquina (14328.1176ms)
+  ✔ P-28: Bloqueo externo genera 409 RECURSO_OCUPADO (9575.8321ms)
+  ✔ P-29: ABM de máquinas bloquea cambio libre de estado (722.1335ms)
+  ✔ P-31: Endpoints sin estado_esperado devuelven 422 DATOS_INVALIDOS (3235.013ms)
+  ✔ P-32: Validación de formato y zona horaria en fecha_inicio (9324.3941ms)
+  ✔ P-33: transicionesDeAccion devuelve todas las filas y el permiso es uniforme (0.8412ms)
+  ✔ P-34: Fecha calendario imposible da 422 DATOS_INVALIDOS (3947.8515ms)
+✔ Etapa 4A — Motor de estados: núcleo, asignación e inicio del trabajo (265992.5315ms)
+(node:33864) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Etapa 7 — Notificaciones internas, reglas de destinatarios, bandeja y canales
+  ✔ N-01: O registra falla CON detención en sector 1 -> R1, R2, A y R3 reciben ALTA (3361.5623ms)
+  ✔ N-02: O registra falla SIN detención -> mismos destinatarios, prioridad NORMAL (2290.6496ms)
+  ✔ N-03: Falla en máquina del sector 2 -> R3 no recibe nada; R1, R2 y A sí (3275.23ms)
+  ✔ N-04: R1 con DENEGAR; O con CONCEDER (sector 1); R2 desactivado; O con VER PROPIAS vs SECTORES (8487.6475ms)
+  ✔ N-05: A asigna a R1; autoasignación de R1 -> nadie recibe (9299.231ms)
+  ✔ N-06: A reasigna de R1 a R2, con motivo -> R2 recibe asignación y R1 te quitaron (7190.8226ms)
+  ✔ N-07: A quita el responsable R1 (en PENDIENTE) -> R1 recibe "te quitaron" (6836.2923ms)
+  ✔ N-08: R1 finaliza con recuperación -> O recibe FINALIZADA; R1 no; ninguna DETENCION (10711.0421ms)
+  ✔ N-09: R1 finaliza SIN recuperación -> O recibe FINALIZADA; R2 y A reciben DETENCION; R_NoVer no (10905.7543ms)
+  ✔ N-10: Cancelar y reabrir -> creador y responsable reciben con motivo (21030.2944ms)
+  ✔ N-11: Creador = responsable -> R1 recibe UNA notificación, no dos (7559.8064ms)
+  ✔ N-12: Iniciar, esperar repuestos, reanudar, confirmar recup, registrar detención, eliminar -> cero notificaciones (12287.1081ms)
+Error no controlado en operación de intervenciones: error: Simulación de fallo en notificaciones
+    at C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\node_modules\pg\lib\client.js:694:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async registrarNotificaciones (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\intervenciones\notificaciones.ts:408:18)
+    at async <anonymous> (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\intervenciones.ts:173:7)
+    at async conTransaccion (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\intervenciones\transaccion.ts:19:20)
+    at async <anonymous> (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\intervenciones.ts:80:23)
+    at async dispatch (file:///C:/Users/andre/.gemini/antigravity-ide/scratch/sistema-mantenimiento-industrial/node_modules/hono/dist/compose.js:35:11)
+    at async <anonymous> (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\middleware.ts:102:5)
+    at async dispatch (file:///C:/Users/andre/.gemini/antigravity-ide/scratch/sistema-mantenimiento-industrial/node_modules/hono/dist/compose.js:35:11)
+    at async <anonymous> (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\middleware.ts:78:3) {
+  length: 161,
+  severity: 'ERROR',
+  code: 'P0001',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: 'PL/pgSQL function trg_fn_test_fallo_notif() line 3 at RAISE',
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'pl_exec.c',
+  line: '3909',
+  routine: 'exec_stmt_raise'
+}
+  ✔ N-13: Atomicidad: trigger que falla en notificaciones revierte toda la operación (4049.7178ms)
+  ✔ N-14: usuariosConPermiso contra resolverPermisosEfectivos (52832.9695ms)
+  ✔ N-15: Bandeja: listar, contador, leer, leer-todas, paginado con antes_de (7335.8362ms)
+  ✔ N-16: Activar EMAIL por SQL -> Un envío PENDIENTE por notificación; inactivos -> cero envíos (5399.6557ms)
+  ✔ N-17: Inserción en lote: falla con al menos 20 destinatarios y todos reciben exactamente una notificación (3100.6082ms)
+✔ Etapa 7 — Notificaciones internas, reglas de destinatarios, bandeja y canales (189179.2668ms)
+(node:9324) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Etapa P — Pendientes técnicos del backend
+  ✔ P-01: Iniciar sin fecha_inicio (5411.3771ms)
+  ✔ P-02: Eliminar una intervención pendiente (4876.4196ms)
+  ✔ P-03: Responsables habilitados (73909.0021ms)
+  ✔ P-04: Formato de errores con codigo (2157.056ms)
+✔ Etapa P — Pendientes técnicos del backend (92821.4661ms)
+(node:11208) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Etapa 2 — Catálogo de Permisos Granulares y Alcance
+  ✔ 1. Aplicar migración 004_permisos_granulares.sql (171.4747ms)
+  ✔ 2. Catálogo de permisos ampliado correctamente (166.2685ms)
+  ✔ 4. Operario tiene INTERVENCIONES_VER con alcance PROPIAS y no tiene COSTOS_VER (164.3457ms)
+  ✔ 5. Conceder excepción individual a usuario (COSTOS_VER con SECTORES) (660.6029ms)
+  ✔ 6. Prevalencia de DENEGAR anula permiso de perfil (656.6206ms)
+  ✔ 7. Restricciones ck_usuario_permiso_efecto y ck_usuario_permiso_alcance (491.0815ms)
+✔ Etapa 2 — Catálogo de Permisos Granulares y Alcance (4165.1271ms)
+(node:4460) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Etapa 6 — Reapertura de intervenciones, eliminación lógica y edición de intervenciones abiertas
+  ✔ R-01: FINALIZADA sin períodos; reabrir con maquina_detenida = false (9611.712ms)
+  ✔ R-02: Sin motivo / menos de 5 (7194.7842ms)
+  ✔ R-03: Usuario sin REABRIR (6688.4654ms)
+  ✔ R-04: Reabrir desde PENDIENTE, EN_PROCESO, EN_ESPERA_REPUESTOS, CANCELADA (13810.8279ms)
+  ✔ R-05: FINALIZADA con período todavía abierto (E7) (18777.5384ms)
+  ✔ R-06: Ejemplo 4 completo (08:00 a 12:00, reabre 15:00 a 17:00, inactividad = 360) (15102.0453ms)
+  ✔ R-07: Sin período abierto y sin maquina_detenida -> 422 DECISION_DETENCION_REQUERIDA (7532.7291ms)
+  ✔ R-08: desde anterior al hasta del último período; desde futura -> 422 FECHA_INCOHERENTE (5821.6716ms)
+  ✔ R-09: Reabrir y volver a finalizar con otro trabajo_realizado y ejecucion -> Auditoria OTRO (12401.0006ms)
+  ✔ R-10: Máquina FUERA_DE_SERVICIO; reabrir con maquina_detenida = true (9912.972ms)
+  ✔ R-11: Dos reabrir simultáneos -> Un 200 y un 409 ESTADO_DESACTUALIZADO (9400.0776ms)
+  ✔ E-01: PENDIENTE sin actividad ni detención (con responsable asignado) (8941.3258ms)
+  ✔ E-02: Con período abierto, maquina_recuperada = true, sin otras causas (8535.5338ms)
+  ✔ E-03: Con período abierto, maquina_recuperada = true, pero otra intervención detiene la máquina (15829.7618ms)
+  ✔ E-04: Con período abierto, maquina_recuperada = false, luego REACTIVAR -> OPERATIVA (9718.505ms)
+  ✔ E-05: Con período abierto: sin decisión -> 422; sin permiso confirmacion -> 403 (12739.9293ms)
+  ✔ E-06: Bloqueos: EN_PROCESO, FINALIZADA, CANCELADA, costos, repuestos, documentos, multiples (27377.5572ms)
+  ✔ E-07: Sin motivo -> 422; sin permiso ELIMINAR -> 403 (3561.435ms)
+  ✔ E-08: Eliminar una ya eliminada -> 404 (5666.3822ms)
+  ✔ E-09: GET /?incluir_eliminadas=true con y sin ELIMINAR; alcance SECTORES (6347.6141ms)
+Error no controlado en operación de intervenciones: error: Fallo forzado en auditoria de eliminacion
+    at C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\node_modules\pg\lib\client.js:694:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async registrarAuditoria (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\intervenciones\auditoria.ts:31:3)
+    at async eliminarIntervencionServicio (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\intervenciones\motor.ts:1727:3)
+    at async conTransaccion (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\intervenciones\transaccion.ts:19:20)
+    at async <anonymous> (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\intervenciones.ts:1235:17)
+    at async dispatch (file:///C:/Users/andre/.gemini/antigravity-ide/scratch/sistema-mantenimiento-industrial/node_modules/hono/dist/compose.js:35:11)
+    at async <anonymous> (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\middleware.ts:78:3)
+    at async dispatch (file:///C:/Users/andre/.gemini/antigravity-ide/scratch/sistema-mantenimiento-industrial/node_modules/hono/dist/compose.js:35:11)
+    at async <anonymous> (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\middleware.ts:27:3) {
+  length: 166,
+  severity: 'ERROR',
+  code: 'P0001',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: 'PL/pgSQL function trigger_fallo_eliminacion() line 4 at RAISE',
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'pl_exec.c',
+  line: '3909',
+  routine: 'exec_stmt_raise'
+}
+  ✔ E-10: Fallo forzado (trigger) al insertar auditoría -> 500 y rollback completo (12891.7448ms)
+  ✔ D-01: Responsable edita descripcion y observaciones de EN_PROCESO -> 200 y 2 filas EDICION (7492.0041ms)
+  ✔ D-02: Operario edita su propia PENDIENTE sin responsable -> 200 (3753.9569ms)
+  ✔ D-03: Operario edita PENDIENTE tomada -> 403; una ajena -> 404 (8330.4307ms)
+  ✔ D-04: Editar FINALIZADA / CANCELADA -> 409 EDICION_NO_PERMITIDA (12962.3752ms)
+  ✔ D-05: Body con maquina_id o estado; body vacío; descripcion < 5 -> 422 DATOS_INVALIDOS (6119.8484ms)
+  ✔ D-06: Mismos valores que los actuales -> 422 SIN_CAMBIOS (3069.7059ms)
+  ✔ D-07: Operario con EDITAR denegado por excepción -> 403 (3057.4162ms)
+  ✔ M-01: Matriz estado x acción (PENDIENTE, EN_PROCESO, EN_ESPERA_REPUESTOS, FINALIZADA, CANCELADA) (49195.914ms)
+✔ Etapa 6 — Reapertura de intervenciones, eliminación lógica y edición de intervenciones abiertas (336576.4499ms)
+(node:18596) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Etapa 8 — Tiempos de gestión e inactividad real de las máquinas
+  ✔ T-01: Creada 08:00, inicio 09:00, fin 12:00 -> espera 60, bruta 180, neta 180, total 240 (2134.2239ms)
+  ✔ T-02: En proceso, espera repuestos y reanudación -> bruta 180, neta 90 (2126.0541ms)
+  ✔ T-03: Reapertura -> bruta 480 (cubre el hueco), neta 300 (excluye el hueco) (2118.397ms)
+  ✔ T-04: Pendiente creada hace 2 h -> espera ≈ 120, espera_en_curso = true, bruta/neta/total NULL (3540.5827ms)
+  ✔ T-05: Resolver ahora con inicio 10:00 y fin 10:20 -> bruta 20, neta 20 (2122.5208ms)
+  ✔ T-06: fecha_inicio cargada 1 h antes del cambio -> neta empieza en fecha_inicio, no en cambiado_en (2141.6818ms)
+  ✔ T-07: En proceso desde hace 30 min -> bruta y neta ≈ 30, trabajo_en_curso = true (2298.5759ms)
+  ✔ T-08: Cancelada sin empezar -> espera NULL, bruta NULL, neta 0 (2119.7472ms)
+  ✔ T-09: Período cerrado 2h y abierto 1h -> inactividad ≈ 180, inactividad_en_curso = true, columna guardada = 120 (3176.2795ms)
+  ✔ T-10: GET /api/intervenciones trae bloque tiempos idéntico al detalle (1091.8826ms)
+  ✔ T-11: Resolver ahora registrado después de la finalización -> bruta 20, neta 20 (6742.011ms)
+  ✔ T-12: Intervención reabierta armada por SQL con cierre desfasado -> bruta 1500, neta 240 (2114.5198ms)
+  ✔ T-13: Flujo completo API: inicio hace 5h, fin hace 4h, reapertura y cierre NOW() -> bruta ≈ 300, neta ≈ 60 (18464.1463ms)
+  ✔ M-01: Ejemplo 7.2 análisis: A 08:00–12:00, B 10:00–14:00 -> unión = 360 min (1936.0415ms)
+  ✔ M-02: Recorte al intervalo 09:00–11:00 -> 120 min (1244.4565ms)
+  ✔ M-03: Detención 08:00–14:00 con FUERA_DE_SERVICIO 10:00–12:00 -> 240, descontado 120 (1922.4373ms)
+  ✔ M-04: Eliminada no cuenta, cancelada sí cuenta (2108.5039ms)
+  ✔ M-05: Período abierto desde hace 2 h; con hasta = hace 1 h corta en 60 (3167.9342ms)
+  ✔ M-06: Desglose por tipo: Correctiva 08:00–12:00 y Preventiva 10:00–13:00 -> total 300, CORR 240, PREV 180 (1920.3801ms)
+  ✔ M-07: Máquina sin detenciones -> inactividad 0 y periodos vacío (1411.5146ms)
+  ✔ M-08: Autorización: sin permiso -> 403; alcance SECTORES máquina ajena -> 404 (1780.6542ms)
+  ✔ M-09: Validación cruzada: función SQL vs fusión de intervalos en TypeScript para 6 períodos (1530.777ms)
+  ✔ M-10: Período abierto con desde en el futuro -> responde 200 con inactividad = 0, sin 500 (2651.3648ms)
+  ✔ R-01: /reportes/inactividad: orden DESC por inactividad, filtro de sector y alcance SECTORES (3706.9484ms)
+  ✔ R-02: /reportes/tiempos?agrupar=ejecucion -> INTERNA: cant 2, prom 90, tot 180; EXTERNA: cant 1, prom 300, tot 300 (1398.2226ms)
+  ✔ R-03: Validaciones de fechas e intervalo -> 422 DATOS_INVALIDOS (3585.554ms)
+  ✔ R-05: Usuario con REPORTES_CONSULTAR alcance PROPIAS asignado a sector 1 (4783.5497ms)
+✔ Etapa 8 — Tiempos de gestión e inactividad real de las máquinas (92562.146ms)
+(node:2312) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ Etapa U — Usuarios, perfiles y contraseñas
+  ✔ U-01: Admin crea un operario con dos sectores (2592.4987ms)
+  ✔ U-02: Validaciones en alta de usuario (2822.2998ms)
+  ✔ U-03: Operario nuevo ingresa con contraseña temporal (1243.4414ms)
+  ✔ U-04: Cambio de contraseña del operario e invalidación de sesión anterior (3298.2011ms)
+  ✔ U-05: Permisos efectivos en login y /me sin permisos en JWT (2376.4746ms)
+  ✔ U-06: PATCH modifica perfil y sectores con auditoría (3021.1226ms)
+  ✔ U-07: Protecciones de autogestión para el administrador (504.7298ms)
+  ✔ U-08: Responsable con USUARIOS_GESTIONAR no puede asignar perfil con permisos superiores (3876.9735ms)
+  ✔ U-09: Protección de último administrador activo (4849.0298ms)
+  ✔ U-10: Concurrencia en desactivación de administradores (7233.4439ms)
+  ✔ U-11: Desactivar responsable con intervenciones abiertas (2454.7554ms)
+  ✔ U-12: Reactivar usuario y validaciones de motivo (2045.1507ms)
+  ✔ U-13: Restablecer contraseña temporal e invalidar token previo (2990.4248ms)
+  ✔ U-14: Endpoints protegidos con USUARIOS_GESTIONAR rechazan usuarios sin permiso (2115.8788ms)
+  ✔ U-15: Consultas de usuarios con filtros y detalle sin password_hash (1149.5879ms)
+  ✔ U-16: Capacidades y restricciones de perfiles I_D y DIRECCION (7798.394ms)
+Error al crear usuario: error: Fallo forzado de prueba auditoria
+    at C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\node_modules\pg\lib\client.js:694:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async <anonymous> (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\usuarios.ts:471:5)
+    at async dispatch (file:///C:/Users/andre/.gemini/antigravity-ide/scratch/sistema-mantenimiento-industrial/node_modules/hono/dist/compose.js:35:11)
+    at async <anonymous> (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\middleware.ts:102:5)
+    at async dispatch (file:///C:/Users/andre/.gemini/antigravity-ide/scratch/sistema-mantenimiento-industrial/node_modules/hono/dist/compose.js:35:11)
+    at async <anonymous> (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\middleware.ts:78:3)
+    at async dispatch (file:///C:/Users/andre/.gemini/antigravity-ide/scratch/sistema-mantenimiento-industrial/node_modules/hono/dist/compose.js:35:11)
+    at async <anonymous> (C:\Users\andre\.gemini\antigravity-ide\scratch\sistema-mantenimiento-industrial\backend\functions\middleware.ts:27:3)
+    at async dispatch (file:///C:/Users/andre/.gemini/antigravity-ide/scratch/sistema-mantenimiento-industrial/node_modules/hono/dist/compose.js:35:11) {
+  length: 159,
+  severity: 'ERROR',
+  code: 'P0001',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: 'PL/pgSQL function trg_fn_test_fail_auditoria() line 4 at RAISE',
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'pl_exec.c',
+  line: '3909',
+  routine: 'exec_stmt_raise'
+}
+  ✔ U-17: Rollback transaccional si falla la inserción de auditoría en alta (2558.7323ms)
+  ✔ U-19: Uso inmediato de nuevo token e invalidación determinista por versión de sesión (2666.3672ms)
+✔ Etapa U — Usuarios, perfiles y contraseñas (59439.2285ms)
+ℹ tests 212
+ℹ suites 0
+ℹ pass 212
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2305912.5563
+
+[test:todo] Total: 270 pruebas, 270 correctas, 0 fallidas (migraciones: 58, negocio: 212)

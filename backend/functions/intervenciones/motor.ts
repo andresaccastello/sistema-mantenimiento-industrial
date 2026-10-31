@@ -6,9 +6,11 @@ import { bloquearIntervencion } from './bloqueos.ts';
 import { recalcularEstadoMaquina } from './recalculoMaquina.ts';
 import { registrarCambioEstado } from './cambioEstado.ts';
 import { registrarAuditoria, registrarNotificaciones } from './auditoria.ts';
-import { AccionTransicion, buscarTransicion, transicionesDeAccion } from './transiciones.ts';
+import { AccionTransicion, buscarTransicion, transicionesDeAccion, TransicionDef } from './transiciones.ts';
 import { validarFechaISO } from './fechas.ts';
 import { validarDecisionRecuperacion, aplicarDecisionRecuperacion } from './recuperacion.ts';
+import { verificarRegistrarDetencion } from './detenciones.ts';
+export { verificarRegistrarDetencion };
 
 /**
  * Verifica si un usuario es "responsable habilitado" para una intervención concreta:
@@ -70,6 +72,50 @@ export async function validarResponsableHabilitado(
 }
 
 /**
+ * Verificación sin efectos para TOMAR (API-01 / Etapa API.1).
+ * Comprueba: permiso INTERVENCIONES_ASIGNARSE, estado PENDIENTE, sin responsable, habilitación.
+ */
+export async function verificarTomar(
+  db: pg.Pool | pg.PoolClient,
+  intervencion: any,
+  maquina: any,
+  usuario: UsuarioVisibilidad
+): Promise<void> {
+  if (!('INTERVENCIONES_ASIGNARSE' in usuario.permisos)) {
+    throw new ErrorNegocio(
+      403,
+      'PERMISO_INSUFICIENTE',
+      'No tienes permiso para asignarte intervenciones'
+    );
+  }
+
+  if (intervencion.estado !== 'PENDIENTE') {
+    throw new ErrorNegocio(
+      409,
+      'TRANSICION_NO_PERMITIDA',
+      `Solo se pueden tomar intervenciones en estado PENDIENTE (estado actual: ${intervencion.estado})`
+    );
+  }
+
+  if (intervencion.responsable_usuario_id !== null) {
+    if (Number(intervencion.responsable_usuario_id) === usuario.id) {
+      throw new ErrorNegocio(
+        422,
+        'RESPONSABLE_SIN_CAMBIOS',
+        'Ya eres el responsable asignado de esta intervención'
+      );
+    }
+    throw new ErrorNegocio(
+      409,
+      'INTERVENCION_YA_ASIGNADA',
+      'La intervención ya fue asignada a otro responsable'
+    );
+  }
+
+  await validarResponsableHabilitado(db, usuario.id, maquina.sector_id);
+}
+
+/**
  * 5.1 POST /:id/tomar
  */
 export async function tomarIntervencionServicio(
@@ -92,14 +138,6 @@ export async function tomarIntervencionServicio(
     usuario
   );
 
-  if (intervencion.estado !== 'PENDIENTE') {
-    throw new ErrorNegocio(
-      409,
-      'TRANSICION_NO_PERMITIDA',
-      `Solo se pueden tomar intervenciones en estado PENDIENTE (estado actual: ${intervencion.estado})`
-    );
-  }
-
   if (estadoEsperado !== intervencion.estado) {
     throw new ErrorNegocio(
       409,
@@ -108,23 +146,7 @@ export async function tomarIntervencionServicio(
     );
   }
 
-  if (intervencion.responsable_usuario_id !== null) {
-    if (Number(intervencion.responsable_usuario_id) === usuario.id) {
-      throw new ErrorNegocio(
-        422,
-        'RESPONSABLE_SIN_CAMBIOS',
-        'Ya eres el responsable asignado de esta intervención'
-      );
-    }
-    throw new ErrorNegocio(
-      409,
-      'INTERVENCION_YA_ASIGNADA',
-      'La intervención ya fue asignada a otro responsable'
-    );
-  }
-
-  // Validar que el usuario sea responsable habilitado
-  await validarResponsableHabilitado(client, usuario.id, maquina.sector_id);
+  await verificarTomar(client, intervencion, maquina, usuario);
 
   // Asignar responsable (sin cambiar estado ni historial_estados_intervencion)
   await client.query(
@@ -150,6 +172,34 @@ export async function tomarIntervencionServicio(
 }
 
 /**
+ * Verificación sin efectos para ASIGNAR (API-01 / Etapa API.1).
+ * Comprueba: permiso INTERVENCIONES_ASIGNAR, estado permitido. No el usuario destino.
+ */
+export async function verificarAsignar(
+  _db: pg.Pool | pg.PoolClient,
+  intervencion: any,
+  _maquina: any,
+  usuario: UsuarioVisibilidad
+): Promise<void> {
+  if (!('INTERVENCIONES_ASIGNAR' in usuario.permisos)) {
+    throw new ErrorNegocio(
+      403,
+      'PERMISO_INSUFICIENTE',
+      'No tienes permiso para asignar responsables a intervenciones'
+    );
+  }
+
+  const estadosPermitidos = ['PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS'];
+  if (!estadosPermitidos.includes(intervencion.estado)) {
+    throw new ErrorNegocio(
+      409,
+      'TRANSICION_NO_PERMITIDA',
+      `No se puede asignar responsable en estado ${intervencion.estado}`
+    );
+  }
+}
+
+/**
  * 5.2 PUT /:id/responsable
  */
 export async function asignarResponsableServicio(
@@ -160,28 +210,11 @@ export async function asignarResponsableServicio(
   motivo: string | null,
   estadoEsperado: string
 ) {
-  if (!('INTERVENCIONES_ASIGNAR' in usuario.permisos)) {
-    throw new ErrorNegocio(
-      403,
-      'PERMISO_INSUFICIENTE',
-      'No tienes permiso para asignar responsables a intervenciones'
-    );
-  }
-
   const { intervencion, maquina } = await bloquearIntervencion(
     client,
     intervencionId,
     usuario
   );
-
-  const estadosPermitidos = ['PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS'];
-  if (!estadosPermitidos.includes(intervencion.estado)) {
-    throw new ErrorNegocio(
-      409,
-      'TRANSICION_NO_PERMITIDA',
-      `No se puede asignar responsable en estado ${intervencion.estado}`
-    );
-  }
 
   if (estadoEsperado !== intervencion.estado) {
     throw new ErrorNegocio(
@@ -190,6 +223,8 @@ export async function asignarResponsableServicio(
       'El estado de la intervención ha cambiado por otra operación'
     );
   }
+
+  await verificarAsignar(client, intervencion, maquina, usuario);
 
   const responsableAnteriorId = intervencion.responsable_usuario_id
     ? Number(intervencion.responsable_usuario_id)
@@ -253,26 +288,19 @@ export async function asignarResponsableServicio(
 }
 
 /**
- * 5.3 DELETE /:id/responsable
+ * Verificación sin efectos para DESASIGNAR (API-01 / Etapa API.1).
+ * Comprueba: permiso INTERVENCIONES_ASIGNAR o propio con ASIGNARSE, estado PENDIENTE, que tenga responsable.
  */
-export async function desasignarResponsableServicio(
-  client: pg.PoolClient,
-  intervencionId: number,
-  usuario: UsuarioVisibilidad,
-  motivo: string | null,
-  estadoEsperado: string
-) {
-  const { intervencion } = await bloquearIntervencion(
-    client,
-    intervencionId,
-    usuario
-  );
-
+export async function verificarDesasignar(
+  _db: pg.Pool | pg.PoolClient,
+  intervencion: any,
+  _maquina: any,
+  usuario: UsuarioVisibilidad
+): Promise<void> {
   const responsableActual = intervencion.responsable_usuario_id
     ? Number(intervencion.responsable_usuario_id)
     : null;
 
-  // Verificación de permiso: INTERVENCIONES_ASIGNAR o (es el responsable y tiene INTERVENCIONES_ASIGNARSE)
   const tieneAsignar = 'INTERVENCIONES_ASIGNAR' in usuario.permisos;
   const esPropioResponsableConAsignarse =
     responsableActual === usuario.id && 'INTERVENCIONES_ASIGNARSE' in usuario.permisos;
@@ -293,6 +321,31 @@ export async function desasignarResponsableServicio(
     );
   }
 
+  if (responsableActual === null) {
+    throw new ErrorNegocio(
+      422,
+      'RESPONSABLE_SIN_CAMBIOS',
+      'La intervención no tiene ningún responsable asignado'
+    );
+  }
+}
+
+/**
+ * 5.3 DELETE /:id/responsable
+ */
+export async function desasignarResponsableServicio(
+  client: pg.PoolClient,
+  intervencionId: number,
+  usuario: UsuarioVisibilidad,
+  motivo: string | null,
+  estadoEsperado: string
+) {
+  const { intervencion } = await bloquearIntervencion(
+    client,
+    intervencionId,
+    usuario
+  );
+
   if (estadoEsperado !== intervencion.estado) {
     throw new ErrorNegocio(
       409,
@@ -301,13 +354,7 @@ export async function desasignarResponsableServicio(
     );
   }
 
-  if (responsableActual === null) {
-    throw new ErrorNegocio(
-      422,
-      'RESPONSABLE_SIN_CAMBIOS',
-      'La intervención no tiene ningún responsable asignado'
-    );
-  }
+  await verificarDesasignar(client, intervencion, null, usuario);
 
   const motivoLimpio = motivo ? motivo.trim() : '';
   if (motivoLimpio.length === 0) {
@@ -317,6 +364,8 @@ export async function desasignarResponsableServicio(
       'El motivo para quitar el responsable es obligatorio'
     );
   }
+
+  const responsableActual = Number(intervencion.responsable_usuario_id);
 
   await client.query(
     'UPDATE intervenciones SET responsable_usuario_id = NULL, actualizado_en = NOW() WHERE id = $1',
@@ -413,11 +462,12 @@ export async function aplicarReglaActor(
     camposExtra?: Record<string, any>;
     eventos?: Array<{ tipo: string; payload: any }>;
     motivoAutoAsignacion?: string;
+    actorInfo?: { responsableId: number; requiereAutoAsignacion: boolean };
   }
 ): Promise<{ responsableId: number; autoAsignado: boolean }> {
-  const { intervencionId, intervencion, maquina, usuario, validaHabilitacion, camposExtra, eventos, motivoAutoAsignacion } = opts;
+  const { intervencionId, intervencion, maquina, usuario, validaHabilitacion, camposExtra, eventos, motivoAutoAsignacion, actorInfo } = opts;
 
-  const { responsableId, requiereAutoAsignacion } = await verificarReglaActor(client, {
+  const { responsableId, requiereAutoAsignacion } = actorInfo || await verificarReglaActor(client, {
     intervencion,
     maquina,
     usuario,
@@ -458,6 +508,59 @@ export async function aplicarReglaActor(
 }
 
 /**
+ * Verificación sin efectos de transiciones de estado (API-01 / Etapa API.1).
+ * 1. buscarTransicion(accion, estado); si no hay transición -> 409 TRANSICION_NO_PERMITIDA.
+ * 2. Controla el permiso de esa transición.
+ * 3. Si requiereActor, llama a verificarReglaActor con el validaHabilitacion de la tabla.
+ */
+export async function verificarTransicion(
+  db: pg.Pool | pg.PoolClient,
+  accion: AccionTransicion,
+  intervencion: any,
+  maquina: any,
+  usuario: UsuarioVisibilidad
+): Promise<TransicionDef & { actorInfo?: { responsableId: number; requiereAutoAsignacion: boolean } }> {
+  const transiciones = transicionesDeAccion(accion);
+  if (transiciones.length === 0) {
+    throw new ErrorNegocio(
+      409,
+      'TRANSICION_NO_PERMITIDA',
+      `Acción de transición desconocida: ${accion}`
+    );
+  }
+
+  const permisoRequerido = transiciones[0].permiso;
+  if (!(permisoRequerido in usuario.permisos)) {
+    throw new ErrorNegocio(
+      403,
+      'PERMISO_INSUFICIENTE',
+      'No posees permiso para ejecutar este cambio de estado'
+    );
+  }
+
+  const transicion = buscarTransicion(accion, intervencion.estado);
+  if (!transicion) {
+    throw new ErrorNegocio(
+      409,
+      'TRANSICION_NO_PERMITIDA',
+      `La acción ${accion} no está permitida desde el estado ${intervencion.estado}`
+    );
+  }
+
+  let actorInfo: { responsableId: number; requiereAutoAsignacion: boolean } | undefined;
+  if (transicion.requiereActor) {
+    actorInfo = await verificarReglaActor(db, {
+      intervencion,
+      maquina,
+      usuario,
+      validaHabilitacion: transicion.validaHabilitacion,
+    });
+  }
+
+  return { ...transicion, actorInfo };
+}
+
+/**
  * 6. Transición de estado (T1, T4, T5)
  */
 export async function ejecutarTransicionServicio(
@@ -471,7 +574,6 @@ export async function ejecutarTransicionServicio(
     fechaInicio?: string | null;
   }
 ) {
-  // 1. Obtener las definiciones de transición para la acción
   const transiciones = transicionesDeAccion(accion);
   if (transiciones.length === 0) {
     throw new ErrorNegocio(
@@ -481,13 +583,12 @@ export async function ejecutarTransicionServicio(
     );
   }
 
-  // 2. Validar permiso tomado de las filas de la acción (todas comparten el mismo permiso)
   const permisoRequerido = transiciones[0].permiso;
   if (!(permisoRequerido in usuario.permisos)) {
     throw new ErrorNegocio(
       403,
       'PERMISO_INSUFICIENTE',
-      'No tienes permiso para ejecutar este cambio de estado'
+      'No posees permiso para ejecutar este cambio de estado'
     );
   }
 
@@ -497,7 +598,7 @@ export async function ejecutarTransicionServicio(
     usuario
   );
 
-  // 3. Validar estado esperado coincidente
+  // Validar estado esperado coincidente
   if (params.estadoEsperado !== intervencion.estado) {
     throw new ErrorNegocio(
       409,
@@ -506,15 +607,7 @@ export async function ejecutarTransicionServicio(
     );
   }
 
-  // 4. Seleccionar la fila de transición cuyo 'desde' coincide con el estado actual
-  const transicion = transiciones.find((t) => t.desde === intervencion.estado);
-  if (!transicion) {
-    throw new ErrorNegocio(
-      409,
-      'TRANSICION_NO_PERMITIDA',
-      `La acción ${accion} no está permitida desde el estado ${intervencion.estado}`
-    );
-  }
+  const transicion = await verificarTransicion(client, accion, intervencion, maquina, usuario);
 
   const camposExtra: Record<string, any> = {};
   const eventos: Array<{ tipo: string; payload: any }> = [];
@@ -537,6 +630,7 @@ export async function ejecutarTransicionServicio(
       camposExtra,
       eventos,
       motivoAutoAsignacion: 'Asignación automática al iniciar trabajo',
+      actorInfo: transicion.actorInfo,
     });
     nuevoResponsableId = resActor.responsableId;
   }
@@ -694,28 +788,7 @@ export async function finalizarIntervencionServicio(
     throw new ErrorNegocio(409, 'ESTADO_DESACTUALIZADO', 'El estado de la intervención ha cambiado concurrentemente');
   }
 
-  const transicion = transiciones.find((t) => t.desde === intervencion.estado);
-  if (!transicion) {
-    throw new ErrorNegocio(
-      409,
-      'TRANSICION_NO_PERMITIDA',
-      `No se puede finalizar una intervención en estado ${intervencion.estado}`
-    );
-  }
-
-  if (!(transicion.permiso in usuario.permisos)) {
-    throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No posees permiso para finalizar intervenciones');
-  }
-
-  if (transicion.requiereActor) {
-    await aplicarReglaActor(client, {
-      intervencionId,
-      intervencion,
-      maquina,
-      usuario,
-      validaHabilitacion: transicion.validaHabilitacion,
-    });
-  }
+  const transicion = await verificarTransicion(client, 'FINALIZAR', intervencion, maquina, usuario);
 
   // Validaciones de datos
   const trabajoRealizado = typeof body.trabajo_realizado === 'string' ? body.trabajo_realizado.trim() : '';
@@ -769,6 +842,17 @@ export async function finalizarIntervencionServicio(
     fechaPorDefecto: fechaFinalizacion,
     observacionRecuperacion: body.observacion_recuperacion,
   });
+
+  if (transicion.requiereActor) {
+    await aplicarReglaActor(client, {
+      intervencionId,
+      intervencion,
+      maquina,
+      usuario,
+      validaHabilitacion: transicion.validaHabilitacion,
+      actorInfo: transicion.actorInfo,
+    });
+  }
 
   // Mutaciones:
   await registrarCambioEstado(client, {
@@ -919,31 +1003,7 @@ export async function resolverAhoraIntervencionServicio(
     throw new ErrorNegocio(409, 'ESTADO_DESACTUALIZADO', 'El estado de la intervención ha cambiado concurrentemente');
   }
 
-  const transicion = transiciones.find((t) => t.desde === intervencion.estado);
-  if (!transicion) {
-    throw new ErrorNegocio(
-      409,
-      'TRANSICION_NO_PERMITIDA',
-      `No se puede resolver inmediatamente una intervención en estado ${intervencion.estado}`
-    );
-  }
-
-  if (!(transicion.permiso in usuario.permisos)) {
-    throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No posees permiso para finalizar intervenciones');
-  }
-
-  let responsableId = intervencion.responsable_usuario_id ? Number(intervencion.responsable_usuario_id) : null;
-  if (transicion.requiereActor) {
-    const resActor = await aplicarReglaActor(client, {
-      intervencionId,
-      intervencion,
-      maquina,
-      usuario,
-      validaHabilitacion: transicion.validaHabilitacion,
-      motivoAutoAsignacion: 'Asignación automática por resolución inmediata',
-    });
-    responsableId = resActor.responsableId;
-  }
+  const transicion = await verificarTransicion(client, 'RESOLVER_AHORA', intervencion, maquina, usuario);
 
   // fecha_inicio es obligatoria
   if (body.fecha_inicio === undefined || body.fecha_inicio === null || String(body.fecha_inicio).trim() === '') {
@@ -1009,6 +1069,20 @@ export async function resolverAhoraIntervencionServicio(
     fechaPorDefecto: fechaFinalizacion,
     observacionRecuperacion: body.observacion_recuperacion,
   });
+
+  let responsableId = intervencion.responsable_usuario_id ? Number(intervencion.responsable_usuario_id) : null;
+  if (transicion.requiereActor) {
+    const resActor = await aplicarReglaActor(client, {
+      intervencionId,
+      intervencion,
+      maquina,
+      usuario,
+      validaHabilitacion: transicion.validaHabilitacion,
+      motivoAutoAsignacion: 'Asignación automática por resolución inmediata',
+      actorInfo: transicion.actorInfo,
+    });
+    responsableId = resActor.responsableId;
+  }
 
   // EXACTAMENTE DOS FILAS EN HISTORIAL (D-30):
   // 1. PENDIENTE -> EN_PROCESO
@@ -1138,28 +1212,7 @@ export async function cancelarIntervencionServicio(
     throw new ErrorNegocio(409, 'ESTADO_DESACTUALIZADO', 'El estado de la intervención ha cambiado concurrentemente');
   }
 
-  const transicion = transiciones.find((t) => t.desde === intervencion.estado);
-  if (!transicion) {
-    throw new ErrorNegocio(
-      409,
-      'TRANSICION_NO_PERMITIDA',
-      `No se puede cancelar una intervención en estado ${intervencion.estado}`
-    );
-  }
-
-  if (!(transicion.permiso in usuario.permisos)) {
-    throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No posees permiso para cancelar intervenciones');
-  }
-
-  if (transicion.requiereActor) {
-    await aplicarReglaActor(client, {
-      intervencionId,
-      intervencion,
-      maquina,
-      usuario,
-      validaHabilitacion: transicion.validaHabilitacion,
-    });
-  }
+  const transicion = await verificarTransicion(client, 'CANCELAR', intervencion, maquina, usuario);
 
   // Motivo de cancelación obligatorio (min 5 caracteres)
   const motivo = typeof body.motivo === 'string' ? body.motivo.trim() : '';
@@ -1287,18 +1340,7 @@ export async function reabrirIntervencionServicio(
     throw new ErrorNegocio(409, 'ESTADO_DESACTUALIZADO', 'El estado de la intervención ha cambiado concurrentemente');
   }
 
-  const transicion = transiciones.find((t) => t.desde === intervencion.estado);
-  if (!transicion) {
-    throw new ErrorNegocio(
-      409,
-      'TRANSICION_NO_PERMITIDA',
-      `No se puede reabrir una intervención en estado ${intervencion.estado}`
-    );
-  }
-
-  if (!(transicion.permiso in usuario.permisos)) {
-    throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No posees permiso para reabrir intervenciones');
-  }
+  const transicion = await verificarTransicion(client, 'REABRIR', intervencion, maquina, usuario);
 
   const motivo = typeof body.motivo === 'string' ? body.motivo.trim() : '';
   if (motivo.length < 5) {
@@ -1550,6 +1592,32 @@ export async function obtenerMotivosBloqueoEliminacion(
 }
 
 /**
+ * Verificación sin efectos para ELIMINAR (API-01 / Etapa API.1).
+ * Comprueba: permiso INTERVENCIONES_ELIMINAR y obtenerMotivosBloqueoEliminacion.
+ * (INTERVENCIONES_ELIMINAR no tiene alcance según análisis 8.3).
+ */
+export async function verificarEliminar(
+  db: pg.Pool | pg.PoolClient,
+  intervencion: any,
+  _maquina: any,
+  usuario: UsuarioVisibilidad
+): Promise<void> {
+  if (!('INTERVENCIONES_ELIMINAR' in usuario.permisos)) {
+    throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No posees permiso para eliminar intervenciones');
+  }
+
+  const motivosBloqueo = await obtenerMotivosBloqueoEliminacion(db, intervencion.id, intervencion);
+  if (motivosBloqueo.length > 0) {
+    throw new ErrorNegocio(
+      409,
+      'ELIMINACION_NO_PERMITIDA',
+      'No se puede eliminar la intervención porque registra actividad previa',
+      { motivos: motivosBloqueo }
+    );
+  }
+}
+
+/**
  * 6. POST /api/intervenciones/:id/eliminar (Eliminación lógica)
  */
 export async function eliminarIntervencionServicio(
@@ -1573,17 +1641,7 @@ export async function eliminarIntervencionServicio(
     throw new ErrorNegocio(422, 'MOTIVO_REQUERIDO', 'El motivo de la eliminación es obligatorio y debe tener al menos 5 caracteres');
   }
 
-  // 3. Evaluar condiciones de actividad relevante
-  const motivosBloqueo = await obtenerMotivosBloqueoEliminacion(client, intervencionId, intervencion);
-
-  if (motivosBloqueo.length > 0) {
-    throw new ErrorNegocio(
-      409,
-      'ELIMINACION_NO_PERMITIDA',
-      'No se puede eliminar la intervención porque registra actividad previa',
-      { motivos: motivosBloqueo }
-    );
-  }
+  await verificarEliminar(client, intervencion, maquina, usuario);
 
   // 4. Período abierto (D-34)
   const resPeriodoAbierto = await client.query(
@@ -1692,35 +1750,24 @@ export async function eliminarIntervencionServicio(
 }
 
 /**
- * 7. PATCH /api/intervenciones/:id (Edición)
+ * Verificación sin efectos para EDITAR (API-01 / Etapa API.1).
+ * Comprueba: permiso INTERVENCIONES_EDITAR, estado editable, reglas de alcance D-33.
  */
-export async function editarIntervencionServicio(
-  client: pg.PoolClient,
-  intervencionId: number,
-  usuario: UsuarioVisibilidad,
-  body: Record<string, any>
-) {
+export async function verificarEditar(
+  _db: pg.Pool | pg.PoolClient,
+  intervencion: any,
+  maquina: any,
+  usuario: UsuarioVisibilidad
+): Promise<void> {
   if (!('INTERVENCIONES_EDITAR' in usuario.permisos)) {
     throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No posees permiso para editar intervenciones');
   }
 
-  const { intervencion, maquina } = await bloquearIntervencion(client, intervencionId, usuario);
-
-  if (!body.estado_esperado || typeof body.estado_esperado !== 'string') {
-    throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
-  }
-
-  if (body.estado_esperado !== intervencion.estado) {
-    throw new ErrorNegocio(409, 'ESTADO_DESACTUALIZADO', 'El estado de la intervención ha cambiado concurrentemente');
-  }
-
-  // 2. Estados editables
   const estadosEditables = ['PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS'];
   if (!estadosEditables.includes(intervencion.estado)) {
     throw new ErrorNegocio(409, 'EDICION_NO_PERMITIDA', `No se permite la edición de intervenciones en estado ${intervencion.estado}`);
   }
 
-  // 3. Alcance de INTERVENCIONES_EDITAR
   const alcanceEditar = usuario.permisos['INTERVENCIONES_EDITAR'];
   if (alcanceEditar === 'PROPIAS') {
     const esPropia = Number(intervencion.creado_por_usuario_id) === usuario.id;
@@ -1739,6 +1786,28 @@ export async function editarIntervencionServicio(
       throw new ErrorNegocio(403, 'EDICION_NO_PERMITIDA', 'No tienes alcance sobre el sector de la máquina asociada');
     }
   }
+}
+
+/**
+ * 7. PATCH /api/intervenciones/:id (Edición)
+ */
+export async function editarIntervencionServicio(
+  client: pg.PoolClient,
+  intervencionId: number,
+  usuario: UsuarioVisibilidad,
+  body: Record<string, any>
+) {
+  const { intervencion, maquina } = await bloquearIntervencion(client, intervencionId, usuario);
+
+  if (!body.estado_esperado || typeof body.estado_esperado !== 'string') {
+    throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo estado_esperado es obligatorio');
+  }
+
+  if (body.estado_esperado !== intervencion.estado) {
+    throw new ErrorNegocio(409, 'ESTADO_DESACTUALIZADO', 'El estado de la intervención ha cambiado concurrentemente');
+  }
+
+  await verificarEditar(client, intervencion, maquina, usuario);
 
   // 4. Campos aceptados: solo descripcion y observaciones (además de estado_esperado)
   for (const key of Object.keys(body)) {
@@ -1846,10 +1915,30 @@ export async function editarIntervencionServicio(
   };
 }
 
+const ACCIONES_ORDEN: Array<{
+  accion: string;
+  verificar: (db: pg.Pool | pg.PoolClient, intervencion: any, maquina: any, usuario: UsuarioVisibilidad) => Promise<any>;
+}> = [
+  { accion: 'TOMAR', verificar: (db, i, m, u) => verificarTomar(db, i, m, u) },
+  { accion: 'ASIGNAR', verificar: (db, i, m, u) => verificarAsignar(db, i, m, u) },
+  { accion: 'DESASIGNAR', verificar: (db, i, m, u) => verificarDesasignar(db, i, m, u) },
+  { accion: 'INICIAR', verificar: (db, i, m, u) => verificarTransicion(db, 'INICIAR', i, m, u) },
+  { accion: 'ESPERAR_REPUESTOS', verificar: (db, i, m, u) => verificarTransicion(db, 'ESPERAR_REPUESTOS', i, m, u) },
+  { accion: 'REANUDAR', verificar: (db, i, m, u) => verificarTransicion(db, 'REANUDAR', i, m, u) },
+  { accion: 'FINALIZAR', verificar: (db, i, m, u) => verificarTransicion(db, 'FINALIZAR', i, m, u) },
+  { accion: 'RESOLVER_AHORA', verificar: (db, i, m, u) => verificarTransicion(db, 'RESOLVER_AHORA', i, m, u) },
+  { accion: 'CANCELAR', verificar: (db, i, m, u) => verificarTransicion(db, 'CANCELAR', i, m, u) },
+  { accion: 'REABRIR', verificar: (db, i, m, u) => verificarTransicion(db, 'REABRIR', i, m, u) },
+  { accion: 'REGISTRAR_DETENCION', verificar: (db, i, m, u) => verificarRegistrarDetencion(db, i, m, u) },
+  { accion: 'EDITAR', verificar: (db, i, m, u) => verificarEditar(db, i, m, u) },
+  { accion: 'ELIMINAR', verificar: (db, i, m, u) => verificarEliminar(db, i, m, u) },
+];
+
 /**
  * 8. API-01 — Calcula las acciones disponibles para un usuario sobre una intervención.
  * Siempre en el orden canónico y sin repetidos:
  * TOMAR, ASIGNAR, DESASIGNAR, INICIAR, ESPERAR_REPUESTOS, REANUDAR, FINALIZAR, RESOLVER_AHORA, CANCELAR, REABRIR, REGISTRAR_DETENCION, EDITAR, ELIMINAR.
+ * Sin reglas propias: evalúa cada una de las 13 acciones llamando a su función de verificación.
  */
 export async function obtenerAccionesDisponibles(
   db: pg.Pool | pg.PoolClient,
@@ -1863,7 +1952,7 @@ export async function obtenerAccionesDisponibles(
   },
   maquina: { id: number; sector_id: number },
   usuario: UsuarioVisibilidad,
-  tieneDetencionAbierta: boolean
+  _tieneDetencionAbierta?: boolean
 ): Promise<string[]> {
   if (intervencion.eliminado_en !== null && intervencion.eliminado_en !== undefined) {
     return [];
@@ -1871,189 +1960,15 @@ export async function obtenerAccionesDisponibles(
 
   const acciones: string[] = [];
 
-  const usuarioHabilitado = (usuarioId: number, maquinaSectorId: number): boolean | null => {
-    if (usuarioId === usuario.id) {
-      if (!('INTERVENCIONES_RECIBIR_ASIGNACION' in usuario.permisos)) return false;
-      if (!('INTERVENCIONES_VER' in usuario.permisos)) return false;
-      const alcanceVer = usuario.permisos['INTERVENCIONES_VER'];
-      if (alcanceVer === 'SECTORES' && !usuario.sectores.includes(Number(maquinaSectorId))) return false;
-      return true;
-    }
-    return null;
-  };
-
-  const verificarHabilitadoDestino = async (usuarioId: number, maquinaSectorId: number): Promise<boolean> => {
-    const quick = usuarioHabilitado(usuarioId, maquinaSectorId);
-    if (quick !== null) return quick;
+  for (const item of ACCIONES_ORDEN) {
     try {
-      await validarResponsableHabilitado(db, usuarioId, maquinaSectorId);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  // 1. TOMAR
-  if (intervencion.estado === 'PENDIENTE' && intervencion.responsable_usuario_id === null) {
-    if ('INTERVENCIONES_ASIGNARSE' in usuario.permisos) {
-      if (await verificarHabilitadoDestino(usuario.id, maquina.sector_id)) {
-        acciones.push('TOMAR');
+      await item.verificar(db, intervencion, maquina, usuario);
+      acciones.push(item.accion);
+    } catch (err) {
+      if (err instanceof ErrorNegocio) {
+        continue;
       }
-    }
-  }
-
-  // 2. ASIGNAR (incluye reasignar)
-  if (['PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS'].includes(intervencion.estado)) {
-    if ('INTERVENCIONES_ASIGNAR' in usuario.permisos) {
-      acciones.push('ASIGNAR');
-    }
-  }
-
-  // 3. DESASIGNAR
-  if (intervencion.estado === 'PENDIENTE' && intervencion.responsable_usuario_id !== null) {
-    const respId = Number(intervencion.responsable_usuario_id);
-    const tieneAsignar = 'INTERVENCIONES_ASIGNAR' in usuario.permisos;
-    const esPropioConAsignarse = respId === usuario.id && 'INTERVENCIONES_ASIGNARSE' in usuario.permisos;
-    if (tieneAsignar || esPropioConAsignarse) {
-      acciones.push('DESASIGNAR');
-    }
-  }
-
-  // 4. INICIAR (T1: PENDIENTE -> EN_PROCESO)
-  if (intervencion.estado === 'PENDIENTE') {
-    if ('INTERVENCIONES_CAMBIAR_ESTADO' in usuario.permisos) {
-      const respId = intervencion.responsable_usuario_id ? Number(intervencion.responsable_usuario_id) : null;
-      if (respId === null) {
-        if ('INTERVENCIONES_ASIGNARSE' in usuario.permisos) {
-          if (await verificarHabilitadoDestino(usuario.id, maquina.sector_id)) {
-            acciones.push('INICIAR');
-          }
-        }
-      } else {
-        if (respId === usuario.id || 'INTERVENCIONES_ASIGNAR' in usuario.permisos) {
-          if (await verificarHabilitadoDestino(respId, maquina.sector_id)) {
-            acciones.push('INICIAR');
-          }
-        }
-      }
-    }
-  }
-
-  // 5. ESPERAR_REPUESTOS (T4: EN_PROCESO -> EN_ESPERA_REPUESTOS)
-  if (intervencion.estado === 'EN_PROCESO') {
-    if ('INTERVENCIONES_CAMBIAR_ESTADO' in usuario.permisos) {
-      const respId = intervencion.responsable_usuario_id ? Number(intervencion.responsable_usuario_id) : null;
-      if (respId !== null && (respId === usuario.id || 'INTERVENCIONES_ASIGNAR' in usuario.permisos)) {
-        acciones.push('ESPERAR_REPUESTOS');
-      }
-    }
-  }
-
-  // 6. REANUDAR (T5: EN_ESPERA_REPUESTOS -> EN_PROCESO)
-  if (intervencion.estado === 'EN_ESPERA_REPUESTOS') {
-    if ('INTERVENCIONES_CAMBIAR_ESTADO' in usuario.permisos) {
-      const respId = intervencion.responsable_usuario_id ? Number(intervencion.responsable_usuario_id) : null;
-      if (respId !== null && (respId === usuario.id || 'INTERVENCIONES_ASIGNAR' in usuario.permisos)) {
-        acciones.push('REANUDAR');
-      }
-    }
-  }
-
-  // 7. FINALIZAR (T6: EN_PROCESO -> FINALIZADA)
-  if (intervencion.estado === 'EN_PROCESO') {
-    if ('INTERVENCIONES_FINALIZAR' in usuario.permisos) {
-      const respId = intervencion.responsable_usuario_id ? Number(intervencion.responsable_usuario_id) : null;
-      if (respId !== null && (respId === usuario.id || 'INTERVENCIONES_ASIGNAR' in usuario.permisos)) {
-        acciones.push('FINALIZAR');
-      }
-    }
-  }
-
-  // 8. RESOLVER_AHORA (T2: PENDIENTE -> FINALIZADA)
-  if (intervencion.estado === 'PENDIENTE') {
-    if ('INTERVENCIONES_FINALIZAR' in usuario.permisos) {
-      const respId = intervencion.responsable_usuario_id ? Number(intervencion.responsable_usuario_id) : null;
-      if (respId === null) {
-        if ('INTERVENCIONES_ASIGNARSE' in usuario.permisos) {
-          if (await verificarHabilitadoDestino(usuario.id, maquina.sector_id)) {
-            acciones.push('RESOLVER_AHORA');
-          }
-        }
-      } else {
-        if (respId === usuario.id || 'INTERVENCIONES_ASIGNAR' in usuario.permisos) {
-          if (await verificarHabilitadoDestino(respId, maquina.sector_id)) {
-            acciones.push('RESOLVER_AHORA');
-          }
-        }
-      }
-    }
-  }
-
-  // 9. CANCELAR (T3, T7, T8: PENDIENTE/EN_PROCESO/EN_ESPERA_REPUESTOS -> CANCELADA)
-  if (['PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS'].includes(intervencion.estado)) {
-    if ('INTERVENCIONES_CANCELAR' in usuario.permisos) {
-      acciones.push('CANCELAR');
-    }
-  }
-
-  // 10. REABRIR (T9: FINALIZADA -> EN_PROCESO)
-  if (intervencion.estado === 'FINALIZADA') {
-    if ('INTERVENCIONES_REABRIR' in usuario.permisos) {
-      acciones.push('REABRIR');
-    }
-  }
-
-  // 11. REGISTRAR_DETENCION
-  if (['PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS'].includes(intervencion.estado)) {
-    if ('INTERVENCIONES_CAMBIAR_ESTADO' in usuario.permisos && !tieneDetencionAbierta) {
-      acciones.push('REGISTRAR_DETENCION');
-    }
-  }
-
-  // 12. EDITAR
-  if (['PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS'].includes(intervencion.estado)) {
-    if ('INTERVENCIONES_EDITAR' in usuario.permisos) {
-      const alcanceEditar = usuario.permisos['INTERVENCIONES_EDITAR'];
-      let puedeEditar = false;
-      if (alcanceEditar === 'PROPIAS') {
-        const esPropia = Number(intervencion.creado_por_usuario_id) === usuario.id;
-        const esPendiente = intervencion.estado === 'PENDIENTE';
-        const sinResponsable = intervencion.responsable_usuario_id === null;
-        if (esPropia && esPendiente && sinResponsable) {
-          puedeEditar = true;
-        }
-      } else if (alcanceEditar === 'SECTORES') {
-        if (usuario.sectores.includes(Number(maquina.sector_id))) {
-          puedeEditar = true;
-        }
-      } else if (alcanceEditar === 'TODAS') {
-        puedeEditar = true;
-      }
-      if (puedeEditar) {
-        acciones.push('EDITAR');
-      }
-    }
-  }
-
-  // 13. ELIMINAR
-  if (intervencion.estado === 'PENDIENTE') {
-    if ('INTERVENCIONES_ELIMINAR' in usuario.permisos) {
-      const alcanceEliminar = usuario.permisos['INTERVENCIONES_ELIMINAR'];
-      let puedeEliminar = false;
-      if (alcanceEliminar === 'PROPIAS') {
-        puedeEliminar = Number(intervencion.creado_por_usuario_id) === usuario.id;
-      } else if (alcanceEliminar === 'SECTORES') {
-        puedeEliminar = usuario.sectores.includes(Number(maquina.sector_id));
-      } else if (alcanceEliminar === 'TODAS') {
-        puedeEliminar = true;
-      }
-
-      if (puedeEliminar) {
-        const motivos = await obtenerMotivosBloqueoEliminacion(db, intervencion.id, intervencion);
-        if (motivos.length === 0) {
-          acciones.push('ELIMINAR');
-        }
-      }
+      throw err;
     }
   }
 

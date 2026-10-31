@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { fileURLToPath } from 'node:url';
@@ -998,11 +1001,413 @@ test('Etapa API — API para el frontend', async (t) => {
         );
       }
     });
+
+    // =========================================================================
+    // AF-14: Responsable con CONCEDER INTERVENCIONES_ELIMINAR alcance PROPIAS
+    // sobre falla creada por otro usuario -> acciones_disponibles incluye ELIMINAR y endpoint responde 200
+    // =========================================================================
+    await t.test('AF-14: Responsable con CONCEDER INTERVENCIONES_ELIMINAR alcance PROPIAS sobre falla de otro usuario', async () => {
+      // 1. OP crea una falla
+      const resPost = await app.request('/api/intervenciones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opToken}` },
+        body: JSON.stringify({ maquina_id: maquina1Id, descripcion: 'Intervencion para AF-14' }),
+      });
+      assert.strictEqual(resPost.status, 201);
+      const intId = (await resPost.json()).id;
+      createdIntervencionIds.push(intId);
+
+      // 2. Otorgar a R2 la excepción CONCEDER INTERVENCIONES_ELIMINAR alcance PROPIAS
+      const resPerm = await client.query('SELECT id FROM permisos WHERE codigo = $1', ['INTERVENCIONES_ELIMINAR']);
+      const permEliminarId = resPerm.rows[0].id;
+
+      await client.query(
+        `INSERT INTO usuario_permiso (usuario_id, permiso_id, efecto, alcance, otorgado_por_usuario_id)
+         VALUES ($1, $2, 'CONCEDER', 'PROPIAS', $3)
+         ON CONFLICT (usuario_id, permiso_id) DO UPDATE SET efecto = 'CONCEDER', alcance = 'PROPIAS'`,
+        [r2Id, permEliminarId, adminId]
+      );
+
+      try {
+        // 3. Consultar detalle con R2 -> acciones_disponibles DEBE incluir ELIMINAR
+        const resDetalle = await app.request(`/api/intervenciones/${intId}`, {
+          headers: { Authorization: `Bearer ${r2Token}` },
+        });
+        assert.strictEqual(resDetalle.status, 200);
+        const dataDetalle = await resDetalle.json();
+        assert.ok(
+          dataDetalle.acciones_disponibles.includes('ELIMINAR'),
+          'acciones_disponibles debe incluir ELIMINAR para el caso de la seccion 1'
+        );
+
+        // 4. Ejecutar POST /:id/eliminar con R2 -> Debe responder 200
+        const resEliminar = await app.request(`/api/intervenciones/${intId}/eliminar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${r2Token}` },
+          body: JSON.stringify({ motivo: 'Eliminacion AF-14 valida' }),
+        });
+        assert.strictEqual(resEliminar.status, 200);
+      } finally {
+        await client.query('DELETE FROM usuario_permiso WHERE usuario_id = $1 AND permiso_id = $2', [
+          r2Id,
+          permEliminarId,
+        ]);
+      }
+    });
+
+    // =========================================================================
+    // AF-15: En S1 y S3, para OP, CON y R2: ejecutar cada una de las 13 acciones
+    // que NO esta en acciones_disponibles -> Ninguna responde 2xx y estado no cambia
+    // =========================================================================
+    await t.test('AF-15: En S1 y S3, para OP, CON y R2 ejecutar acciones no disponibles no responde 2xx ni cambia estado', async () => {
+      const TODAS_ACCIONES = [
+        'TOMAR',
+        'ASIGNAR',
+        'DESASIGNAR',
+        'INICIAR',
+        'ESPERAR_REPUESTOS',
+        'REANUDAR',
+        'FINALIZAR',
+        'RESOLVER_AHORA',
+        'CANCELAR',
+        'REABRIR',
+        'REGISTRAR_DETENCION',
+        'EDITAR',
+        'ELIMINAR',
+      ];
+
+      const ejecutarAccion = async (accion: string, id: number, estadoActual: string, token: string) => {
+        let endpoint = '';
+        let method = 'POST';
+        let body: any = {};
+
+        switch (accion) {
+          case 'TOMAR':
+            endpoint = `/api/intervenciones/${id}/tomar`;
+            body = { estado_esperado: estadoActual };
+            break;
+          case 'ASIGNAR':
+            endpoint = `/api/intervenciones/${id}/responsable`;
+            method = 'PUT';
+            body = {
+              destinatario_id: estadoActual === 'EN_PROCESO' ? r2Id : r1Id,
+              motivo: 'Reasignacion AF-15 valida',
+              estado_esperado: estadoActual,
+            };
+            break;
+          case 'DESASIGNAR':
+            endpoint = `/api/intervenciones/${id}/responsable`;
+            method = 'DELETE';
+            body = { motivo: 'Desasignacion AF-15 valida', estado_esperado: estadoActual };
+            break;
+          case 'INICIAR':
+            endpoint = `/api/intervenciones/${id}/iniciar`;
+            body = { estado_esperado: estadoActual };
+            break;
+          case 'ESPERAR_REPUESTOS':
+            endpoint = `/api/intervenciones/${id}/espera-repuestos`;
+            body = { estado_esperado: estadoActual, observacion: 'Falta repuesto ruleman AF-15' };
+            break;
+          case 'REANUDAR':
+            endpoint = `/api/intervenciones/${id}/reanudar`;
+            body = { estado_esperado: estadoActual };
+            break;
+          case 'FINALIZAR':
+            endpoint = `/api/intervenciones/${id}/finalizar`;
+            body = { estado_esperado: estadoActual, trabajo_realizado: 'Trabajo AF-15 finalizado', ejecucion: 'INTERNA' };
+            break;
+          case 'RESOLVER_AHORA':
+            endpoint = `/api/intervenciones/${id}/resolver-ahora`;
+            body = {
+              estado_esperado: estadoActual,
+              fecha_inicio: new Date().toISOString(),
+              trabajo_realizado: 'Resolucion inmediata AF-15',
+              ejecucion: 'INTERNA',
+            };
+            break;
+          case 'CANCELAR':
+            endpoint = `/api/intervenciones/${id}/cancelar`;
+            body = { estado_esperado: estadoActual, motivo: 'Cancelacion AF-15 valida' };
+            break;
+          case 'REABRIR':
+            endpoint = `/api/intervenciones/${id}/reabrir`;
+            body = { estado_esperado: estadoActual, motivo: 'Reapertura AF-15 valida' };
+            break;
+          case 'REGISTRAR_DETENCION':
+            endpoint = `/api/intervenciones/${id}/registrar-detencion`;
+            body = { estado_esperado: estadoActual, observacion: 'Detencion AF-15 valida' };
+            break;
+          case 'EDITAR':
+            endpoint = `/api/intervenciones/${id}`;
+            method = 'PATCH';
+            body = { estado_esperado: estadoActual, descripcion: 'Descripcion editada AF-15' };
+            break;
+          case 'ELIMINAR':
+            endpoint = `/api/intervenciones/${id}/eliminar`;
+            body = { motivo: 'Eliminacion AF-15 valida' };
+            break;
+          default:
+            throw new Error(`Accion desconocida: ${accion}`);
+        }
+
+        const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+        if (method !== 'GET') {
+          headers['Content-Type'] = 'application/json';
+        }
+
+        return await app.request(endpoint, {
+          method,
+          headers,
+          body: JSON.stringify(body),
+        });
+      };
+
+      const crearS1 = async () => {
+        const res = await app.request('/api/intervenciones', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opToken}` },
+          body: JSON.stringify({ maquina_id: maquina1Id, descripcion: `Falla S1 AF15 ${Date.now()}` }),
+        });
+        assert.strictEqual(res.status, 201);
+        const id = (await res.json()).id;
+        createdIntervencionIds.push(id);
+        return id;
+      };
+
+      const crearS3 = async () => {
+        const id = await crearS1();
+        const resIni = await app.request(`/api/intervenciones/${id}/iniciar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${r1Token}` },
+          body: JSON.stringify({ estado_esperado: 'PENDIENTE' }),
+        });
+        assert.strictEqual(resIni.status, 200);
+        return id;
+      };
+
+      const situaciones = [
+        { sit: 'S1', estado: 'PENDIENTE', crear: crearS1 },
+        { sit: 'S3', estado: 'EN_PROCESO', crear: crearS3 },
+      ];
+
+      const usuarios = [
+        { nombre: 'OP', token: opToken },
+        { nombre: 'CON', token: conToken },
+        { nombre: 'R2', token: r2Token },
+      ];
+
+      for (const situacion of situaciones) {
+        for (const usuario of usuarios) {
+          // Obtener acciones disponibles para este usuario en esta situación
+          const refId = await situacion.crear();
+          const resDet = await app.request(`/api/intervenciones/${refId}`, {
+            headers: { Authorization: `Bearer ${usuario.token}` },
+          });
+          assert.strictEqual(resDet.status, 200);
+          const dataDet = await resDet.json();
+          const disponibles: string[] = dataDet.acciones_disponibles;
+
+          const noDisponibles = TODAS_ACCIONES.filter((a) => !disponibles.includes(a));
+          assert.ok(noDisponibles.length > 0, `Debe haber acciones no disponibles para ${usuario.nombre} en ${situacion.sit}`);
+
+          for (const accion of noDisponibles) {
+            const testId = await situacion.crear();
+            const resAccion = await ejecutarAccion(accion, testId, situacion.estado, usuario.token);
+
+            assert.ok(
+              resAccion.status < 200 || resAccion.status >= 300,
+              `AF-15: ${usuario.nombre} en ${situacion.sit} ejecutando ${accion} debio responder no-2xx (respondio ${resAccion.status})`
+            );
+
+            const resCheck = await client.query('SELECT estado FROM intervenciones WHERE id = $1', [testId]);
+            assert.strictEqual(
+              resCheck.rows[0].estado,
+              situacion.estado,
+              `AF-15: El estado de la intervencion ${testId} debio permanecer en ${situacion.estado}`
+            );
+          }
+        }
+      }
+    });
+
+    // =========================================================================
+    // AF-16: Detalle de una intervención eliminada con ?incluir_eliminada=true
+    // =========================================================================
+    await t.test('AF-16: Detalle de una intervención eliminada con y sin ?incluir_eliminada=true', async () => {
+      // 1. Crear intervención con OP y luego eliminarla con admin
+      const resPost = await app.request('/api/intervenciones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opToken}` },
+        body: JSON.stringify({ maquina_id: maquina1Id, descripcion: 'Intervencion para AF-16' }),
+      });
+      assert.strictEqual(resPost.status, 201);
+      const intId = (await resPost.json()).id;
+      createdIntervencionIds.push(intId);
+
+      const resElim = await app.request(`/api/intervenciones/${intId}/eliminar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ motivo: 'Eliminacion AF-16' }),
+      });
+      assert.strictEqual(resElim.status, 200);
+
+      // Con ?incluir_eliminada=true:
+      // - Usuario de consulta (CON) -> 403 PERMISO_INSUFICIENTE
+      const resConInc = await app.request(`/api/intervenciones/${intId}?incluir_eliminada=true`, {
+        headers: { Authorization: `Bearer ${conToken}` },
+      });
+      assert.strictEqual(resConInc.status, 403);
+      assert.strictEqual((await resConInc.json()).codigo, 'PERMISO_INSUFICIENTE');
+
+      // - Operario creador (OP) -> 403 PERMISO_INSUFICIENTE
+      const resOpInc = await app.request(`/api/intervenciones/${intId}?incluir_eliminada=true`, {
+        headers: { Authorization: `Bearer ${opToken}` },
+      });
+      assert.strictEqual(resOpInc.status, 403);
+      assert.strictEqual((await resOpInc.json()).codigo, 'PERMISO_INSUFICIENTE');
+
+      // - Administrador (ADMIN) -> 200 con acciones_disponibles = []
+      const resAdminInc = await app.request(`/api/intervenciones/${intId}?incluir_eliminada=true`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resAdminInc.status, 200);
+      const dataAdmin = await resAdminInc.json();
+      assert.deepStrictEqual(dataAdmin.acciones_disponibles, []);
+
+      // Sin el parámetro -> 404 para todos
+      const resConSin = await app.request(`/api/intervenciones/${intId}`, {
+        headers: { Authorization: `Bearer ${conToken}` },
+      });
+      assert.strictEqual(resConSin.status, 404);
+
+      const resOpSin = await app.request(`/api/intervenciones/${intId}`, {
+        headers: { Authorization: `Bearer ${opToken}` },
+      });
+      assert.strictEqual(resOpSin.status, 404);
+
+      const resAdminSin = await app.request(`/api/intervenciones/${intId}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resAdminSin.status, 404);
+    });
+
+    // =========================================================================
+    // AF-17: cargar-marca.mjs ejecutado como proceso aparte contra la base de pruebas
+    // =========================================================================
+    await t.test('AF-17: cargar-marca.mjs ejecutado como proceso aparte contra la base de pruebas', async () => {
+      // Guardar estado original
+      const resOrig = await client.query('SELECT nombre_empresa, logo, logo_tipo FROM configuracion_sistema WHERE id = 1');
+      const origRow = resOrig.rows[0];
+
+      const rootDir = path.resolve(__dirname, '../..');
+      const scriptPath = path.join(rootDir, 'scripts', 'cargar-marca.mjs');
+
+      const tmpDir = os.tmpdir();
+      const pngChicoPath = path.join(tmpDir, `logo_test_af17_${Date.now()}.png`);
+      const svgFakePath = path.join(tmpDir, `logo_fake_af17_${Date.now()}.svg`);
+      const bigFilePath = path.join(tmpDir, `logo_big_af17_${Date.now()}.png`);
+
+      // 1x1 PNG válido
+      const pngBuffer = Buffer.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+        0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+        0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+        0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+        0x89, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41,
+        0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+        0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00,
+        0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
+        0x42, 0x60, 0x82,
+      ]);
+      fs.writeFileSync(pngChicoPath, pngBuffer);
+
+      // Archivo de texto que empieza con <svg
+      fs.writeFileSync(svgFakePath, '<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>');
+
+      // Archivo de más de 300 KB (301 KB = 308224 bytes)
+      const bigBuffer = Buffer.alloc(308224, 0);
+      pngBuffer.copy(bigBuffer, 0, 0, 8);
+      fs.writeFileSync(bigFilePath, bigBuffer);
+
+      try {
+        // 1. Con un PNG chico y --empresa "Empresa de prueba": termina con código 0
+        const procSuccess = spawnSync(
+          process.execPath,
+          [scriptPath, '--empresa', 'Empresa de prueba', '--logo', pngChicoPath],
+          {
+            cwd: rootDir,
+            env: { ...process.env, DATABASE_URL: dbUrl },
+            encoding: 'utf-8',
+          }
+        );
+        assert.strictEqual(procSuccess.status, 0, `cargar-marca exit code should be 0: ${procSuccess.stderr}`);
+
+        const resPub = await app.request('/api/configuracion/publica');
+        assert.strictEqual(resPub.status, 200);
+        const dataPub = await resPub.json();
+        assert.strictEqual(dataPub.tiene_logo, true);
+        assert.strictEqual(dataPub.nombre_empresa, 'Empresa de prueba');
+
+        // 2. Con un archivo de texto que empieza con <svg: código distinto de 0 y la fila no cambia
+        const procSvg = spawnSync(
+          process.execPath,
+          [scriptPath, '--logo', svgFakePath],
+          {
+            cwd: rootDir,
+            env: { ...process.env, DATABASE_URL: dbUrl },
+            encoding: 'utf-8',
+          }
+        );
+        assert.notStrictEqual(procSvg.status, 0);
+
+        const resPubSvg = await app.request('/api/configuracion/publica');
+        const dataPubSvg = await resPubSvg.json();
+        assert.strictEqual(dataPubSvg.tiene_logo, true);
+        assert.strictEqual(dataPubSvg.nombre_empresa, 'Empresa de prueba');
+
+        // 3. Con un archivo de 301 KB: código distinto de 0 y la fila no cambia
+        const procBig = spawnSync(
+          process.execPath,
+          [scriptPath, '--logo', bigFilePath],
+          {
+            cwd: rootDir,
+            env: { ...process.env, DATABASE_URL: dbUrl },
+            encoding: 'utf-8',
+          }
+        );
+        assert.notStrictEqual(procBig.status, 0);
+
+        const resPubBig = await app.request('/api/configuracion/publica');
+        const dataPubBig = await resPubBig.json();
+        assert.strictEqual(dataPubBig.tiene_logo, true);
+        assert.strictEqual(dataPubBig.nombre_empresa, 'Empresa de prueba');
+      } finally {
+        // Limpiar archivos temporales
+        try { fs.unlinkSync(pngChicoPath); } catch {}
+        try { fs.unlinkSync(svgFakePath); } catch {}
+        try { fs.unlinkSync(bigFilePath); } catch {}
+
+        // Restaurar fila 1 a como estaba por SQL
+        await client.query(
+          'UPDATE configuracion_sistema SET nombre_empresa = $1, logo = $2, logo_tipo = $3, actualizado_en = NOW() WHERE id = 1',
+          [origRow?.nombre_empresa || null, origRow?.logo || null, origRow?.logo_tipo || null]
+        );
+      }
+    });
   } finally {
     // Limpieza de datos creados en orden inverso de dependencias
-    for (const id of createdIntervencionIds) {
+    if (createdIntervencionIds.length > 0) {
       try {
-        await limpiarIntervencion(id);
+        await client.query('DELETE FROM notificacion_envios WHERE notificacion_id IN (SELECT id FROM notificaciones WHERE intervencion_id = ANY($1))', [createdIntervencionIds]);
+        await client.query('DELETE FROM notificaciones WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);
+        await client.query('DELETE FROM intervencion_auditoria WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);
+        await client.query('DELETE FROM intervencion_costos WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);
+        await client.query('DELETE FROM documentos WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);
+        await client.query('DELETE FROM intervencion_repuestos WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);
+        await client.query('DELETE FROM movimientos_stock WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);
+        await client.query('DELETE FROM intervencion_periodos_detencion WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);
+        await client.query('DELETE FROM historial_estados_intervencion WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);
+        await client.query('DELETE FROM intervenciones WHERE id = ANY($1)', [createdIntervencionIds]);
       } catch {}
     }
     for (const mId of createdMaquinaIds) {

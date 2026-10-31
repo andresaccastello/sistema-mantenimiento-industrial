@@ -569,9 +569,9 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
       [id]
     );
 
-    const incluirEliminada = c.req.query('incluir_eliminada') === 'true' || c.req.query('incluir_eliminadas') === 'true';
+    const incluirEliminada = c.req.query('incluir_eliminada') === 'true';
 
-    if (resI.rows.length === 0 || (resI.rows[0].eliminado_en !== null && !incluirEliminada)) {
+    if (resI.rows.length === 0) {
       throw new ErrorNegocio(404, 'INTERVENCION_NO_ENCONTRADA', 'Intervención no encontrada');
     }
 
@@ -586,6 +586,19 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
 
     if (!visible) {
       throw new ErrorNegocio(404, 'INTERVENCION_NO_ENCONTRADA', 'Intervención no encontrada');
+    }
+
+    if (r.eliminado_en !== null) {
+      if (!incluirEliminada) {
+        throw new ErrorNegocio(404, 'INTERVENCION_NO_ENCONTRADA', 'Intervención no encontrada');
+      }
+      if (!('INTERVENCIONES_ELIMINAR' in usuario.permisos)) {
+        throw new ErrorNegocio(
+          403,
+          'PERMISO_INSUFICIENTE',
+          'No posees permiso para consultar intervenciones eliminadas'
+        );
+      }
     }
 
     // Historial de cambios de estado ordenado por cambiado_en ASC, id ASC
