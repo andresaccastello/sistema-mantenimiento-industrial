@@ -14,14 +14,13 @@ import { useNavigate } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { EncabezadoPagina } from '../componentes/EncabezadoPagina';
 import { nombrePerfil } from '../lib/perfiles';
+import { nombreCompleto } from '../lib/personas';
 
 export function MiCuenta() {
   const { usuario, salir } = useAuth();
   const navigate = useNavigate();
 
-  const nombreCompleto = usuario
-    ? `${usuario.nombre} ${usuario.apellido}`.trim()
-    : 'Usuario';
+  const nombreUsuario = nombreCompleto(usuario) || 'Usuario';
 
   return (
     <>
@@ -49,7 +48,7 @@ export function MiCuenta() {
             </Box>
             <Stack gap={2}>
               <Text fw={600} size="lg" c="#0f172a">
-                {nombreCompleto}
+                {nombreUsuario}
               </Text>
               <Text size="sm" c="#64748b">
                 Legajo: {usuario?.legajo || '—'}

@@ -15,7 +15,12 @@ export interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined | null>;
 }
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+interface ExecuteResponse<T> {
+  data: T;
+  response: Response;
+}
+
+async function executeRequest<T>(path: string, options: RequestOptions = {}): Promise<ExecuteResponse<T>> {
   const url = new URL(path.startsWith('http') ? path : `${BASE_URL}${path.startsWith('/') ? path : `/${path}`}`);
 
   if (options.params) {
@@ -82,16 +87,24 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     throw apiError;
   }
 
+  let data: T;
   if (response.status === 204) {
-    return {} as T;
+    data = {} as T;
+  } else {
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      data = (await response.json()) as T;
+    } else {
+      data = (await response.text()) as unknown as T;
+    }
   }
 
-  const contentType = response.headers.get('content-type');
-  if (contentType && contentType.includes('application/json')) {
-    return (await response.json()) as T;
-  }
+  return { data, response };
+}
 
-  return (await response.text()) as unknown as T;
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const { data } = await executeRequest<T>(path, options);
+  return data;
 }
 
 export const clienteApi = {
@@ -128,64 +141,10 @@ export const clienteApi = {
   },
 
   async listar<T>(path: string, options?: RequestOptions): Promise<ListaResultado<T>> {
-    const url = new URL(path.startsWith('http') ? path : `${BASE_URL}${path.startsWith('/') ? path : `/${path}`}`);
-
-    if (options?.params) {
-      for (const [key, value] of Object.entries(options.params)) {
-        if (value !== undefined && value !== null) {
-          url.searchParams.set(key, String(value));
-        }
-      }
-    }
-
-    const headers = new Headers(options?.headers || {});
-    const token = obtenerToken();
-    if (token && !headers.has('Authorization')) {
-      headers.set('Authorization', `Bearer ${token}`);
-    }
-
-    let response: Response;
-    try {
-      response = await fetch(url.toString(), {
-        ...options,
-        method: 'GET',
-        headers,
-      });
-    } catch (_err) {
-      throw new ApiError(0, 'SIN_CONEXION', 'No se pudo conectar con el servidor.');
-    }
-
-    if (!response.ok) {
-      let errorData: any = null;
-      try {
-        errorData = await response.json();
-      } catch {
-        errorData = { error: response.statusText };
-      }
-
-      const codigo = errorData?.codigo || (response.status === 401 ? 'NO_AUTENTICADO' : 'ERROR_INTERNO');
-      const mensaje = errorData?.error || errorData?.mensaje || response.statusText;
-      const apiError = new ApiError(response.status, codigo, mensaje, errorData?.motivos);
-
-      const reaccion = reaccionError(apiError);
-      if (reaccion === 'cerrar_sesion') {
-        eliminarToken();
-        if (reaccionListener) {
-          reaccionListener('cerrar_sesion');
-        } else if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('auth:cerrar_sesion'));
-        }
-      }
-
-      throw apiError;
-    }
-
+    const { data, response } = await executeRequest<any>(path, { ...options, method: 'GET' });
     const totalHeader = response.headers.get('X-Total-Count') || response.headers.get('x-total-count');
-    const data = await response.json();
-
     const items: T[] = Array.isArray(data) ? data : data?.items || [];
     const total = totalHeader ? Number(totalHeader) : (data?.total ?? items.length);
-
     return { items, total };
   },
 };

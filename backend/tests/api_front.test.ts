@@ -1394,6 +1394,127 @@ test('Etapa API — API para el frontend', async (t) => {
         );
       }
     });
+
+    // =========================================================================
+    // AF-18: Código de máquina
+    // =========================================================================
+    await t.test('AF-18: Código de máquina en GET /api/maquinas y GET /api/maquinas/:id', async () => {
+      const resMCon = await client.query(
+        `INSERT INTO maquinas (nombre, codigo, sector_id, estado, activo) VALUES ($1, $2, $3, 'OPERATIVA', TRUE) RETURNING id`,
+        [`Maquina_AF18_Con_${testSuffix}`, 'AF18-01', sector1Id]
+      );
+      const mConId = Number(resMCon.rows[0].id);
+      createdMaquinaIds.push(mConId);
+
+      const resMSin = await client.query(
+        `INSERT INTO maquinas (nombre, codigo, sector_id, estado, activo) VALUES ($1, NULL, $2, 'OPERATIVA', TRUE) RETURNING id`,
+        [`Maquina_AF18_Sin_${testSuffix}`, sector1Id]
+      );
+      const mSinId = Number(resMSin.rows[0].id);
+      createdMaquinaIds.push(mSinId);
+
+      // GET /api/maquinas
+      const resLista = await app.request('/api/maquinas', {
+        headers: { Authorization: `Bearer ${r1Token}` },
+      });
+      assert.strictEqual(resLista.status, 200);
+      const lista = await resLista.json();
+      const itemCon = lista.find((m: any) => Number(m.id) === mConId);
+      const itemSin = lista.find((m: any) => Number(m.id) === mSinId);
+      assert.ok(itemCon, 'Debe encontrar máquina con código en lista');
+      assert.strictEqual(itemCon.codigo, 'AF18-01');
+      assert.ok(itemSin, 'Debe encontrar máquina sin código en lista');
+      assert.strictEqual(itemSin.codigo, null);
+
+      // GET /api/maquinas/:id
+      const resDetCon = await app.request(`/api/maquinas/${mConId}`, {
+        headers: { Authorization: `Bearer ${r1Token}` },
+      });
+      assert.strictEqual(resDetCon.status, 200);
+      const detCon = await resDetCon.json();
+      assert.strictEqual(detCon.codigo, 'AF18-01');
+
+      const resDetSin = await app.request(`/api/maquinas/${mSinId}`, {
+        headers: { Authorization: `Bearer ${r1Token}` },
+      });
+      assert.strictEqual(resDetSin.status, 200);
+      const detSin = await resDetSin.json();
+      assert.strictEqual(detSin.codigo, null);
+    });
+
+    // =========================================================================
+    // AF-19: Apellido en personas
+    // =========================================================================
+    await t.test('AF-19: Apellido en personas en intervenciones (creado_por, historial_estados)', async () => {
+      // Usuario con apellido 'Pérez'
+      const resUCon = await client.query(
+        `INSERT INTO usuarios (legajo, nombre, apellido, password_hash, perfil_id, activo, sesion_version, debe_cambiar_password)
+         VALUES ($1, $2, $3, $4, $5, TRUE, 1, FALSE) RETURNING id`,
+        [`OP_Perez_${testSuffix}`, 'Juan', 'Pérez', passHash, perfilMap['OPERARIO']]
+      );
+      const uConId = Number(resUCon.rows[0].id);
+      createdUsuarioIds.push(uConId);
+      await client.query(`INSERT INTO usuario_sector (usuario_id, sector_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [uConId, sector1Id]);
+
+      const resLogCon = await app.request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ legajo: `OP_Perez_${testSuffix}`, password: 'pass123' }),
+      });
+      const tokCon = (await resLogCon.json()).token;
+
+      // Reporta falla usuario con apellido
+      const resRepCon = await app.request('/api/intervenciones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokCon}` },
+        body: JSON.stringify({ maquina_id: maquina1Id, descripcion: `Falla con apellido ${testSuffix}` }),
+      });
+      assert.strictEqual(resRepCon.status, 201);
+      const idCon = (await resRepCon.json()).id;
+      createdIntervencionIds.push(idCon);
+
+      // Reporta falla usuario sin apellido (opId / opToken)
+      const resRepSin = await app.request('/api/intervenciones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opToken}` },
+        body: JSON.stringify({ maquina_id: maquina1Id, descripcion: `Falla sin apellido ${testSuffix}` }),
+      });
+      assert.strictEqual(resRepSin.status, 201);
+      const idSin = (await resRepSin.json()).id;
+      createdIntervencionIds.push(idSin);
+
+      // GET /api/intervenciones
+      const resList = await app.request('/api/intervenciones', {
+        headers: { Authorization: `Bearer ${r1Token}` },
+      });
+      assert.strictEqual(resList.status, 200);
+      const listData = await resList.json();
+      const itemCon = listData.find((i: any) => i.id === idCon);
+      const itemSin = listData.find((i: any) => i.id === idSin);
+      assert.ok(itemCon, 'Debe encontrar intervención con apellido en lista');
+      assert.strictEqual(itemCon.creado_por.apellido, 'Pérez');
+      assert.ok(itemSin, 'Debe encontrar intervención sin apellido en lista');
+      assert.strictEqual(itemSin.creado_por.apellido, null);
+
+      // GET /api/intervenciones/:id
+      const resDetCon = await app.request(`/api/intervenciones/${idCon}`, {
+        headers: { Authorization: `Bearer ${r1Token}` },
+      });
+      assert.strictEqual(resDetCon.status, 200);
+      const detCon = await resDetCon.json();
+      assert.strictEqual(detCon.creado_por.apellido, 'Pérez');
+      assert.ok(detCon.historial_estados.length > 0);
+      assert.strictEqual(detCon.historial_estados[0].cambiado_por.apellido, 'Pérez');
+
+      const resDetSin = await app.request(`/api/intervenciones/${idSin}`, {
+        headers: { Authorization: `Bearer ${r1Token}` },
+      });
+      assert.strictEqual(resDetSin.status, 200);
+      const detSin = await resDetSin.json();
+      assert.strictEqual(detSin.creado_por.apellido, null);
+      assert.ok(detSin.historial_estados.length > 0);
+      assert.strictEqual(detSin.historial_estados[0].cambiado_por.apellido, null);
+    });
   } finally {
     // Limpieza de datos creados en orden inverso de dependencias
     if (createdIntervencionIds.length > 0) {

@@ -12,6 +12,10 @@ import { CambiarPassword } from '../pantallas/CambiarPassword';
 import { Notificaciones } from '../pantallas/Notificaciones';
 import { MiCuenta } from '../pantallas/MiCuenta';
 import { Muestra } from '../pantallas/Muestra';
+import { MisReportes } from '../pantallas/MisReportes';
+import { ReportarFalla } from '../pantallas/ReportarFalla';
+import { DetalleReporteOperario } from '../pantallas/DetalleReporteOperario';
+import { vistaDetalle } from '../lib/intervenciones';
 
 // Componentes generales
 import { EnConstruccion } from '../componentes/EnConstruccion';
@@ -30,6 +34,17 @@ function RedireccionInicio() {
   const { usuario } = useAuth();
   const destino = destinoInicio(usuario?.permisos);
   return <Navigate to={destino} replace />;
+}
+
+function DetalleIntervencionRuta() {
+  const { usuario } = useAuth();
+  const vista = vistaDetalle(usuario?.permisos);
+
+  if (vista === 'completa') {
+    return <EnConstruccion titulo="Detalle de intervención" etapa="F2" />;
+  }
+
+  return <DetalleReporteOperario />;
 }
 
 export function RutasApp() {
@@ -80,13 +95,13 @@ export function RutasApp() {
         />
         <Route
           path="/mis-reportes"
-          element={<EnConstruccion titulo="Inicio del operario" etapa="F1" />}
+          element={<MisReportes />}
         />
         <Route
           path="/reportar"
           element={
             <RutaProtegida permiso="INTERVENCIONES_CREAR">
-              <EnConstruccion titulo="Reportar falla" etapa="F1" />
+              <ReportarFalla />
             </RutaProtegida>
           }
         />
@@ -102,7 +117,7 @@ export function RutasApp() {
           path="/intervenciones/:id"
           element={
             <RutaProtegida permiso="INTERVENCIONES_VER">
-              <EnConstruccion titulo="Detalle de intervención" etapa="F2" />
+              <DetalleIntervencionRuta />
             </RutaProtegida>
           }
         />

@@ -34,6 +34,7 @@ import { clienteApi } from '../api/cliente';
 import { itemsMenu } from '../lib/menu';
 import { esRutaInicio } from '../lib/inicio';
 import { nombrePerfil } from '../lib/perfiles';
+import { nombreCompleto } from '../lib/personas';
 import { Campana } from '../componentes/Campana';
 import type { ConfiguracionPublica } from '../api/tipos';
 
@@ -158,7 +159,7 @@ export function Layout() {
               >
                 <Stack gap={0} align="flex-end">
                   <Text size="sm" fw={500} c="#1e293b" lineClamp={1}>
-                    {usuario.nombre} {usuario.apellido}
+                    {nombreCompleto(usuario)}
                   </Text>
                   <Text size="xs" c="#64748b" lineClamp={1}>
                     {perfilLegible}

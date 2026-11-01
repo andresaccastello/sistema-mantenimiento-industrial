@@ -37,7 +37,7 @@ maquinasApp.get('/', async (c) => {
     const activeFilter = showAll ? '' : 'WHERE m.activo = TRUE';
 
     const query = `
-      SELECT m.id, m.nombre, m.tipo, m.estado, m.ubicacion, m.observaciones, m.activo, m.creado_en,
+      SELECT m.id, m.codigo, m.nombre, m.tipo, m.estado, m.ubicacion, m.observaciones, m.activo, m.creado_en,
              s.id as sector_id, s.nombre as sector_nombre,
              COALESCE(ia.abiertas, 0)::int as intervenciones_abiertas
       FROM maquinas m
@@ -56,6 +56,7 @@ maquinasApp.get('/', async (c) => {
     
     const result = rows.map(r => ({
       id: r.id,
+      codigo: r.codigo ?? null,
       nombre: r.nombre,
       tipo: r.tipo,
       estado: r.estado,
@@ -79,7 +80,7 @@ maquinasApp.get('/:id', async (c) => {
     if (!id) return badRequest(c, 'ID inválido');
 
     const { rows } = await pool.query(
-      `SELECT m.id, m.nombre, m.tipo, m.estado, m.ubicacion, m.observaciones, m.activo, m.creado_en,
+      `SELECT m.id, m.codigo, m.nombre, m.tipo, m.estado, m.ubicacion, m.observaciones, m.activo, m.creado_en,
               s.id as sector_id, s.nombre as sector_nombre
        FROM maquinas m
        JOIN sectores s ON m.sector_id = s.id
@@ -90,7 +91,7 @@ maquinasApp.get('/:id', async (c) => {
     if (rows.length === 0) return c.json({ error: 'Máquina no encontrada', codigo: 'MAQUINA_NO_ENCONTRADA' }, 404);
     const r = rows[0];
     return c.json({
-      id: r.id, nombre: r.nombre, tipo: r.tipo, estado: r.estado, 
+      id: r.id, codigo: r.codigo ?? null, nombre: r.nombre, tipo: r.tipo, estado: r.estado, 
       ubicacion: r.ubicacion, observaciones: r.observaciones, activo: r.activo, creado_en: r.creado_en,
       sector: { id: r.sector_id, nombre: r.sector_nombre }
     });

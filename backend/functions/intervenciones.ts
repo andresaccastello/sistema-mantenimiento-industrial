@@ -431,6 +431,7 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
         uel.id AS eliminador_id,
         uel.legajo AS eliminador_legajo,
         uel.nombre AS eliminador_nombre,
+        uel.apellido AS eliminador_apellido,
         m.id AS maquina_id,
         m.nombre AS maquina_nombre,
         m.codigo AS maquina_codigo,
@@ -440,9 +441,11 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
         uc.id AS creador_id,
         uc.legajo AS creador_legajo,
         uc.nombre AS creador_nombre,
+        uc.apellido AS creador_apellido,
         ur.id AS responsable_id,
         ur.legajo AS responsable_legajo,
         ur.nombre AS responsable_nombre,
+        ur.apellido AS responsable_apellido,
         (pd.id IS NOT NULL) AS detiene_maquina_actualmente,
         vit.espera_minutos,
         vit.espera_en_curso,
@@ -490,6 +493,7 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
             id: Number(r.eliminador_id),
             legajo: r.eliminador_legajo,
             nombre: r.eliminador_nombre,
+            apellido: r.eliminador_apellido ?? null,
           }
         : null,
       motivo_eliminacion: r.motivo_eliminacion,
@@ -507,12 +511,14 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
         id: Number(r.creador_id),
         legajo: r.creador_legajo,
         nombre: r.creador_nombre,
+        apellido: r.creador_apellido ?? null,
       },
       responsable: r.responsable_id
         ? {
             id: Number(r.responsable_id),
             legajo: r.responsable_legajo,
             nombre: r.responsable_nombre,
+            apellido: r.responsable_apellido ?? null,
           }
         : null,
       tiempos: {
@@ -554,8 +560,8 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
          i.eliminado_en, i.creado_por_usuario_id, i.responsable_usuario_id,
          m.id AS maquina_id, m.nombre AS maquina_nombre, m.codigo AS maquina_codigo, m.estado AS maquina_estado,
          m.sector_id, s.nombre AS sector_nombre,
-         uc.legajo AS creador_legajo, uc.nombre AS creador_nombre,
-         ur.legajo AS responsable_legajo, ur.nombre AS responsable_nombre,
+         uc.legajo AS creador_legajo, uc.nombre AS creador_nombre, uc.apellido AS creador_apellido,
+         ur.legajo AS responsable_legajo, ur.nombre AS responsable_nombre, ur.apellido AS responsable_apellido,
          vit.espera_minutos, vit.espera_en_curso, vit.duracion_bruta_minutos,
          vit.duracion_neta_minutos, vit.tiempo_total_minutos, vit.trabajo_en_curso,
          vit.inactividad_minutos AS vit_inactividad_minutos, vit.inactividad_en_curso
@@ -604,7 +610,7 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
     // Historial de cambios de estado ordenado por cambiado_en ASC, id ASC
     const resHistorial = await pool.query(
       `SELECT h.id, h.estado_anterior, h.estado_nuevo, h.observacion, h.cambiado_en, h.fecha_efectiva,
-              u.id AS usuario_id, u.legajo AS usuario_legajo, u.nombre AS usuario_nombre
+              u.id AS usuario_id, u.legajo AS usuario_legajo, u.nombre AS usuario_nombre, u.apellido AS usuario_apellido
        FROM historial_estados_intervencion h
        JOIN usuarios u ON h.cambiado_por_usuario_id = u.id
        WHERE h.intervencion_id = $1
@@ -615,8 +621,8 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
     // Períodos de detención
     const resPeriodos = await pool.query(
       `SELECT pd.id, pd.desde, pd.hasta, pd.observacion, pd.observacion_confirmacion,
-              ua.id AS abierto_id, ua.nombre AS abierto_nombre,
-              uc.id AS confirmado_id, uc.nombre AS confirmado_nombre
+              ua.id AS abierto_id, ua.nombre AS abierto_nombre, ua.apellido AS abierto_apellido,
+              uc.id AS confirmado_id, uc.nombre AS confirmado_nombre, uc.apellido AS confirmado_apellido
        FROM intervencion_periodos_detencion pd
        JOIN usuarios ua ON pd.abierto_por_usuario_id = ua.id
        LEFT JOIN usuarios uc ON pd.confirmado_por_usuario_id = uc.id
@@ -628,7 +634,7 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
     // Auditoría de intervenciones
     const resAuditoria = await pool.query(
       `SELECT a.id, a.tipo_evento, a.campo_modificado, a.valor_anterior, a.valor_nuevo, a.motivo, a.creado_en,
-              u.id AS usuario_id, u.legajo AS usuario_legajo, u.nombre AS usuario_nombre
+              u.id AS usuario_id, u.legajo AS usuario_legajo, u.nombre AS usuario_nombre, u.apellido AS usuario_apellido
        FROM intervencion_auditoria a
        JOIN usuarios u ON a.realizado_por_usuario_id = u.id
        WHERE a.intervencion_id = $1
@@ -692,12 +698,14 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
         id: Number(r.creado_por_usuario_id),
         legajo: r.creador_legajo,
         nombre: r.creador_nombre,
+        apellido: r.creador_apellido ?? null,
       },
       responsable: r.responsable_usuario_id
         ? {
             id: Number(r.responsable_usuario_id),
             legajo: r.responsable_legajo,
             nombre: r.responsable_nombre,
+            apellido: r.responsable_apellido ?? null,
           }
         : null,
       historial_estados: resHistorial.rows.map((h) => ({
@@ -711,6 +719,7 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
           id: Number(h.usuario_id),
           legajo: h.usuario_legajo,
           nombre: h.usuario_nombre,
+          apellido: h.usuario_apellido ?? null,
         },
       })),
       periodos_detencion: resPeriodos.rows.map((p) => ({
@@ -720,8 +729,8 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
         esta_abierto: p.hasta === null,
         observacion: p.observacion,
         observacion_confirmacion: p.observacion_confirmacion,
-        abierto_por: { id: Number(p.abierto_id), nombre: p.abierto_nombre },
-        confirmado_por: p.confirmado_id ? { id: Number(p.confirmado_id), nombre: p.confirmado_nombre } : null,
+        abierto_por: { id: Number(p.abierto_id), nombre: p.abierto_nombre, apellido: p.abierto_apellido ?? null },
+        confirmado_por: p.confirmado_id ? { id: Number(p.confirmado_id), nombre: p.confirmado_nombre, apellido: p.confirmado_apellido ?? null } : null,
       })),
       auditoria: resAuditoria.rows.map((a) => ({
         id: Number(a.id),
@@ -735,6 +744,7 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
           id: Number(a.usuario_id),
           legajo: a.usuario_legajo,
           nombre: a.usuario_nombre,
+          apellido: a.usuario_apellido ?? null,
         },
       })),
     });
@@ -804,7 +814,7 @@ intervencionesApp.get('/:id/responsables-habilitados', requirePermission('INTERV
     }
 
     const resUsers = await pool.query(
-      'SELECT id, legajo, nombre FROM usuarios WHERE id = ANY($1::int[]) ORDER BY nombre ASC',
+      'SELECT id, legajo, nombre, apellido FROM usuarios WHERE id = ANY($1::int[]) ORDER BY nombre ASC',
       [idsHabilitados]
     );
 
@@ -812,6 +822,7 @@ intervencionesApp.get('/:id/responsables-habilitados', requirePermission('INTERV
       id: Number(u.id),
       legajo: u.legajo,
       nombre: u.nombre,
+      apellido: u.apellido ?? null,
     }));
 
     return c.json(habilitados);

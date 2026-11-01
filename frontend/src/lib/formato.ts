@@ -60,3 +60,24 @@ export function formatHace(fechaISO: string | Date, ahora?: Date | string | numb
   const minutos = Math.floor(diffMs / 60_000);
   return `hace ${formatDuracion(minutos)}`;
 }
+
+/**
+ * Formatea una fecha ISO o Date en "DD/MM/YYYY HH:mm" en hora local con ceros a la izquierda.
+ * null, undefined o fecha inválida -> "—"
+ */
+export function formatFechaHora(fecha?: string | Date | null): string {
+  if (fecha === null || fecha === undefined) {
+    return '—';
+  }
+  const d = typeof fecha === 'string' ? new Date(fecha) : fecha;
+  if (isNaN(d.getTime())) {
+    return '—';
+  }
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
+}

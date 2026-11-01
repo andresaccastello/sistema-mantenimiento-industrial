@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatDuracion, formatHace } from './formato';
+import { formatDuracion, formatHace, formatFechaHora } from './formato';
 
 describe('FE-01: formatDuracion', () => {
   it('formatea null como raya em', () => {
@@ -53,5 +53,14 @@ describe('FE-02: formatHace', () => {
     const ahora = new Date('2026-10-31T12:00:00Z');
     const hace80m = new Date('2026-10-31T10:40:00Z');
     assert.equal(formatHace(hace80m, ahora), 'hace 1 h 20 min');
+  });
+});
+
+describe('FE-10: formatFechaHora', () => {
+  it('formatea fechas con ceros a la izquierda y maneja valores inválidos o nulos', () => {
+    assert.equal(formatFechaHora(new Date(2026, 9, 31, 8, 5)), '31/10/2026 08:05');
+    assert.equal(formatFechaHora(new Date(2026, 0, 2, 23, 59)), '02/01/2026 23:59');
+    assert.equal(formatFechaHora(null), '—');
+    assert.equal(formatFechaHora('no-es-fecha'), '—');
   });
 });
