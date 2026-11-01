@@ -1515,6 +1515,43 @@ test('Etapa API — API para el frontend', async (t) => {
       assert.ok(detSin.historial_estados.length > 0);
       assert.strictEqual(detSin.historial_estados[0].cambiado_por.apellido, null);
     });
+
+    // =========================================================================
+    // AF-20: Ids numéricos
+    // =========================================================================
+    await t.test('AF-20: Ids numéricos en GET /api/maquinas, /:id y /api/sectores', async () => {
+      // 1. GET /api/maquinas
+      const resMaqs = await app.request('/api/maquinas', {
+        headers: { Authorization: `Bearer ${r1Token}` },
+      });
+      assert.strictEqual(resMaqs.status, 200);
+      const maqs = await resMaqs.json();
+      assert.ok(maqs.length > 0, 'Debe haber al menos una máquina en la lista');
+      for (const m of maqs) {
+        assert.strictEqual(typeof m.id, 'number', `maquina.id debe ser number, fue ${typeof m.id}`);
+        assert.strictEqual(typeof m.sector.id, 'number', `maquina.sector.id debe ser number, fue ${typeof m.sector.id}`);
+      }
+
+      // 2. GET /api/maquinas/:id
+      const resDetMaq = await app.request(`/api/maquinas/${maqs[0].id}`, {
+        headers: { Authorization: `Bearer ${r1Token}` },
+      });
+      assert.strictEqual(resDetMaq.status, 200);
+      const detMaq = await resDetMaq.json();
+      assert.strictEqual(typeof detMaq.id, 'number', `detMaq.id debe ser number, fue ${typeof detMaq.id}`);
+      assert.strictEqual(typeof detMaq.sector.id, 'number', `detMaq.sector.id debe ser number, fue ${typeof detMaq.sector.id}`);
+
+      // 3. GET /api/sectores
+      const resSectores = await app.request('/api/sectores', {
+        headers: { Authorization: `Bearer ${r1Token}` },
+      });
+      assert.strictEqual(resSectores.status, 200);
+      const sectores = await resSectores.json();
+      assert.ok(sectores.length > 0, 'Debe haber al menos un sector en la lista');
+      for (const s of sectores) {
+        assert.strictEqual(typeof s.id, 'number', `sector.id debe ser number, fue ${typeof s.id}`);
+      }
+    });
   } finally {
     // Limpieza de datos creados en orden inverso de dependencias
     if (createdIntervencionIds.length > 0) {

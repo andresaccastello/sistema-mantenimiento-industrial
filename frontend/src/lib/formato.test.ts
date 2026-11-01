@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatDuracion, formatHace, formatFechaHora } from './formato';
+import { formatDuracion, formatHace, formatFechaHora, parsearId } from './formato';
 
 describe('FE-01: formatDuracion', () => {
   it('formatea null como raya em', () => {
@@ -62,5 +62,22 @@ describe('FE-10: formatFechaHora', () => {
     assert.equal(formatFechaHora(new Date(2026, 0, 2, 23, 59)), '02/01/2026 23:59');
     assert.equal(formatFechaHora(null), '—');
     assert.equal(formatFechaHora('no-es-fecha'), '—');
+  });
+});
+
+describe('FE-18: parsearId', () => {
+  it('parsea entero positivo como número', () => {
+    assert.equal(parsearId('12'), 12);
+    assert.equal(parsearId('1'), 1);
+  });
+
+  it('devuelve null para valores no enteros o no positivos', () => {
+    assert.equal(parsearId('abc'), null);
+    assert.equal(parsearId('0'), null);
+    assert.equal(parsearId('-3'), null);
+    assert.equal(parsearId('1.5'), null);
+    assert.equal(parsearId(''), null);
+    assert.equal(parsearId(null), null);
+    assert.equal(parsearId(undefined), null);
   });
 });

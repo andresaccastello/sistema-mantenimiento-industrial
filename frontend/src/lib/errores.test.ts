@@ -45,3 +45,41 @@ describe('FE-06: reaccionError y mensajeError', () => {
     );
   });
 });
+
+describe('FE-17: mensajeError', () => {
+  it('EDICION_NO_PERMITIDA devuelve texto propio aunque el error traiga otro mensaje del backend', () => {
+    const errorConMensaje = new ApiError(
+      403,
+      'EDICION_NO_PERMITIDA',
+      'Con alcance PROPIAS solo puedes editar intervenciones creadas por ti...'
+    );
+    assert.equal(
+      mensajeError(errorConMensaje),
+      'Ya no se puede editar: el reporte cambió de estado o ya tiene responsable.'
+    );
+
+    const errorSinMensaje = new ApiError(403, 'EDICION_NO_PERMITIDA');
+    assert.equal(
+      mensajeError(errorSinMensaje),
+      'Ya no se puede editar: el reporte cambió de estado o ya tiene responsable.'
+    );
+  });
+
+  it('SIN_CAMBIOS devuelve texto propio aunque el error traiga otro mensaje del backend', () => {
+    const errorConMensaje = new ApiError(
+      400,
+      'SIN_CAMBIOS',
+      'Los valores enviados no presentan cambios respecto de los actuales'
+    );
+    assert.equal(
+      mensajeError(errorConMensaje),
+      'No hay cambios para guardar.'
+    );
+
+    const errorSinMensaje = new ApiError(400, 'SIN_CAMBIOS');
+    assert.equal(
+      mensajeError(errorSinMensaje),
+      'No hay cambios para guardar.'
+    );
+  });
+});

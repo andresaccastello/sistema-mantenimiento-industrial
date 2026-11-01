@@ -28,9 +28,9 @@ import { clienteApi } from '../api/cliente';
 import { EstadoBadge } from '../componentes/EstadoBadge';
 import { PantallaVacia } from '../componentes/PantallaVacia';
 import { etiquetaMaquina } from '../lib/maquinas';
-import { formatFechaHora, formatHace, formatDuracion } from '../lib/formato';
+import { formatFechaHora, formatHace, formatDuracion, parsearId } from '../lib/formato';
 import { nombreCompleto } from '../lib/personas';
-import { itemHistorial } from '../lib/intervenciones';
+import { itemHistorial, hayCambiosReporte } from '../lib/intervenciones';
 import { obtenerInfoEstado } from '../lib/estados';
 import { mensajeError, ApiError } from '../lib/errores';
 import type { IntervencionDetalle } from '../api/tipos';
@@ -40,6 +40,8 @@ export function DetalleReporteOperario() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  const idValido = parsearId(id);
+
   // Estado para el modal de edición
   const [modalAbierto, setModalAbierto] = useState(false);
   const [editDescripcion, setEditDescripcion] = useState('');
@@ -47,6 +49,7 @@ export function DetalleReporteOperario() {
   const [guardando, setGuardando] = useState(false);
   const [errorEdicion, setErrorEdicion] = useState<string | null>(null);
   const [errorValidacionDesc, setErrorValidacionDesc] = useState<string | null>(null);
+  const [errorValidacionObs, setErrorValidacionObs] = useState<string | null>(null);
 
   // Consulta del detalle de la intervención
   const {
@@ -54,8 +57,9 @@ export function DetalleReporteOperario() {
     isLoading,
     error,
   } = useQuery<IntervencionDetalle, ApiError>({
-    queryKey: ['intervencion', id],
-    queryFn: () => clienteApi.get<IntervencionDetalle>(`/api/intervenciones/${id}`),
+    queryKey: ['intervencion', idValido],
+    queryFn: () => clienteApi.get<IntervencionDetalle>(`/api/intervenciones/${idValido}`),
+    enabled: idValido !== null,
     refetchInterval: 60000,
     retry: false,
   });
@@ -67,13 +71,19 @@ export function DetalleReporteOperario() {
     setEditObservaciones(reporte.observaciones || '');
     setErrorEdicion(null);
     setErrorValidacionDesc(null);
+    setErrorValidacionObs(null);
     setModalAbierto(true);
   };
+
+  const hayCambios = hayCambiosReporte(
+    { descripcion: reporte?.descripcion, observaciones: reporte?.observaciones },
+    { descripcion: editDescripcion, observaciones: editObservaciones }
+  );
 
   // Guardar edición
   const handleGuardarEdicion = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reporte) return;
+    if (!reporte || idValido === null) return;
 
     const descLimpia = editDescripcion.trim();
     if (descLimpia.length < 5) {
@@ -85,14 +95,20 @@ export function DetalleReporteOperario() {
       return;
     }
 
+    const obsLimpia = editObservaciones.trim();
+    if (obsLimpia.length > 2000) {
+      setErrorValidacionObs('Las observaciones no pueden superar los 2000 caracteres.');
+      return;
+    }
+
     setGuardando(true);
     setErrorEdicion(null);
 
     try {
-      await clienteApi.patch(`/api/intervenciones/${id}`, {
+      await clienteApi.patch(`/api/intervenciones/${idValido}`, {
         estado_esperado: reporte.estado,
         descripcion: descLimpia,
-        observaciones: editObservaciones.trim() || undefined,
+        observaciones: obsLimpia ? obsLimpia : null,
       });
 
       notifications.show({
@@ -100,7 +116,7 @@ export function DetalleReporteOperario() {
         color: 'green',
       });
       setModalAbierto(false);
-      await queryClient.invalidateQueries({ queryKey: ['intervencion', id] });
+      await queryClient.invalidateQueries({ queryKey: ['intervencion', idValido] });
     } catch (err: any) {
       const codigo = err?.codigo;
       if (codigo === 'ESTADO_DESACTUALIZADO' || codigo === 'EDICION_NO_PERMITIDA') {
@@ -109,7 +125,7 @@ export function DetalleReporteOperario() {
           color: 'red',
           message: mensajeError(err),
         });
-        await queryClient.invalidateQueries({ queryKey: ['intervencion', id] });
+        await queryClient.invalidateQueries({ queryKey: ['intervencion', idValido] });
       } else {
         setErrorEdicion(mensajeError(err));
       }
@@ -127,10 +143,12 @@ export function DetalleReporteOperario() {
     );
   }
 
-  // Manejo de no encontrado o error 404
-  if (error || !reporte) {
+  // Manejo de no encontrado o error 404 (o ID inválido)
+  if (idValido === null || error || !reporte) {
     const es404 =
-      error?.status === 404 || error?.codigo === 'INTERVENCION_NO_ENCONTRADA';
+      idValido === null ||
+      error?.status === 404 ||
+      error?.codigo === 'INTERVENCION_NO_ENCONTRADA';
 
     return (
       <PantallaVacia
@@ -439,7 +457,11 @@ export function DetalleReporteOperario() {
                 minRows={2}
                 maxRows={4}
                 value={editObservaciones}
-                onChange={(e) => setEditObservaciones(e.currentTarget.value)}
+                onChange={(e) => {
+                  setEditObservaciones(e.currentTarget.value);
+                  if (errorValidacionObs) setErrorValidacionObs(null);
+                }}
+                error={errorValidacionObs}
                 disabled={guardando}
               />
               <Group justify="flex-end">
@@ -461,6 +483,7 @@ export function DetalleReporteOperario() {
                 type="submit"
                 color="marca"
                 loading={guardando}
+                disabled={!hayCambios}
               >
                 Guardar cambios
               </Button>

@@ -55,7 +55,7 @@ maquinasApp.get('/', async (c) => {
     const { rows } = await pool.query(query);
     
     const result = rows.map(r => ({
-      id: r.id,
+      id: Number(r.id),
       codigo: r.codigo ?? null,
       nombre: r.nombre,
       tipo: r.tipo,
@@ -64,7 +64,7 @@ maquinasApp.get('/', async (c) => {
       observaciones: r.observaciones,
       activo: r.activo,
       creado_en: r.creado_en,
-      sector: { id: r.sector_id, nombre: r.sector_nombre },
+      sector: { id: Number(r.sector_id), nombre: r.sector_nombre },
       intervenciones_abiertas: Number(r.intervenciones_abiertas || 0)
     }));
     return c.json(result);
@@ -91,9 +91,9 @@ maquinasApp.get('/:id', async (c) => {
     if (rows.length === 0) return c.json({ error: 'Máquina no encontrada', codigo: 'MAQUINA_NO_ENCONTRADA' }, 404);
     const r = rows[0];
     return c.json({
-      id: r.id, codigo: r.codigo ?? null, nombre: r.nombre, tipo: r.tipo, estado: r.estado, 
+      id: Number(r.id), codigo: r.codigo ?? null, nombre: r.nombre, tipo: r.tipo, estado: r.estado, 
       ubicacion: r.ubicacion, observaciones: r.observaciones, activo: r.activo, creado_en: r.creado_en,
-      sector: { id: r.sector_id, nombre: r.sector_nombre }
+      sector: { id: Number(r.sector_id), nombre: r.sector_nombre }
     });
   } catch (error) {
     console.error('Error obteniendo máquina:', error);
@@ -142,7 +142,12 @@ maquinasApp.post('/', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
       [nombre, sector_id, tipo, ubicacion, observaciones, codigo]
     );
     
-    return c.json(rows[0], 201);
+    const r = rows[0];
+    return c.json({
+      ...r,
+      id: Number(r.id),
+      sector_id: r.sector_id !== undefined ? Number(r.sector_id) : undefined,
+    }, 201);
   } catch (error: any) {
     console.error('Error creando máquina:', error);
     if (error.code === '23514') return badRequest(c, 'Estado de máquina inválido');
@@ -198,7 +203,12 @@ maquinasApp.put('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
     );
 
     if (rows.length === 0) return c.json({ error: 'Máquina no encontrada', codigo: 'MAQUINA_NO_ENCONTRADA' }, 404);
-    return c.json(rows[0]);
+    const r = rows[0];
+    return c.json({
+      ...r,
+      id: Number(r.id),
+      sector_id: r.sector_id !== undefined ? Number(r.sector_id) : undefined,
+    });
   } catch (error: any) {
     console.error('Error actualizando máquina:', error);
     if (error.code === '23514') return badRequest(c, 'Estado de máquina inválido');

@@ -14,7 +14,7 @@ import {
 } from '@mantine/core';
 import { IconAlertTriangle } from '@tabler/icons-react';
 import { useNavigate, Navigate } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
 import { clienteApi } from '../api/cliente';
 import { destinoInicio } from '../lib/inicio';
@@ -98,12 +98,18 @@ function TarjetaReporte({
 
 export function MisReportes() {
   const { usuario } = useAuth();
-  const navigate = useNavigate();
 
-  // Redirección si no es el destino de inicio del perfil
+  // Redirección si no es el destino de inicio del perfil (sin hooks internos)
   if (destinoInicio(usuario?.permisos) !== '/mis-reportes') {
     return <Navigate to="/" replace />;
   }
+
+  return <MisReportesContenido />;
+}
+
+function MisReportesContenido() {
+  const { usuario } = useAuth();
+  const navigate = useNavigate();
 
   const tieneCrear = Boolean(usuario?.permisos?.['INTERVENCIONES_CREAR']);
   const tieneVer = Boolean(usuario?.permisos?.['INTERVENCIONES_VER']);
@@ -120,7 +126,11 @@ export function MisReportes() {
     refetchInterval: 60000,
   });
 
-  const { data: dataCerrados, isLoading: cargandoCerrados } = useQuery<ListaResultado<IntervencionLista>>({
+  const {
+    data: dataCerrados,
+    isLoading: cargandoCerrados,
+    isPlaceholderData: trayendoMasCerrados,
+  } = useQuery<ListaResultado<IntervencionLista>>({
     queryKey: ['intervenciones', { estado: 'FINALIZADA,CANCELADA', limit: limitCerrados }],
     queryFn: () =>
       clienteApi.listar<IntervencionLista>('/api/intervenciones', {
@@ -128,6 +138,7 @@ export function MisReportes() {
       }),
     enabled: tieneVer,
     refetchInterval: 60000,
+    placeholderData: keepPreviousData,
   });
 
   const botonReportar = tieneCrear ? (
@@ -151,12 +162,12 @@ export function MisReportes() {
     );
   }
 
-  const cargando = cargandoAbiertos || cargandoCerrados;
+  const primeraCarga = (cargandoAbiertos && !dataAbiertos) || (cargandoCerrados && !dataCerrados);
   const abiertos = dataAbiertos?.items || [];
   const cerrados = dataCerrados?.items || [];
   const totalAbiertos = dataAbiertos?.total ?? abiertos.length;
   const totalCerrados = dataCerrados?.total ?? cerrados.length;
-  const sinReportes = !cargando && totalAbiertos === 0 && totalCerrados === 0;
+  const sinReportes = !primeraCarga && totalAbiertos === 0 && totalCerrados === 0;
 
   return (
     <Stack gap="xl">
@@ -168,7 +179,7 @@ export function MisReportes() {
         {botonReportar && <Box w={{ base: '100%', sm: 'auto' }}>{botonReportar}</Box>}
       </Group>
 
-      {cargando && (
+      {primeraCarga && (
         <Center py="xl">
           <Loader color="marca" />
         </Center>
@@ -182,7 +193,7 @@ export function MisReportes() {
         />
       )}
 
-      {!cargando && !sinReportes && (
+      {!primeraCarga && !sinReportes && (
         <Stack gap="xl">
           {/* Bloque Abiertos */}
           <Stack gap="sm">
@@ -241,6 +252,7 @@ export function MisReportes() {
                     <Button
                       variant="default"
                       size="md"
+                      loading={trayendoMasCerrados}
                       onClick={() => setLimitCerrados((l) => l + 10)}
                     >
                       Ver más
@@ -255,4 +267,5 @@ export function MisReportes() {
     </Stack>
   );
 }
+
 export default MisReportes;

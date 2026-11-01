@@ -72,6 +72,14 @@ export function mensajeError(error: unknown): string {
     return 'Otra persona modificó esta intervención. Actualizá la pantalla.';
   }
 
+  if (codigo === 'EDICION_NO_PERMITIDA') {
+    return 'Ya no se puede editar: el reporte cambió de estado o ya tiene responsable.';
+  }
+
+  if (codigo === 'SIN_CAMBIOS') {
+    return 'No hay cambios para guardar.';
+  }
+
   if (codigo === 'ERROR_INTERNO') {
     return 'Ocurrió un error inesperado en el servidor.';
   }

@@ -11,6 +11,7 @@ import {
   Box,
   Title,
   Center,
+  SimpleGrid,
   ComboboxParsedItem,
   OptionsFilter,
 } from '@mantine/core';
@@ -56,6 +57,7 @@ export function ReportarFalla() {
     maquina?: string;
     detieneMaquina?: string;
     descripcion?: string;
+    observaciones?: string;
   }>({});
 
   // Resultado de confirmación
@@ -117,7 +119,8 @@ export function ReportarFalla() {
       ];
     }
 
-    return maquinas.map((m) => ({
+    const listaOrdenada = [...propias, ...otras];
+    return listaOrdenada.map((m) => ({
       value: String(m.id),
       label: etiquetaMaquina(m),
     }));
@@ -181,6 +184,11 @@ export function ReportarFalla() {
       nuevosErrores.descripcion = 'Describí la falla (al menos 5 caracteres).';
     } else if (descLimpia.length > 2000) {
       nuevosErrores.descripcion = 'La descripción no puede superar los 2000 caracteres.';
+    }
+
+    const obsLimpia = observaciones.trim();
+    if (obsLimpia.length > 2000) {
+      nuevosErrores.observaciones = 'Las observaciones no pueden superar los 2000 caracteres.';
     }
 
     setErrores(nuevosErrores);
@@ -369,10 +377,14 @@ export function ReportarFalla() {
 
           {/* 3. ¿La máquina quedó detenida? */}
           <Stack gap="xs">
-            <Text fw={500} size="md" c="#0f172a">
+            <Text id="label-maquina-detenida" fw={500} size="md" c="#0f172a">
               ¿La máquina quedó detenida?
             </Text>
-            <Group gap="md" grow>
+            <SimpleGrid
+              cols={{ base: 1, xs: 2 }}
+              role="group"
+              aria-labelledby="label-maquina-detenida"
+            >
               <Button
                 size="lg"
                 variant={detieneMaquina === true ? 'filled' : 'default'}
@@ -402,7 +414,7 @@ export function ReportarFalla() {
               >
                 No, sigue funcionando
               </Button>
-            </Group>
+            </SimpleGrid>
             {errores.detieneMaquina && (
               <Text size="sm" c="red">
                 {errores.detieneMaquina}
@@ -443,7 +455,13 @@ export function ReportarFalla() {
               minRows={2}
               maxRows={4}
               value={observaciones}
-              onChange={(e) => setObservaciones(e.currentTarget.value)}
+              onChange={(e) => {
+                setObservaciones(e.currentTarget.value);
+                if (errores.observaciones) {
+                  setErrores((prev) => ({ ...prev, observaciones: undefined }));
+                }
+              }}
+              error={errores.observaciones}
             />
             <Group justify="flex-end">
               <Text size="xs" c={observaciones.length > 2000 ? 'red' : '#94a3b8'}>
@@ -463,7 +481,7 @@ export function ReportarFalla() {
           </Box>
 
           {/* Botones de acción */}
-          <Group justify="flex-start" gap="md" mt="md" wrap="wrap">
+          <Box className="botones-formulario-reporte">
             <Button
               type="submit"
               size="lg"
@@ -481,7 +499,7 @@ export function ReportarFalla() {
             >
               Cancelar
             </Button>
-          </Group>
+          </Box>
         </Stack>
       </form>
     </Stack>

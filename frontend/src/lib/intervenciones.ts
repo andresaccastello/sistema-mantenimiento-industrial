@@ -74,3 +74,32 @@ export function itemHistorial(h: HistorialItemEntrada): ItemHistorialResultado {
     estado: h.estado_nuevo,
   };
 }
+
+export interface ReporteEditableCampos {
+  descripcion?: string | null;
+  observaciones?: string | null;
+}
+
+function normalizarCampo(texto?: string | null): string {
+  if (texto === null || texto === undefined) return '';
+  return texto.trim();
+}
+
+/**
+ * Devuelve true si alguno de los campos { descripcion, observaciones } cambió.
+ * Compara los textos recortados y trata null, undefined y "" como iguales.
+ */
+export function hayCambiosReporte(
+  actual: ReporteEditableCampos,
+  editado: ReporteEditableCampos
+): boolean {
+  const descActual = normalizarCampo(actual?.descripcion);
+  const descEditado = normalizarCampo(editado?.descripcion);
+  if (descActual !== descEditado) return true;
+
+  const obsActual = normalizarCampo(actual?.observaciones);
+  const obsEditado = normalizarCampo(editado?.observaciones);
+  if (obsActual !== obsEditado) return true;
+
+  return false;
+}

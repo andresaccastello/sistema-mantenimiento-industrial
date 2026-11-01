@@ -81,3 +81,22 @@ export function formatFechaHora(fecha?: string | Date | null): string {
 
   return `${day}/${month}/${year} ${hours}:${minutes}`;
 }
+
+/**
+ * Parsea un ID como entero positivo.
+ * Devuelve el número si el texto es un entero positivo y, si no, null.
+ */
+export function parsearId(texto?: string | number | null): number | null {
+  if (texto === null || texto === undefined || texto === '') {
+    return null;
+  }
+  const str = String(texto).trim();
+  if (!/^\d+$/.test(str)) {
+    return null;
+  }
+  const n = Number(str);
+  if (!Number.isSafeInteger(n) || n <= 0) {
+    return null;
+  }
+  return n;
+}

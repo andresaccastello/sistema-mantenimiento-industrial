@@ -12,7 +12,7 @@ sectoresApp.get('/', async (c) => {
     const { rows } = await pool.query(
       'SELECT id, nombre, descripcion, activo, creado_en FROM sectores WHERE activo = TRUE ORDER BY nombre'
     );
-    return c.json(rows);
+    return c.json(rows.map((r) => ({ ...r, id: Number(r.id) })));
   } catch (error) {
     console.error('Error obteniendo sectores:', error);
     return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
@@ -31,7 +31,7 @@ sectoresApp.get('/:id', async (c) => {
     if (rows.length === 0) {
       return c.json({ error: 'Sector no encontrado', codigo: 'SECTOR_NO_ENCONTRADO' }, 404);
     }
-    return c.json(rows[0]);
+    return c.json({ ...rows[0], id: Number(rows[0].id) });
   } catch (error) {
     console.error('Error obteniendo sector:', error);
     return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
@@ -51,7 +51,7 @@ sectoresApp.post('/', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
       [nombre, descripcion]
     );
     
-    return c.json(rows[0], 201);
+    return c.json({ ...rows[0], id: Number(rows[0].id) }, 201);
   } catch (error: any) {
     console.error('Error creando sector:', error);
     if (error.code === '23505') {
@@ -80,7 +80,7 @@ sectoresApp.put('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
       return c.json({ error: 'Sector no encontrado', codigo: 'SECTOR_NO_ENCONTRADO' }, 404);
     }
     
-    return c.json(rows[0]);
+    return c.json({ ...rows[0], id: Number(rows[0].id) });
   } catch (error: any) {
     console.error('Error actualizando sector:', error);
     if (error.code === '23505') {

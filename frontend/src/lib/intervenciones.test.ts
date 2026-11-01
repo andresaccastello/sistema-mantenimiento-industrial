@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { vistaDetalle, itemHistorial } from './intervenciones.js';
+import { vistaDetalle, itemHistorial, hayCambiosReporte } from './intervenciones.js';
 
 describe('FE-11: vistaDetalle', () => {
   // Permisos copiados de migraciones (igual que en FE-04 / menu.test.ts)
@@ -104,5 +104,71 @@ describe('FE-15: itemHistorial', () => {
       fecha_efectiva: null,
     });
     assert.equal(sinEfectiva.fecha, '2026-10-31T11:00:00Z');
+  });
+});
+
+describe('FE-16: hayCambiosReporte', () => {
+  it('mismos textos devuelve false', () => {
+    assert.equal(
+      hayCambiosReporte(
+        { descripcion: 'Falla motor', observaciones: 'Revisar cable' },
+        { descripcion: 'Falla motor', observaciones: 'Revisar cable' }
+      ),
+      false
+    );
+  });
+
+  it('solo cambian los espacios de los extremos devuelve false', () => {
+    assert.equal(
+      hayCambiosReporte(
+        { descripcion: 'Falla motor', observaciones: 'Revisar cable' },
+        { descripcion: '  Falla motor  ', observaciones: ' Revisar cable\n' }
+      ),
+      false
+    );
+  });
+
+  it('observaciones null contra "" devuelve false', () => {
+    assert.equal(
+      hayCambiosReporte(
+        { descripcion: 'Falla motor', observaciones: null },
+        { descripcion: 'Falla motor', observaciones: '' }
+      ),
+      false
+    );
+    assert.equal(
+      hayCambiosReporte(
+        { descripcion: 'Falla motor', observaciones: '' },
+        { descripcion: 'Falla motor', observaciones: null }
+      ),
+      false
+    );
+  });
+
+  it('descripción distinta devuelve true', () => {
+    assert.equal(
+      hayCambiosReporte(
+        { descripcion: 'Falla motor', observaciones: 'Revisar cable' },
+        { descripcion: 'Falla bomba', observaciones: 'Revisar cable' }
+      ),
+      true
+    );
+  });
+
+  it('observaciones "algo" contra "" devuelve true', () => {
+    assert.equal(
+      hayCambiosReporte(
+        { descripcion: 'Falla motor', observaciones: 'algo' },
+        { descripcion: 'Falla motor', observaciones: '' }
+      ),
+      true
+    );
+    assert.equal(
+      hayCambiosReporte(
+        { descripcion: 'Falla motor', observaciones: '' },
+        { descripcion: 'Falla motor', observaciones: 'algo' }
+      ),
+      true
+    );
   });
 });
