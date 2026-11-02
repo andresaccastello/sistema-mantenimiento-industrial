@@ -1552,6 +1552,91 @@ test('Etapa API — API para el frontend', async (t) => {
         assert.strictEqual(typeof s.id, 'number', `sector.id debe ser number, fue ${typeof s.id}`);
       }
     });
+
+    // =========================================================================
+    // AF-21: Personas en la auditoría
+    // =========================================================================
+    await t.test('AF-21: Personas en la auditoría', async () => {
+      // 1. Operario reporta
+      const resPost = await app.request('/api/intervenciones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opToken}` },
+        body: JSON.stringify({ maquina_id: maquina1Id, descripcion: 'Falla para prueba AF-21' }),
+      });
+      assert.strictEqual(resPost.status, 201);
+      const intId = (await resPost.json()).id;
+      createdIntervencionIds.push(intId);
+
+      // 2. Responsable 1 la toma
+      const resTomar = await app.request(`/api/intervenciones/${intId}/tomar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${r1Token}` },
+        body: JSON.stringify({ estado_esperado: 'PENDIENTE' }),
+      });
+      assert.strictEqual(resTomar.status, 200);
+
+      const resDet1 = await app.request(`/api/intervenciones/${intId}`, {
+        headers: { Authorization: `Bearer ${r1Token}` },
+      });
+      assert.strictEqual(resDet1.status, 200);
+      const det1 = await resDet1.json();
+      const aud1 = det1.auditoria.find((a: any) => a.campo_modificado === 'responsable_usuario_id');
+      assert.ok(aud1, 'Debe existir auditoría de cambio de responsable al tomar');
+      assert.strictEqual(aud1.responsable_anterior, null);
+      assert.ok(aud1.responsable_nuevo);
+      assert.strictEqual(typeof aud1.responsable_nuevo.id, 'number');
+      assert.strictEqual(aud1.responsable_nuevo.id, r1Id);
+      assert.strictEqual(typeof aud1.responsable_nuevo.nombre, 'string');
+      assert.ok(aud1.responsable_nuevo.apellido !== undefined);
+
+      // 3. Se reasigna al responsable 2 con motivo
+      const resReasig = await app.request(`/api/intervenciones/${intId}/responsable`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${r1Token}` },
+        body: JSON.stringify({
+          usuario_id: r2Id,
+          motivo: 'Reasignada por prueba AF-21',
+          estado_esperado: 'PENDIENTE',
+        }),
+      });
+      assert.strictEqual(resReasig.status, 200);
+
+      const resDet2 = await app.request(`/api/intervenciones/${intId}`, {
+        headers: { Authorization: `Bearer ${r1Token}` },
+      });
+      assert.strictEqual(resDet2.status, 200);
+      const det2 = await resDet2.json();
+      const aud2 = det2.auditoria[det2.auditoria.length - 1];
+      assert.strictEqual(aud2.campo_modificado, 'responsable_usuario_id');
+      assert.ok(aud2.responsable_anterior);
+      assert.strictEqual(typeof aud2.responsable_anterior.id, 'number');
+      assert.strictEqual(aud2.responsable_anterior.id, r1Id);
+      assert.ok(aud2.responsable_nuevo);
+      assert.strictEqual(typeof aud2.responsable_nuevo.id, 'number');
+      assert.strictEqual(aud2.responsable_nuevo.id, r2Id);
+
+      // 4. Se edita la descripción: ese ítem tiene los dos campos en null
+      const resEdit = await app.request(`/api/intervenciones/${intId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${r1Token}` },
+        body: JSON.stringify({
+          descripcion: 'Falla para prueba AF-21 con descripcion editada',
+          estado_esperado: 'PENDIENTE',
+        }),
+      });
+      assert.strictEqual(resEdit.status, 200);
+
+      const resDet3 = await app.request(`/api/intervenciones/${intId}`, {
+        headers: { Authorization: `Bearer ${r1Token}` },
+      });
+      assert.strictEqual(resDet3.status, 200);
+      const det3 = await resDet3.json();
+      const aud3 = det3.auditoria[det3.auditoria.length - 1];
+      assert.strictEqual(aud3.tipo_evento, 'EDICION');
+      assert.strictEqual(aud3.campo_modificado, 'descripcion');
+      assert.strictEqual(aud3.responsable_anterior, null);
+      assert.strictEqual(aud3.responsable_nuevo, null);
+    });
   } finally {
     // Limpieza de datos creados en orden inverso de dependencias
     if (createdIntervencionIds.length > 0) {

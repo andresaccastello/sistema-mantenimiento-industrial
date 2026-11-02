@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { ApiError, mensajeError, reaccionError } from './errores';
+import { ApiError, mensajeError, reaccionError, requiereRecargar } from './errores';
 
 describe('FE-06: reaccionError y mensajeError', () => {
   it('NO_AUTENTICADO lleva a cerrar_sesion', () => {
@@ -81,5 +81,30 @@ describe('FE-17: mensajeError', () => {
       mensajeError(errorSinMensaje),
       'No hay cambios para guardar.'
     );
+  });
+});
+
+describe('FE-20: requiereRecargar y mensajeError', () => {
+  it('requiereRecargar devuelve true para errores de intervención cambiada concurrentemente', () => {
+    assert.equal(requiereRecargar(new ApiError(409, 'ESTADO_DESACTUALIZADO')), true);
+    assert.equal(requiereRecargar(new ApiError(409, 'INTERVENCION_YA_ASIGNADA')), true);
+    assert.equal(requiereRecargar(new ApiError(409, 'PERIODO_INVALIDO')), true);
+  });
+
+  it('requiereRecargar devuelve false para errores de validación o red', () => {
+    assert.equal(requiereRecargar(new ApiError(422, 'MOTIVO_REQUERIDO')), false);
+    assert.equal(requiereRecargar(new ApiError(422, 'FECHA_INCOHERENTE')), false);
+    assert.equal(requiereRecargar(new ApiError(0, 'SIN_CONEXION')), false);
+  });
+
+  it('mensajeError devuelve texto oficial de la sección 3.4 aunque el error traiga otro mensaje', () => {
+    const errAsignada = new ApiError(409, 'INTERVENCION_YA_ASIGNADA', 'Detalle técnico de Postgres');
+    assert.equal(mensajeError(errAsignada), 'Otra persona ya tomó esta intervención.');
+
+    const errEjecucion = new ApiError(422, 'EJECUCION_REQUERIDA', 'Backend raw execution message');
+    assert.equal(mensajeError(errEjecucion), 'Indicá si lo hizo personal propio o un servicio externo.');
+
+    const errRecuperacion = new ApiError(422, 'DECISION_RECUPERACION_REQUERIDA', 'Another message');
+    assert.equal(mensajeError(errRecuperacion), 'Indicá si la máquina volvió a funcionar.');
   });
 });

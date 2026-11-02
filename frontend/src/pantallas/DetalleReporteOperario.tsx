@@ -9,28 +9,24 @@ import {
   Box,
   Title,
   Timeline,
-  Modal,
-  Textarea,
   Loader,
   Center,
   Anchor,
-  Alert,
 } from '@mantine/core';
 import {
   IconArrowLeft,
   IconEdit,
-  IconAlertCircle,
 } from '@tabler/icons-react';
 import { useParams, useNavigate } from 'react-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { notifications } from '@mantine/notifications';
+import { useQuery } from '@tanstack/react-query';
 import { clienteApi } from '../api/cliente';
 import { EstadoBadge } from '../componentes/EstadoBadge';
 import { PantallaVacia } from '../componentes/PantallaVacia';
+import { ModalEditarReporte } from '../componentes/ModalEditarReporte';
 import { etiquetaMaquina } from '../lib/maquinas';
 import { formatFechaHora, formatHace, formatDuracion, parsearId } from '../lib/formato';
 import { nombreCompleto } from '../lib/personas';
-import { itemHistorial, hayCambiosReporte } from '../lib/intervenciones';
+import { itemHistorial } from '../lib/intervenciones';
 import { obtenerInfoEstado } from '../lib/estados';
 import { mensajeError, ApiError } from '../lib/errores';
 import type { IntervencionDetalle } from '../api/tipos';
@@ -38,18 +34,11 @@ import type { IntervencionDetalle } from '../api/tipos';
 export function DetalleReporteOperario() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   const idValido = parsearId(id);
 
   // Estado para el modal de edición
-  const [modalAbierto, setModalAbierto] = useState(false);
-  const [editDescripcion, setEditDescripcion] = useState('');
-  const [editObservaciones, setEditObservaciones] = useState('');
-  const [guardando, setGuardando] = useState(false);
-  const [errorEdicion, setErrorEdicion] = useState<string | null>(null);
-  const [errorValidacionDesc, setErrorValidacionDesc] = useState<string | null>(null);
-  const [errorValidacionObs, setErrorValidacionObs] = useState<string | null>(null);
+  const [modalEditarAbierto, setModalEditarAbierto] = useState(false);
 
   // Consulta del detalle de la intervención
   const {
@@ -63,76 +52,6 @@ export function DetalleReporteOperario() {
     refetchInterval: 60000,
     retry: false,
   });
-
-  // Abrir modal de edición con los datos actuales
-  const handleAbrirEditar = () => {
-    if (!reporte) return;
-    setEditDescripcion(reporte.descripcion || '');
-    setEditObservaciones(reporte.observaciones || '');
-    setErrorEdicion(null);
-    setErrorValidacionDesc(null);
-    setErrorValidacionObs(null);
-    setModalAbierto(true);
-  };
-
-  const hayCambios = hayCambiosReporte(
-    { descripcion: reporte?.descripcion, observaciones: reporte?.observaciones },
-    { descripcion: editDescripcion, observaciones: editObservaciones }
-  );
-
-  // Guardar edición
-  const handleGuardarEdicion = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!reporte || idValido === null) return;
-
-    const descLimpia = editDescripcion.trim();
-    if (descLimpia.length < 5) {
-      setErrorValidacionDesc('Describí la falla (al menos 5 caracteres).');
-      return;
-    }
-    if (descLimpia.length > 2000) {
-      setErrorValidacionDesc('La descripción no puede superar los 2000 caracteres.');
-      return;
-    }
-
-    const obsLimpia = editObservaciones.trim();
-    if (obsLimpia.length > 2000) {
-      setErrorValidacionObs('Las observaciones no pueden superar los 2000 caracteres.');
-      return;
-    }
-
-    setGuardando(true);
-    setErrorEdicion(null);
-
-    try {
-      await clienteApi.patch(`/api/intervenciones/${idValido}`, {
-        estado_esperado: reporte.estado,
-        descripcion: descLimpia,
-        observaciones: obsLimpia ? obsLimpia : null,
-      });
-
-      notifications.show({
-        message: 'Reporte actualizado',
-        color: 'green',
-      });
-      setModalAbierto(false);
-      await queryClient.invalidateQueries({ queryKey: ['intervencion', idValido] });
-    } catch (err: any) {
-      const codigo = err?.codigo;
-      if (codigo === 'ESTADO_DESACTUALIZADO' || codigo === 'EDICION_NO_PERMITIDA') {
-        setModalAbierto(false);
-        notifications.show({
-          color: 'red',
-          message: mensajeError(err),
-        });
-        await queryClient.invalidateQueries({ queryKey: ['intervencion', idValido] });
-      } else {
-        setErrorEdicion(mensajeError(err));
-      }
-    } finally {
-      setGuardando(false);
-    }
-  };
 
   // Manejo de carga
   if (isLoading) {
@@ -217,7 +136,7 @@ export function DetalleReporteOperario() {
             variant="light"
             color="marca"
             leftSection={<IconEdit size={18} />}
-            onClick={handleAbrirEditar}
+            onClick={() => setModalEditarAbierto(true)}
           >
             Editar
           </Button>
@@ -410,87 +329,16 @@ export function DetalleReporteOperario() {
       </Card>
 
       {/* Modal de edición */}
-      <Modal
-        opened={modalAbierto}
-        onClose={() => !guardando && setModalAbierto(false)}
-        title="Editar reporte"
-        size="lg"
-        centered
-      >
-        <form onSubmit={handleGuardarEdicion} noValidate>
-          <Stack gap="md">
-            {errorEdicion && (
-              <Alert
-                color="red"
-                variant="light"
-                icon={<IconAlertCircle size={18} />}
-              >
-                {errorEdicion}
-              </Alert>
-            )}
-
-            <Stack gap={4}>
-              <Textarea
-                size="md"
-                label="¿Qué pasa?"
-                minRows={3}
-                maxRows={6}
-                value={editDescripcion}
-                onChange={(e) => {
-                  setEditDescripcion(e.currentTarget.value);
-                  if (errorValidacionDesc) setErrorValidacionDesc(null);
-                }}
-                error={errorValidacionDesc}
-                disabled={guardando}
-              />
-              <Group justify="flex-end">
-                <Text size="xs" c={editDescripcion.length > 2000 ? 'red' : '#94a3b8'}>
-                  {editDescripcion.length}/2000
-                </Text>
-              </Group>
-            </Stack>
-
-            <Stack gap={4}>
-              <Textarea
-                size="md"
-                label="Observaciones (opcional)"
-                minRows={2}
-                maxRows={4}
-                value={editObservaciones}
-                onChange={(e) => {
-                  setEditObservaciones(e.currentTarget.value);
-                  if (errorValidacionObs) setErrorValidacionObs(null);
-                }}
-                error={errorValidacionObs}
-                disabled={guardando}
-              />
-              <Group justify="flex-end">
-                <Text size="xs" c={editObservaciones.length > 2000 ? 'red' : '#94a3b8'}>
-                  {editObservaciones.length}/2000
-                </Text>
-              </Group>
-            </Stack>
-
-            <Group justify="flex-end" gap="sm" mt="md">
-              <Button
-                variant="default"
-                onClick={() => setModalAbierto(false)}
-                disabled={guardando}
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                color="marca"
-                loading={guardando}
-                disabled={!hayCambios}
-              >
-                Guardar cambios
-              </Button>
-            </Group>
-          </Stack>
-        </form>
-      </Modal>
+      {reporte && idValido !== null && (
+        <ModalEditarReporte
+          abierto={modalEditarAbierto}
+          onCerrar={() => setModalEditarAbierto(false)}
+          intervencionId={idValido}
+          estadoEsperado={reporte.estado}
+          descripcionInicial={reporte.descripcion}
+          observacionesIniciales={reporte.observaciones}
+        />
+      )}
     </Stack>
   );
 }

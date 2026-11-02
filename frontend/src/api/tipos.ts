@@ -152,6 +152,27 @@ export interface PeriodoDetencion {
   confirmado_por: { id: number; nombre: string; apellido: string | null } | null;
 }
 
+export interface AuditoriaItem {
+  id: number;
+  tipo_evento: string;
+  campo_modificado: string | null;
+  valor_anterior: string | null;
+  valor_nuevo: string | null;
+  motivo: string | null;
+  creado_en: string;
+  realizado_por: Persona;
+  responsable_anterior: Persona | null;
+  responsable_nuevo: Persona | null;
+}
+
+export interface SectorLista {
+  id: number;
+  nombre: string;
+  descripcion: string | null;
+  activo: boolean;
+  creado_en: string;
+}
+
 export interface IntervencionDetalle {
   id: number;
   descripcion: string;
@@ -176,16 +197,7 @@ export interface IntervencionDetalle {
   responsable: Persona | null;
   historial_estados: HistorialEstado[];
   periodos_detencion: PeriodoDetencion[];
-  auditoria?: Array<{
-    id: number;
-    tipo_evento: string;
-    campo_modificado: string | null;
-    valor_anterior: string | null;
-    valor_nuevo: string | null;
-    motivo: string | null;
-    creado_en: string;
-    realizado_por: Persona;
-  }>;
+  auditoria: AuditoriaItem[];
 }
 
 export interface IntervencionCreada {

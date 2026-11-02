@@ -1,6 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { vistaDetalle, itemHistorial, hayCambiosReporte } from './intervenciones.js';
+import {
+  vistaDetalle,
+  itemHistorial,
+  hayCambiosReporte,
+  tiempoLista,
+  minimoNuevaDetencion,
+  eventosHistorial,
+} from './intervenciones.js';
 
 describe('FE-11: vistaDetalle', () => {
   // Permisos copiados de migraciones (igual que en FE-04 / menu.test.ts)
@@ -170,5 +177,172 @@ describe('FE-16: hayCambiosReporte', () => {
       ),
       true
     );
+  });
+});
+
+describe('FE-24: tiempoLista y minimoNuevaDetencion', () => {
+  it('tiempoLista devuelve formato y etiqueta según estado', () => {
+    // Pendiente con 75 minutos de espera en curso
+    const pend = tiempoLista({
+      estado: 'PENDIENTE',
+      tiempos: { espera_minutos: 75, espera_en_curso: true },
+    });
+    assert.deepEqual(pend, { etiqueta: 'Espera', texto: '1 h 15 min', enCurso: true });
+
+    // Esperando repuestos -> "Trabajo"
+    const rep = tiempoLista({
+      estado: 'EN_ESPERA_REPUESTOS',
+      tiempos: { duracion_bruta_minutos: 40, trabajo_en_curso: true },
+    });
+    assert.equal(rep.etiqueta, 'Trabajo');
+
+    // Finalizada -> "Total", sin "en curso"
+    const fin = tiempoLista({
+      estado: 'FINALIZADA',
+      tiempos: { tiempo_total_minutos: 120, trabajo_en_curso: false },
+    });
+    assert.deepEqual(fin, { etiqueta: 'Total', texto: '2 h', enCurso: false });
+
+    // Cancelada -> etiqueta null y "—"
+    const canc = tiempoLista({
+      estado: 'CANCELADA',
+      tiempos: null,
+    });
+    assert.deepEqual(canc, { etiqueta: null, texto: '—', enCurso: false });
+  });
+
+  it('minimoNuevaDetencion maneja períodos cerrados y abiertos', () => {
+    const creacion = '2026-11-02T10:00:00.000Z';
+
+    // sin períodos -> fecha_creacion
+    assert.equal(minimoNuevaDetencion({ fecha_creacion: creacion }), creacion);
+
+    // con un período cerrado posterior a la creación -> su hasta
+    const hastaCerrado = '2026-11-02T12:00:00.000Z';
+    const conPeriodoCerrado = minimoNuevaDetencion({
+      fecha_creacion: creacion,
+      periodos_detencion: [
+        { hasta: hastaCerrado },
+      ],
+    });
+    assert.equal(conPeriodoCerrado, hastaCerrado);
+
+    // un período abierto no cuenta
+    const conAbierto = minimoNuevaDetencion({
+      fecha_creacion: creacion,
+      periodos_detencion: [
+        { hasta: null },
+      ],
+    });
+    assert.equal(conAbierto, creacion);
+  });
+});
+
+describe('FE-25: eventosHistorial', () => {
+  it('combina historial de estados y auditoría con formato y orden correctos', () => {
+    const personaOp = { id: 1, legajo: 'OP1', nombre: 'Carlos', apellido: 'Gómez' };
+    const personaR1 = { id: 2, legajo: 'R1', nombre: 'Juan', apellido: 'Pérez' };
+    const personaR2 = { id: 3, legajo: 'R2', nombre: 'Ana', apellido: 'Gómez' };
+
+    const detalle = {
+      historial_estados: [
+        {
+          id: 1,
+          estado_anterior: null,
+          estado_nuevo: 'PENDIENTE',
+          observacion: null,
+          cambiado_en: '2026-11-02T10:00:00Z',
+          fecha_efectiva: '2026-11-02T10:00:00Z',
+          cambiado_por: personaOp,
+        },
+        {
+          id: 2,
+          estado_anterior: 'PENDIENTE',
+          estado_nuevo: 'EN_PROCESO',
+          observacion: null,
+          cambiado_en: '2026-11-02T11:00:00Z',
+          fecha_efectiva: '2026-11-02T10:30:00Z', // 30 min antes -> mostrarRegistrado = true
+          cambiado_por: personaR1,
+        },
+      ],
+      auditoria: [
+        {
+          id: 10,
+          tipo_evento: 'ASIGNACION',
+          campo_modificado: 'responsable_usuario_id',
+          valor_anterior: null,
+          valor_nuevo: '2',
+          motivo: 'Intervención tomada por el responsable', // texto automático -> detalle null
+          creado_en: '2026-11-02T11:00:00Z', // mismo instante que estado 2 -> auditoría va antes
+          realizado_por: personaR1,
+          responsable_anterior: null,
+          responsable_nuevo: personaR1,
+        },
+        {
+          id: 11,
+          tipo_evento: 'ASIGNACION',
+          campo_modificado: 'responsable_usuario_id',
+          valor_anterior: '2',
+          valor_nuevo: '3',
+          motivo: 'Turno tarde',
+          creado_en: '2026-11-02T12:00:00Z',
+          realizado_por: personaR1,
+          responsable_anterior: personaR1,
+          responsable_nuevo: personaR2,
+        },
+        {
+          id: 12,
+          tipo_evento: 'EDICION',
+          campo_modificado: 'observaciones',
+          valor_anterior: 'Ruido en rodamiento',
+          valor_nuevo: 'Ruido y vibración',
+          motivo: null,
+          creado_en: '2026-11-02T13:00:00Z',
+          realizado_por: personaR2,
+          responsable_anterior: null,
+          responsable_nuevo: null,
+        },
+        {
+          id: 13,
+          tipo_evento: 'REAPERTURA',
+          campo_modificado: null,
+          valor_anterior: null,
+          valor_nuevo: null,
+          motivo: 'Volvió a fallar',
+          creado_en: '2026-11-02T14:00:00Z',
+          realizado_por: personaR2,
+          responsable_anterior: null,
+          responsable_nuevo: null,
+        },
+      ],
+    };
+
+    const eventos = eventosHistorial(detalle);
+
+    // Títulos esperados
+    const titulos = eventos.map((e) => e.titulo);
+    assert.deepEqual(titulos, [
+      'Reporte registrado',
+      'Tomada por Juan Pérez',
+      'En proceso',
+      'Reasignada de Juan Pérez a Ana Gómez',
+      'Se editaron las observaciones',
+    ]);
+
+    // La reapertura no se incluye
+    assert.equal(eventos.some((e) => e.titulo.toLowerCase().includes('reapertura')), false);
+
+    // La toma no muestra el texto automático como detalle
+    assert.equal(eventos[1].detalle, null);
+
+    // La reasignación muestra el motivo como detalle
+    assert.equal(eventos[3].detalle, 'Turno tarde');
+
+    // La edición de observaciones muestra "Antes: ..."
+    assert.equal(eventos[4].detalle, 'Antes: Ruido en rodamiento');
+
+    // mostrarRegistrado
+    assert.equal(eventos[0].mostrarRegistrado, false);
+    assert.equal(eventos[2].mostrarRegistrado, true);
   });
 });

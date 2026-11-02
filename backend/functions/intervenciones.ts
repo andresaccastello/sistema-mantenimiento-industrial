@@ -634,9 +634,17 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
     // Auditoría de intervenciones
     const resAuditoria = await pool.query(
       `SELECT a.id, a.tipo_evento, a.campo_modificado, a.valor_anterior, a.valor_nuevo, a.motivo, a.creado_en,
-              u.id AS usuario_id, u.legajo AS usuario_legajo, u.nombre AS usuario_nombre, u.apellido AS usuario_apellido
+              u.id AS usuario_id, u.legajo AS usuario_legajo, u.nombre AS usuario_nombre, u.apellido AS usuario_apellido,
+              u_ant.id AS ant_id, u_ant.legajo AS ant_legajo, u_ant.nombre AS ant_nombre, u_ant.apellido AS ant_apellido,
+              u_nue.id AS nue_id, u_nue.legajo AS nue_legajo, u_nue.nombre AS nue_nombre, u_nue.apellido AS nue_apellido
        FROM intervencion_auditoria a
        JOIN usuarios u ON a.realizado_por_usuario_id = u.id
+       LEFT JOIN usuarios u_ant ON u_ant.id = CASE
+         WHEN a.campo_modificado = 'responsable_usuario_id' AND a.valor_anterior ~ '^[0-9]+$'
+         THEN a.valor_anterior::bigint END
+       LEFT JOIN usuarios u_nue ON u_nue.id = CASE
+         WHEN a.campo_modificado = 'responsable_usuario_id' AND a.valor_nuevo ~ '^[0-9]+$'
+         THEN a.valor_nuevo::bigint END
        WHERE a.intervencion_id = $1
        ORDER BY a.creado_en ASC, a.id ASC`,
       [id]
@@ -746,6 +754,22 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
           nombre: a.usuario_nombre,
           apellido: a.usuario_apellido ?? null,
         },
+        responsable_anterior: a.ant_id
+          ? {
+              id: Number(a.ant_id),
+              legajo: a.ant_legajo,
+              nombre: a.ant_nombre,
+              apellido: a.ant_apellido ?? null,
+            }
+          : null,
+        responsable_nuevo: a.nue_id
+          ? {
+              id: Number(a.nue_id),
+              legajo: a.nue_legajo,
+              nombre: a.nue_nombre,
+              apellido: a.nue_apellido ?? null,
+            }
+          : null,
       })),
     });
   } catch (error) {

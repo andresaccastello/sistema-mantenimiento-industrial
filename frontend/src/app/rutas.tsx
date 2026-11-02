@@ -15,6 +15,8 @@ import { Muestra } from '../pantallas/Muestra';
 import { MisReportes } from '../pantallas/MisReportes';
 import { ReportarFalla } from '../pantallas/ReportarFalla';
 import { DetalleReporteOperario } from '../pantallas/DetalleReporteOperario';
+import { IntervencionesLista } from '../pantallas/IntervencionesLista';
+import { DetalleIntervencion } from '../pantallas/DetalleIntervencion';
 import { vistaDetalle } from '../lib/intervenciones';
 
 // Componentes generales
@@ -41,7 +43,7 @@ function DetalleIntervencionRuta() {
   const vista = vistaDetalle(usuario?.permisos);
 
   if (vista === 'completa') {
-    return <EnConstruccion titulo="Detalle de intervención" etapa="F2" />;
+    return <DetalleIntervencion />;
   }
 
   return <DetalleReporteOperario />;
@@ -109,7 +111,7 @@ export function RutasApp() {
           path="/intervenciones"
           element={
             <RutaProtegida permiso="INTERVENCIONES_VER">
-              <EnConstruccion titulo="Intervenciones" etapa="F2" />
+              <IntervencionesLista />
             </RutaProtegida>
           }
         />

@@ -3,7 +3,9 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MantineProvider } from '@mantine/core';
+import { DatesProvider } from '@mantine/dates';
 import { Notifications, notifications } from '@mantine/notifications';
+import 'dayjs/locale/es';
 import { tema } from './tema/tema';
 import { AuthProvider } from './auth/AuthContext';
 import { ApiError, mensajeError } from './lib/errores';
@@ -41,14 +43,16 @@ const queryClient = new QueryClient({
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <MantineProvider theme={tema} forceColorScheme="light">
-      <Notifications position="top-right" zIndex={1000} />
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <AuthProvider>
-            <App />
-          </AuthProvider>
-        </BrowserRouter>
-      </QueryClientProvider>
+      <DatesProvider settings={{ locale: 'es', firstDayOfWeek: 1 }}>
+        <Notifications position="top-right" zIndex={1000} />
+        <QueryClientProvider client={queryClient}>
+          <BrowserRouter>
+            <AuthProvider>
+              <App />
+            </AuthProvider>
+          </BrowserRouter>
+        </QueryClientProvider>
+      </DatesProvider>
     </MantineProvider>
   </React.StrictMode>
 );

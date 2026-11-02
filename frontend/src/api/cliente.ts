@@ -136,8 +136,12 @@ export const clienteApi = {
     });
   },
 
-  delete<T>(path: string, options?: RequestOptions): Promise<T> {
-    return request<T>(path, { ...options, method: 'DELETE' });
+  delete<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T> {
+    return request<T>(path, {
+      ...options,
+      method: 'DELETE',
+      body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
+    });
   },
 
   async listar<T>(path: string, options?: RequestOptions): Promise<ListaResultado<T>> {
