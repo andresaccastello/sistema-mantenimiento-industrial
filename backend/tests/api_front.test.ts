@@ -1565,28 +1565,43 @@ test('Etapa API — API para el frontend', async (t) => {
         await client.query('DELETE FROM movimientos_stock WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);
         await client.query('DELETE FROM intervencion_periodos_detencion WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);
         await client.query('DELETE FROM historial_estados_intervencion WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);
+        await client.query('DELETE FROM historial_estados_maquina WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);
+        if (createdMaquinaIds.length > 0) {
+          await client.query('DELETE FROM historial_estados_maquina WHERE maquina_id = ANY($1)', [createdMaquinaIds]);
+        }
         await client.query('DELETE FROM intervenciones WHERE id = ANY($1)', [createdIntervencionIds]);
-      } catch {}
+      } catch (error: any) {
+        console.error('[limpieza] api_front.test.ts:', error.message);
+      }
     }
     for (const mId of createdMaquinaIds) {
       try {
         await client.query('DELETE FROM intervencion_periodos_detencion WHERE maquina_id = $1', [mId]);
         await client.query('DELETE FROM historial_estados_maquina WHERE maquina_id = $1', [mId]);
         await client.query('DELETE FROM maquinas WHERE id = $1', [mId]);
-      } catch {}
+      } catch (error: any) {
+        console.error('[limpieza] api_front.test.ts:', error.message);
+      }
     }
     for (const uId of createdUsuarioIds) {
       try {
-        await client.query('DELETE FROM usuario_permiso WHERE usuario_id = $1', [uId]);
+        await client.query('DELETE FROM notificacion_envios WHERE notificacion_id IN (SELECT id FROM notificaciones WHERE usuario_id = $1 OR generada_por_usuario_id = $1)', [uId]);
+        await client.query('DELETE FROM notificaciones WHERE usuario_id = $1 OR generada_por_usuario_id = $1', [uId]);
+        await client.query('DELETE FROM auditoria_permisos WHERE sobre_usuario_id = $1 OR realizado_por_usuario_id = $1', [uId]);
+        await client.query('DELETE FROM usuario_permiso WHERE usuario_id = $1 OR otorgado_por_usuario_id = $1', [uId]);
         await client.query('DELETE FROM usuario_sector WHERE usuario_id = $1', [uId]);
-        await client.query('DELETE FROM notificaciones WHERE usuario_id = $1', [uId]);
         await client.query('DELETE FROM usuarios WHERE id = $1', [uId]);
-      } catch {}
+      } catch (error: any) {
+        console.error('[limpieza] api_front.test.ts:', error.message);
+      }
     }
     for (const sId of createdSectorIds) {
       try {
+        await client.query('DELETE FROM usuario_sector WHERE sector_id = $1', [sId]);
         await client.query('DELETE FROM sectores WHERE id = $1', [sId]);
-      } catch {}
+      } catch (error: any) {
+        console.error('[limpieza] api_front.test.ts:', error.message);
+      }
     }
     client.release();
   }

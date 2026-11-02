@@ -2018,8 +2018,13 @@ test('Etapa 4B — Motor de estados: cierres, recuperación de la máquina y est
         await client.query('DELETE FROM usuario_permiso WHERE usuario_id = ANY($1)', [createdUsuarioIds]);
         await client.query('DELETE FROM usuarios WHERE id = ANY($1)', [createdUsuarioIds]);
       }
-    } catch (e) {
-      console.error('Error durante la limpieza final de tests 4B:', e);
+      const secIds = [sector1Id, sector2Id].filter(id => id > 0);
+      if (secIds.length > 0) {
+        await client.query('DELETE FROM usuario_sector WHERE sector_id = ANY($1)', [secIds]);
+        await client.query('DELETE FROM sectores WHERE id = ANY($1)', [secIds]);
+      }
+    } catch (e: any) {
+      console.error('[limpieza] motor_cierres.test.ts:', e.message);
     }
     client.release();
   }

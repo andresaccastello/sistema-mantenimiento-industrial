@@ -61,9 +61,18 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
   let sector1Id = 0;
   let sector2Id = 0;
   let sectorInactivoId = 0;
+  let sectorPropioId = 0;
   let maquinaId = 0;
+  const createdIntervencionIds: number[] = [];
+  const initialUserIds = new Set<number>();
 
   try {
+    // Registrar usuarios iniciales antes de la prueba
+    const resInitialUsers = await client.query('SELECT id FROM usuarios');
+    for (const r of resInitialUsers.rows) {
+      initialUserIds.add(Number(r.id));
+    }
+
     // Setup inicial
     const resPerfiles = await client.query('SELECT id, nombre FROM perfiles');
     for (const r of resPerfiles.rows) {
@@ -100,17 +109,18 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
     );
     sectorInactivoId = Number(insSInact.rows[0].id);
 
-    // Máquina para pruebas
-    const resM = await client.query('SELECT id FROM maquinas WHERE activo = TRUE LIMIT 1');
-    if (resM.rows.length > 0) {
-      maquinaId = Number(resM.rows[0].id);
-    } else {
-      const insM = await client.query(
-        "INSERT INTO maquinas (nombre, sector_id) VALUES ('Maq Test U', $1) RETURNING id",
-        [sector1Id]
-      );
-      maquinaId = Number(insM.rows[0].id);
-    }
+    // Sector y máquina propios para pruebas de intervenciones (U11 y U16)
+    const insSecPropio = await client.query(
+      "INSERT INTO sectores (nombre, activo) VALUES ($1, TRUE) RETURNING id",
+      [`Sector Test Usuarios ${Date.now()}`]
+    );
+    sectorPropioId = Number(insSecPropio.rows[0].id);
+
+    const insM = await client.query(
+      "INSERT INTO maquinas (nombre, sector_id) VALUES ($1, $2) RETURNING id",
+      [`Maq Test Usuarios ${Date.now()}`, sectorPropioId]
+    );
+    maquinaId = Number(insM.rows[0].id);
 
     // Admin login
     const adminPass = process.env.ADMIN_INITIAL_PASSWORD || 'admin';
@@ -690,12 +700,14 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
       const tokenR = (await loginR.json()).token;
 
       // Crear 2 intervenciones abiertas asignadas a respId
-      await client.query(`
+      const insInt11 = await client.query(`
         INSERT INTO intervenciones (maquina_id, tipo_intervencion_id, creado_por_usuario_id, responsable_usuario_id, estado, descripcion)
         VALUES 
           ($1, 1, $2, $3, 'PENDIENTE', 'Int abierta 1 test U11'),
           ($1, 1, $2, $3, 'EN_PROCESO', 'Int abierta 2 test U11')
+        RETURNING id
       `, [maquinaId, adminId, respId]);
+      createdIntervencionIds.push(...insInt11.rows.map(r => Number(r.id)));
 
       // Desactivar
       const resDesact = await postJson(`/api/usuarios/${respId}/desactivar`, {
@@ -874,6 +886,7 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
         VALUES ($1, 1, $2, $3, 'PENDIENTE', 'Intervencion prueba U16') RETURNING id
       `, [maquinaId, adminId, idUserId]);
       const intId = Number(insInt.rows[0].id);
+      createdIntervencionIds.push(intId);
 
       // 1. Usuario I_D puede iniciar la intervención
       const resIniciarID = await postJson(`/api/intervenciones/${intId}/iniciar`, { estado_esperado: 'PENDIENTE' }, tokenID);
@@ -902,6 +915,8 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
         detiene_maquina: false,
       }, adminToken);
       assert.strictEqual(resFalla.status, 201);
+      const dataFalla = await resFalla.json();
+      createdIntervencionIds.push(Number(dataFalla.id));
 
       const countNotifAfter = await client.query(
         'SELECT COUNT(*)::integer AS total FROM notificaciones WHERE usuario_id = $1',
@@ -1004,6 +1019,59 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
     });
 
   } finally {
-    client.release();
+    try {
+      // 1. Borrar intervenciones y sus dependencias
+      const resInts = await client.query('SELECT id FROM intervenciones WHERE maquina_id = $1', [maquinaId]);
+      const intIds = [...new Set([...createdIntervencionIds, ...resInts.rows.map(r => Number(r.id))])];
+      if (intIds.length > 0) {
+        await client.query('DELETE FROM notificacion_envios WHERE notificacion_id IN (SELECT id FROM notificaciones WHERE intervencion_id = ANY($1))', [intIds]);
+        await client.query('DELETE FROM notificaciones WHERE intervencion_id = ANY($1)', [intIds]);
+        await client.query('DELETE FROM intervencion_auditoria WHERE intervencion_id = ANY($1)', [intIds]);
+        await client.query('DELETE FROM intervencion_costos WHERE intervencion_id = ANY($1)', [intIds]);
+        await client.query('DELETE FROM documentos WHERE intervencion_id = ANY($1)', [intIds]);
+        await client.query('DELETE FROM intervencion_repuestos WHERE intervencion_id = ANY($1)', [intIds]);
+        await client.query('DELETE FROM movimientos_stock WHERE intervencion_id = ANY($1)', [intIds]);
+        await client.query('DELETE FROM intervencion_periodos_detencion WHERE intervencion_id = ANY($1)', [intIds]);
+        await client.query('DELETE FROM historial_estados_intervencion WHERE intervencion_id = ANY($1)', [intIds]);
+        await client.query('DELETE FROM historial_estados_maquina WHERE intervencion_id = ANY($1)', [intIds]);
+        await client.query('DELETE FROM intervenciones WHERE id = ANY($1)', [intIds]);
+      }
+
+      // 2. Borrar máquina
+      if (maquinaId > 0) {
+        await client.query('DELETE FROM intervencion_periodos_detencion WHERE maquina_id = $1', [maquinaId]);
+        await client.query('DELETE FROM historial_estados_maquina WHERE maquina_id = $1', [maquinaId]);
+        await client.query('DELETE FROM maquinas WHERE id = $1', [maquinaId]);
+      }
+
+      // 3. Borrar sectores creados por la prueba
+      const secIds = [sectorPropioId, sectorInactivoId].filter(id => id > 0);
+      if (secIds.length > 0) {
+        await client.query('DELETE FROM usuario_sector WHERE sector_id = ANY($1)', [secIds]);
+        await client.query('DELETE FROM sectores WHERE id = ANY($1)', [secIds]);
+      }
+
+      // 4. Identificar todos los usuarios creados por la prueba
+      const resCurrentUsers = await client.query('SELECT id FROM usuarios');
+      const usersToDelete = resCurrentUsers.rows
+        .map(r => Number(r.id))
+        .filter(id => !initialUserIds.has(id));
+
+      if (usersToDelete.length > 0) {
+        await client.query('DELETE FROM notificacion_envios WHERE notificacion_id IN (SELECT id FROM notificaciones WHERE usuario_id = ANY($1) OR generada_por_usuario_id = ANY($1))', [usersToDelete]);
+        await client.query('DELETE FROM notificaciones WHERE usuario_id = ANY($1) OR generada_por_usuario_id = ANY($1)', [usersToDelete]);
+        await client.query('DELETE FROM auditoria_permisos WHERE sobre_usuario_id = ANY($1) OR realizado_por_usuario_id = ANY($1)', [usersToDelete]);
+        await client.query('DELETE FROM usuario_permiso WHERE usuario_id = ANY($1) OR otorgado_por_usuario_id = ANY($1)', [usersToDelete]);
+        await client.query('DELETE FROM usuario_sector WHERE usuario_id = ANY($1)', [usersToDelete]);
+        await client.query('DELETE FROM usuarios WHERE id = ANY($1)', [usersToDelete]);
+      }
+
+      // Reasegurar que ADMIN001 quede activo
+      await client.query('UPDATE usuarios SET activo = TRUE WHERE id = $1', [adminId]);
+    } catch (error: any) {
+      console.error('[limpieza] usuarios.test.ts:', error.message);
+    } finally {
+      client.release();
+    }
   }
 });
