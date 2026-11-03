@@ -139,7 +139,7 @@ export function IntervencionesLista() {
   // Petición del listado de intervenciones
   const queryParams = useMemo(() => paramsListado(filtros, 25), [filtros]);
 
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError, error, isPlaceholderData } = useQuery({
     queryKey: ['intervenciones', queryParams],
     queryFn: () =>
       clienteApi.listar<IntervencionLista>('/api/intervenciones', {
@@ -151,7 +151,7 @@ export function IntervencionesLista() {
 
   // Reajustar página si queda fuera de rango
   useEffect(() => {
-    if (data && data.total !== undefined) {
+    if (data && !isPlaceholderData && data.total !== undefined) {
       const paginaAjustada = paginaValida(filtros.pagina, data.total, 25);
       if (paginaAjustada !== filtros.pagina) {
         setSearchParams(
@@ -163,7 +163,7 @@ export function IntervencionesLista() {
         );
       }
     }
-  }, [data, filtros, setSearchParams]);
+  }, [data, isPlaceholderData, filtros, setSearchParams]);
 
   const puedeCrear = Boolean(usuario?.permisos?.['INTERVENCIONES_CREAR']);
   const tieneFiltrosActivos = hayFiltros(filtros);
@@ -299,7 +299,7 @@ export function IntervencionesLista() {
 
         <MultiSelect
           aria-label="Estado"
-          placeholder="Estado"
+          placeholder={filtros.estados.length === 0 ? 'Estado' : undefined}
           data={ESTADOS_OPCIONES[filtros.vista]}
           value={filtros.estados}
           onChange={handleEstadosChange}

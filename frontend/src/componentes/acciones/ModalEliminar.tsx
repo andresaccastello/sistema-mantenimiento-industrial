@@ -21,6 +21,7 @@ import type { PeriodoDetencion } from '../../api/tipos';
 export interface ModalEliminarProps {
   abierto: boolean;
   onCerrar: () => void;
+  onEliminada: () => void;
   intervencionId: number;
   destinoVolver: string;
   periodoAbierto?: PeriodoDetencion | null;
@@ -30,6 +31,7 @@ export interface ModalEliminarProps {
 export function ModalEliminar({
   abierto,
   onCerrar,
+  onEliminada,
   intervencionId,
   destinoVolver,
   periodoAbierto,
@@ -99,9 +101,9 @@ export function ModalEliminar({
         message: `Intervención N.º ${intervencionId} eliminada.`,
       });
 
+      onEliminada();
       onCerrar();
       navigate(destinoVolver);
-      queryClient.removeQueries({ queryKey: ['intervencion', intervencionId] });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['intervenciones'] }),
         queryClient.invalidateQueries({ queryKey: ['maquinas'] }),

@@ -42,9 +42,13 @@ export function useAccionIntervencion(options?: UseAccionIntervencionOptions) {
         queryClient.invalidateQueries({ queryKey: ['notificaciones-contador'] }),
       ];
 
-      if (options?.intervencionId && !opcionesPersonalizadas?.saltarInvalidacionIntervencion) {
+      if (!opcionesPersonalizadas?.saltarInvalidacionIntervencion) {
         invalidaciones.unshift(
-          queryClient.invalidateQueries({ queryKey: ['intervencion', options.intervencionId] })
+          queryClient.invalidateQueries({
+            queryKey: options?.intervencionId
+              ? ['intervencion', options.intervencionId]
+              : ['intervencion'],
+          })
         );
       }
 
@@ -62,11 +66,11 @@ export function useAccionIntervencion(options?: UseAccionIntervencionOptions) {
           color: 'red',
           message: mensajeError(err),
         });
-        if (options?.intervencionId) {
-          await queryClient.invalidateQueries({
-            queryKey: ['intervencion', options.intervencionId],
-          });
-        }
+        await queryClient.invalidateQueries({
+          queryKey: options?.intervencionId
+            ? ['intervencion', options.intervencionId]
+            : ['intervencion'],
+        });
       } else {
         setErrorModal(mensajeError(err));
       }

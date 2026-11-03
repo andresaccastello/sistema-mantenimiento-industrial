@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Stack, Group, Card, Text, Badge, Button, Box,
   Title, Timeline, Loader, Center, Anchor, Menu, Grid,
@@ -46,6 +46,14 @@ export function DetalleIntervencion() {
   const { usuario } = useAuth();
 
   const idValido = parsearId(id);
+
+  const eliminadaRef = useRef(false);
+  useEffect(() => () => {
+    if (eliminadaRef.current) {
+      eliminadaRef.current = false;
+      queryClient.removeQueries({ queryKey: ['intervencion', idValido] });
+    }
+  }, [idValido, queryClient]);
 
   // Destino del botón "Volver"
   const volverA = (location.state as any)?.volverA;
@@ -479,7 +487,8 @@ export function DetalleIntervencion() {
         intervencionId={idValido} estadoAlAbrir={estadoAlAbrir} fechaCreacion={reporte.fecha_creacion}
       />
       <ModalEliminar
-        abierto={modalActivo === 'ELIMINAR'} onCerrar={cerrarModal} intervencionId={idValido}
+        abierto={modalActivo === 'ELIMINAR'} onCerrar={cerrarModal}
+        onEliminada={() => { eliminadaRef.current = true; }} intervencionId={idValido}
         destinoVolver={destinoVolver} periodoAbierto={periodoAbierto} puedeConfirmarRecuperacion={puedeConfirmarRecuperacion}
       />
       <ModalConfirmarRecuperacion
