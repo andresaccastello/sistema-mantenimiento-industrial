@@ -23,16 +23,43 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 
 test('Migración 012 — Marca configurable por instalación', async (t) => {
   const client = await pool.connect();
+  let configPrevia: {
+    nombre_sistema: string;
+    nombre_empresa: string | null;
+    logo: Buffer | null;
+    logo_tipo: string | null;
+  } | null = null;
 
   try {
     const sqlPath = path.resolve(__dirname, '../../database/migrations/012_configuracion.sql');
     const sqlContent = fs.readFileSync(sqlPath, 'utf-8');
+
+    // Leer y guardar los valores previos si la tabla ya existe
+    try {
+      const resPrev = await client.query(
+        'SELECT nombre_sistema, nombre_empresa, logo, logo_tipo FROM configuracion_sistema WHERE id = 1'
+      );
+      if (resPrev.rows.length > 0) {
+        configPrevia = resPrev.rows[0];
+      }
+    } catch {
+      // La tabla aún no existe antes de correr M12-01.1
+    }
 
     // 1. Aplicación limpia de la migración
     await t.test('M12-01.1: Aplicar migración 012_configuracion.sql', async () => {
       await client.query(sqlContent);
       assert.ok(true, 'Migración 012 ejecutada exitosamente');
     });
+
+    if (!configPrevia) {
+      const resPrev = await client.query(
+        'SELECT nombre_sistema, nombre_empresa, logo, logo_tipo FROM configuracion_sistema WHERE id = 1'
+      );
+      if (resPrev.rows.length > 0) {
+        configPrevia = resPrev.rows[0];
+      }
+    }
 
     // 2. Idempotencia
     await t.test('M12-01.2: Idempotencia: ejecutar la migración dos veces no falla', async () => {
@@ -46,10 +73,18 @@ test('Migración 012 — Marca configurable por instalación', async (t) => {
       assert.strictEqual(res.rows.length, 1, 'Debe existir la fila con id = 1');
       const row = res.rows[0];
       assert.strictEqual(row.nombre_sistema, 'Sistema de Mantenimiento Industrial');
-      assert.strictEqual(row.nombre_empresa, null);
-      assert.strictEqual(row.logo, null);
-      assert.strictEqual(row.logo_tipo, null);
       assert.ok(row.actualizado_en, 'Debe tener actualizado_en');
+
+      const resCols = await client.query(`
+        SELECT column_name, column_default
+        FROM information_schema.columns
+        WHERE table_name = 'configuracion_sistema'
+          AND column_name IN ('nombre_empresa', 'logo', 'logo_tipo')
+      `);
+      assert.strictEqual(resCols.rows.length, 3, 'Deben existir las columnas nombre_empresa, logo y logo_tipo');
+      for (const col of resCols.rows) {
+        assert.strictEqual(col.column_default, null, `La columna ${col.column_name} debe tener column_default IS NULL`);
+      }
     });
 
     // 4. Un segundo INSERT con id = 2 falla
@@ -126,16 +161,24 @@ test('Migración 012 — Marca configurable por instalación', async (t) => {
       );
     });
   } finally {
-    // Restaurar estado por omisión de la fila 1
-    await client.query(`
-      UPDATE configuracion_sistema
-      SET nombre_sistema = 'Sistema de Mantenimiento Industrial',
-          nombre_empresa = NULL,
-          logo = NULL,
-          logo_tipo = NULL,
-          actualizado_en = NOW()
-      WHERE id = 1
-    `);
+    // Restaurar los valores guardados de la fila 1
+    if (configPrevia) {
+      await client.query(
+        `UPDATE configuracion_sistema
+         SET nombre_sistema = $1,
+             nombre_empresa = $2,
+             logo = $3,
+             logo_tipo = $4,
+             actualizado_en = NOW()
+         WHERE id = 1`,
+        [
+          configPrevia.nombre_sistema,
+          configPrevia.nombre_empresa,
+          configPrevia.logo,
+          configPrevia.logo_tipo,
+        ]
+      );
+    }
     client.release();
   }
 });

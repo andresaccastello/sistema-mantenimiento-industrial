@@ -957,22 +957,41 @@ test('Etapa API — API para el frontend', async (t) => {
     // AF-12: Configuración pública sin sesión
     // =========================================================================
     await t.test('AF-12: GET /api/configuracion/publica sin sesión y logo -> 404 LOGO_NO_CONFIGURADO', async () => {
-      const resPub = await app.request('/api/configuracion/publica');
-      assert.strictEqual(resPub.status, 200);
-      const data = await resPub.json();
-      assert.strictEqual(data.nombre_sistema, 'Sistema de Mantenimiento Industrial');
-      assert.strictEqual(data.tiene_logo, false);
+      const resPrev = await client.query('SELECT logo, logo_tipo FROM configuracion_sistema WHERE id = 1');
+      const logoPrevio = resPrev.rows[0]?.logo ?? null;
+      const logoTipoPrevio = resPrev.rows[0]?.logo_tipo ?? null;
 
-      const resLogo = await app.request('/api/configuracion/logo');
-      assert.strictEqual(resLogo.status, 404);
-      const dataLogo = await resLogo.json();
-      assert.strictEqual(dataLogo.codigo, 'LOGO_NO_CONFIGURADO');
+      await client.query(
+        'UPDATE configuracion_sistema SET logo = NULL, logo_tipo = NULL, actualizado_en = NOW() WHERE id = 1'
+      );
+
+      try {
+        const resPub = await app.request('/api/configuracion/publica');
+        assert.strictEqual(resPub.status, 200);
+        const data = await resPub.json();
+        assert.strictEqual(data.nombre_sistema, 'Sistema de Mantenimiento Industrial');
+        assert.strictEqual(data.tiene_logo, false);
+
+        const resLogo = await app.request('/api/configuracion/logo');
+        assert.strictEqual(resLogo.status, 404);
+        const dataLogo = await resLogo.json();
+        assert.strictEqual(dataLogo.codigo, 'LOGO_NO_CONFIGURADO');
+      } finally {
+        await client.query(
+          'UPDATE configuracion_sistema SET logo = $1, logo_tipo = $2, actualizado_en = NOW() WHERE id = 1',
+          [logoPrevio, logoTipoPrevio]
+        );
+      }
     });
 
     // =========================================================================
     // AF-13: Cargar un PNG chico por SQL en la prueba
     // =========================================================================
     await t.test('AF-13: Cargar un PNG chico por SQL devuelve tiene_logo=true y logo responde 200 con headers correctos', async () => {
+      const resPrev = await client.query('SELECT logo, logo_tipo FROM configuracion_sistema WHERE id = 1');
+      const logoPrevio = resPrev.rows[0]?.logo ?? null;
+      const logoTipoPrevio = resPrev.rows[0]?.logo_tipo ?? null;
+
       // Cabecera PNG válida
       const pngChico = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52]);
 
@@ -997,7 +1016,8 @@ test('Etapa API — API para el frontend', async (t) => {
         assert.deepStrictEqual(bytesLogo, pngChico);
       } finally {
         await client.query(
-          "UPDATE configuracion_sistema SET logo = NULL, logo_tipo = NULL, actualizado_en = NOW() WHERE id = 1"
+          'UPDATE configuracion_sistema SET logo = $1, logo_tipo = $2, actualizado_en = NOW() WHERE id = 1',
+          [logoPrevio, logoTipoPrevio]
         );
       }
     });

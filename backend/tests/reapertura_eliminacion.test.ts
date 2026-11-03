@@ -25,6 +25,7 @@ test('Etapa 6 — Reapertura de intervenciones, eliminación lógica y edición 
   const createdMaquinaIds: number[] = [];
   const createdUsuarioIds: number[] = [];
   const createdSectorIds: number[] = [];
+  const createdRepuestoIds: number[] = [];
 
   const limpiarIntervenciones = async (ids: number[]) => {
     if (!ids || ids.length === 0) return;
@@ -1219,12 +1220,12 @@ test('Etapa 6 — Reapertura de intervenciones, eliminación lógica y edición 
       });
       const idRep = (await resRep.json()).id;
       createdIntervencionIds.push(idRep);
-      const resRepRow = await client.query("SELECT id FROM repuestos LIMIT 1");
-      let repuestoId = resRepRow.rows[0]?.id;
-      if (!repuestoId) {
-        const insRep = await client.query("INSERT INTO repuestos (nombre, costo_unitario, cantidad_disponible) VALUES ('Repuesto Test', 10.50, 100) RETURNING id");
-        repuestoId = insRep.rows[0].id;
-      }
+      const insRep = await client.query(
+        'INSERT INTO repuestos (nombre, costo_unitario, cantidad_disponible) VALUES ($1, 10.50, 100) RETURNING id',
+        [`Repuesto E06 ${Date.now()}`]
+      );
+      const repuestoId = Number(insRep.rows[0].id);
+      createdRepuestoIds.push(repuestoId);
       await client.query(
         "INSERT INTO intervencion_repuestos (intervencion_id, repuesto_id, cantidad, costo_unitario_aplicado) VALUES ($1, $2, 1, 10.50)",
         [idRep, repuestoId]
@@ -1947,6 +1948,9 @@ test('Etapa 6 — Reapertura de intervenciones, eliminación lógica y edición 
     // Limpieza
     try {
       await limpiarIntervenciones(createdIntervencionIds);
+      if (createdRepuestoIds.length > 0) {
+        await client.query('DELETE FROM repuestos WHERE id = ANY($1)', [createdRepuestoIds]);
+      }
       for (const mId of createdMaquinaIds) {
         await limpiarMaquina(mId);
       }

@@ -74,6 +74,7 @@ test('Etapa 7 — Notificaciones internas, reglas de destinatarios, bandeja y ca
   let sector2Id = 0;
   let maquina1Id = 0;
   let maquina2Id = 0;
+  let canalesPrevios: Array<{ canal: string; activo: boolean }> = [];
 
   try {
     const bcrypt = await import('bcryptjs');
@@ -225,7 +226,9 @@ test('Etapa 7 — Notificaciones internas, reglas de destinatarios, bandeja y ca
     });
     resp3Token = (await loginR3.json()).token;
 
-    // Asegurar canales inactivos inicialmente
+    // Guardar estado previo de canales y asegurar canales inactivos inicialmente
+    const resCanalesPrev = await client.query('SELECT canal, activo FROM notificacion_canales');
+    canalesPrevios = resCanalesPrev.rows.map((r) => ({ canal: String(r.canal), activo: Boolean(r.activo) }));
     await client.query('UPDATE notificacion_canales SET activo = FALSE');
 
     // =========================================================================
@@ -1448,8 +1451,12 @@ test('Etapa 7 — Notificaciones internas, reglas de destinatarios, bandeja y ca
       await client.query('DELETE FROM usuario_sector WHERE sector_id = ANY($1)', [createdSectorIds]);
       await client.query('DELETE FROM sectores WHERE id = ANY($1)', [createdSectorIds]);
     }
-    // Dejar canales inactivos
-    await client.query('UPDATE notificacion_canales SET activo = FALSE');
+    // Restaurar estado previo de canales
+    if (canalesPrevios.length > 0) {
+      for (const c of canalesPrevios) {
+        await client.query('UPDATE notificacion_canales SET activo = $1 WHERE canal = $2', [c.activo, c.canal]);
+      }
+    }
     client.release();
   }
 });

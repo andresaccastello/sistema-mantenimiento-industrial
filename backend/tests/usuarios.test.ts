@@ -501,13 +501,15 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
 
     // U-09: Único administrador activo: otro usuario con USUARIOS_GESTIONAR intenta desactivarlo o cambiarle el perfil
     await t.test('U-09: Protección de último administrador activo', async () => {
-      try {
-        // Aseguramos que solo ADMIN001 sea el único admin activo
-        await client.query(`
-          UPDATE usuarios SET activo = FALSE
-          WHERE perfil_id = $1 AND id != $2
-        `, [adminPerfilId, adminId]);
+      // Aseguramos que solo ADMIN001 sea el único admin activo (guardando los desactivados para restaurarlos)
+      const resDesactPrev = await client.query(`
+        UPDATE usuarios SET activo = FALSE
+        WHERE perfil_id = $1 AND id != $2 AND activo = TRUE
+        RETURNING id
+      `, [adminPerfilId, adminId]);
+      const desactivadosIds = resDesactPrev.rows.map((r) => Number(r.id));
 
+      try {
         // Usuario gestor secundario
         const legajoG = `GESTOR_${Date.now()}`;
         const hash = await bcrypt.hash('claveGestor123', 10);
@@ -556,13 +558,20 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
         }, adminToken);
         assert.strictEqual(resDesactOk.status, 200);
       } finally {
-        // Revertir y asegurar que ADMIN001 quede activo pase o falle la prueba
-        await client.query('UPDATE usuarios SET activo = TRUE WHERE id = $1', [adminId]);
+        // Revertir y asegurar que ADMIN001 y los administradores que estaban activos antes queden activos
+        await client.query('UPDATE usuarios SET activo = TRUE WHERE id = ANY($1)', [[adminId, ...desactivadosIds]]);
       }
     });
 
     // U-10: Concurrencia: dos administradores, A1 y A2, se desactivan mutuamente a la vez
     await t.test('U-10: Concurrencia en desactivación de administradores', async () => {
+      // Guardar los administradores que ya estaban activos antes de la prueba para restaurarlos al final
+      const resAdminsPrevios = await client.query(
+        'SELECT id FROM usuarios WHERE perfil_id = $1 AND id != $2 AND activo = TRUE',
+        [adminPerfilId, adminId]
+      );
+      const desactivadosIds = resAdminsPrevios.rows.map((r) => Number(r.id));
+
       try {
         const hash = await bcrypt.hash('adminMutuo123', 10);
         const legajoA1 = `CONC_A1_${Date.now()}`;
@@ -685,8 +694,8 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
         }
 
       } finally {
-        // Revertir siempre y reactivar ADMIN001 para que la base nunca quede rota
-        await client.query('UPDATE usuarios SET activo = TRUE WHERE id = $1', [adminId]);
+        // Revertir siempre y reactivar ADMIN001 y los administradores que ya estaban activos
+        await client.query('UPDATE usuarios SET activo = TRUE WHERE id = ANY($1)', [[adminId, ...desactivadosIds]]);
       }
     });
 

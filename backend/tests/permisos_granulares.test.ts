@@ -23,6 +23,7 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 
 test('Etapa 2 — Catálogo de Permisos Granulares y Alcance', async (t) => {
   const client = await pool.connect();
+  let testUserId: number | null = null;
 
   try {
     // 1. Aplicación de la migración 004
@@ -60,7 +61,7 @@ test('Etapa 2 — Catálogo de Permisos Granulares y Alcance', async (t) => {
        VALUES ($1, 'Operario Test', $2) RETURNING id`,
       [legajoTest, perfilOperarioId]
     );
-    const testUserId = resUser.rows[0].id;
+    testUserId = resUser.rows[0].id;
 
     const resAdmin = await client.query("SELECT id FROM usuarios WHERE legajo = 'ADMIN001' LIMIT 1");
     const adminId = resAdmin.rows.length > 0 ? resAdmin.rows[0].id : testUserId;
@@ -176,11 +177,12 @@ test('Etapa 2 — Catálogo de Permisos Granulares y Alcance', async (t) => {
       );
     });
 
-    // Limpieza
-    await client.query('DELETE FROM usuario_permiso WHERE usuario_id = $1', [testUserId]);
-    await client.query('DELETE FROM usuarios WHERE id = $1', [testUserId]);
-
   } finally {
+    if (testUserId !== null) {
+      await client.query('DELETE FROM usuario_sector WHERE usuario_id = $1', [testUserId]);
+      await client.query('DELETE FROM usuario_permiso WHERE usuario_id = $1', [testUserId]);
+      await client.query('DELETE FROM usuarios WHERE id = $1', [testUserId]);
+    }
     client.release();
   }
 });

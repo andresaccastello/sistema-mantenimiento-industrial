@@ -128,15 +128,20 @@ test('Migración 009 — Usuarios, perfiles y contraseñas', async (t) => {
         VALUES ($1, $1, 'PASSWORD_CAMBIADA', '{"ok": true}')
         RETURNING id
       `, [userId]);
-      assert.ok(resOk.rows[0].id);
+      const audId = resOk.rows[0].id;
+      try {
+        assert.ok(audId);
 
-      // Acción inválida debe fallar
-      await assert.rejects(async () => {
-        await client.query(`
-          INSERT INTO auditoria_permisos (realizado_por_usuario_id, sobre_usuario_id, accion, detalle)
-          VALUES ($1, $1, 'ACCION_INEXISTENTE', '{}')
-        `, [userId]);
-      }, /ck_auditoria_permisos_accion/);
+        // Acción inválida debe fallar
+        await assert.rejects(async () => {
+          await client.query(`
+            INSERT INTO auditoria_permisos (realizado_por_usuario_id, sobre_usuario_id, accion, detalle)
+            VALUES ($1, $1, 'ACCION_INEXISTENTE', '{}')
+          `, [userId]);
+        }, /ck_auditoria_permisos_accion/);
+      } finally {
+        await client.query('DELETE FROM auditoria_permisos WHERE id = $1', [audId]);
+      }
     });
 
     // 6. Idempotencia: correr la migración una segunda vez

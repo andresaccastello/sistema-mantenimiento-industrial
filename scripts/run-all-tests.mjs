@@ -56,7 +56,9 @@ async function contarFilas() {
         (SELECT COUNT(*)::integer FROM maquinas) AS maquinas,
         (SELECT COUNT(*)::integer FROM intervenciones) AS intervenciones,
         (SELECT COUNT(*)::integer FROM usuario_permiso) AS usuario_permiso,
-        (SELECT COUNT(*)::integer FROM notificaciones) AS notificaciones
+        (SELECT COUNT(*)::integer FROM notificaciones) AS notificaciones,
+        (SELECT COUNT(*)::integer FROM auditoria_permisos) AS auditoria_permisos,
+        (SELECT COUNT(*)::integer FROM repuestos) AS repuestos
     `);
     const row = res.rows[0];
     return {
@@ -66,6 +68,8 @@ async function contarFilas() {
       intervenciones: Number(row.intervenciones),
       usuario_permiso: Number(row.usuario_permiso),
       notificaciones: Number(row.notificaciones),
+      auditoria_permisos: Number(row.auditoria_permisos),
+      repuestos: Number(row.repuestos),
     };
   } finally {
     await client.end();
@@ -185,7 +189,9 @@ async function main() {
       const diffIntervenciones = recFinalMig.intervenciones - recInicial.intervenciones;
       const diffUsuarioPermiso = recFinalMig.usuario_permiso - recInicial.usuario_permiso;
       const diffNotificaciones = recFinalMig.notificaciones - recInicial.notificaciones;
-      const datosLinea = `[test:todo] Datos que quedaron: usuarios ${diffUsuarios}, sectores ${diffSectores}, maquinas ${diffMaquinas}, intervenciones ${diffIntervenciones}, usuario_permiso ${diffUsuarioPermiso}, notificaciones ${diffNotificaciones}\n`;
+      const diffAuditoriaPermisos = recFinalMig.auditoria_permisos - recInicial.auditoria_permisos;
+      const diffRepuestos = recFinalMig.repuestos - recInicial.repuestos;
+      const datosLinea = `[test:todo] Datos que quedaron: usuarios ${diffUsuarios}, sectores ${diffSectores}, maquinas ${diffMaquinas}, intervenciones ${diffIntervenciones}, usuario_permiso ${diffUsuarioPermiso}, notificaciones ${diffNotificaciones}, auditoria_permisos ${diffAuditoriaPermisos}, repuestos ${diffRepuestos}\n`;
       process.stdout.write(datosLinea);
       logStream.write(datosLinea);
     } catch (err) {
@@ -231,8 +237,10 @@ async function main() {
   const diffIntervenciones = recFinal.intervenciones - recInicial.intervenciones;
   const diffUsuarioPermiso = recFinal.usuario_permiso - recInicial.usuario_permiso;
   const diffNotificaciones = recFinal.notificaciones - recInicial.notificaciones;
+  const diffAuditoriaPermisos = recFinal.auditoria_permisos - recInicial.auditoria_permisos;
+  const diffRepuestos = recFinal.repuestos - recInicial.repuestos;
 
-  const datosLinea = `[test:todo] Datos que quedaron: usuarios ${diffUsuarios}, sectores ${diffSectores}, maquinas ${diffMaquinas}, intervenciones ${diffIntervenciones}, usuario_permiso ${diffUsuarioPermiso}, notificaciones ${diffNotificaciones}\n`;
+  const datosLinea = `[test:todo] Datos que quedaron: usuarios ${diffUsuarios}, sectores ${diffSectores}, maquinas ${diffMaquinas}, intervenciones ${diffIntervenciones}, usuario_permiso ${diffUsuarioPermiso}, notificaciones ${diffNotificaciones}, auditoria_permisos ${diffAuditoriaPermisos}, repuestos ${diffRepuestos}\n`;
   process.stdout.write(datosLinea);
   logStream.write(datosLinea);
 
@@ -242,7 +250,9 @@ async function main() {
     diffMaquinas !== 0 ||
     diffIntervenciones !== 0 ||
     diffUsuarioPermiso !== 0 ||
-    diffNotificaciones !== 0
+    diffNotificaciones !== 0 ||
+    diffAuditoriaPermisos !== 0 ||
+    diffRepuestos !== 0
   );
 
   const exitCode = resStd.code !== 0 ? resStd.code : (huboDatosQueQuedaron ? 1 : 0);
