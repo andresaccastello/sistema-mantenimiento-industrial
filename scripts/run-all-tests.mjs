@@ -58,7 +58,10 @@ async function contarFilas() {
         (SELECT COUNT(*)::integer FROM usuario_permiso) AS usuario_permiso,
         (SELECT COUNT(*)::integer FROM notificaciones) AS notificaciones,
         (SELECT COUNT(*)::integer FROM auditoria_permisos) AS auditoria_permisos,
-        (SELECT COUNT(*)::integer FROM repuestos) AS repuestos
+        (SELECT COUNT(*)::integer FROM repuestos) AS repuestos,
+        (SELECT COUNT(*)::integer FROM plantas) AS plantas,
+        (SELECT COUNT(*)::integer FROM criticidades) AS criticidades,
+        (SELECT COUNT(*)::integer FROM tipos_equipo) AS tipos_equipo
     `);
     const row = res.rows[0];
     return {
@@ -70,6 +73,9 @@ async function contarFilas() {
       notificaciones: Number(row.notificaciones),
       auditoria_permisos: Number(row.auditoria_permisos),
       repuestos: Number(row.repuestos),
+      plantas: Number(row.plantas),
+      criticidades: Number(row.criticidades),
+      tipos_equipo: Number(row.tipos_equipo),
     };
   } finally {
     await client.end();
@@ -191,7 +197,10 @@ async function main() {
       const diffNotificaciones = recFinalMig.notificaciones - recInicial.notificaciones;
       const diffAuditoriaPermisos = recFinalMig.auditoria_permisos - recInicial.auditoria_permisos;
       const diffRepuestos = recFinalMig.repuestos - recInicial.repuestos;
-      const datosLinea = `[test:todo] Datos que quedaron: usuarios ${diffUsuarios}, sectores ${diffSectores}, maquinas ${diffMaquinas}, intervenciones ${diffIntervenciones}, usuario_permiso ${diffUsuarioPermiso}, notificaciones ${diffNotificaciones}, auditoria_permisos ${diffAuditoriaPermisos}, repuestos ${diffRepuestos}\n`;
+      const diffPlantas = recFinalMig.plantas - recInicial.plantas;
+      const diffCriticidades = recFinalMig.criticidades - recInicial.criticidades;
+      const diffTiposEquipo = recFinalMig.tipos_equipo - recInicial.tipos_equipo;
+      const datosLinea = `[test:todo] Datos que quedaron: usuarios ${diffUsuarios}, sectores ${diffSectores}, maquinas ${diffMaquinas}, intervenciones ${diffIntervenciones}, usuario_permiso ${diffUsuarioPermiso}, notificaciones ${diffNotificaciones}, auditoria_permisos ${diffAuditoriaPermisos}, repuestos ${diffRepuestos}, plantas ${diffPlantas}, criticidades ${diffCriticidades}, tipos_equipo ${diffTiposEquipo}\n`;
       process.stdout.write(datosLinea);
       logStream.write(datosLinea);
     } catch (err) {
@@ -239,8 +248,11 @@ async function main() {
   const diffNotificaciones = recFinal.notificaciones - recInicial.notificaciones;
   const diffAuditoriaPermisos = recFinal.auditoria_permisos - recInicial.auditoria_permisos;
   const diffRepuestos = recFinal.repuestos - recInicial.repuestos;
+  const diffPlantas = recFinal.plantas - recInicial.plantas;
+  const diffCriticidades = recFinal.criticidades - recInicial.criticidades;
+  const diffTiposEquipo = recFinal.tipos_equipo - recInicial.tipos_equipo;
 
-  const datosLinea = `[test:todo] Datos que quedaron: usuarios ${diffUsuarios}, sectores ${diffSectores}, maquinas ${diffMaquinas}, intervenciones ${diffIntervenciones}, usuario_permiso ${diffUsuarioPermiso}, notificaciones ${diffNotificaciones}, auditoria_permisos ${diffAuditoriaPermisos}, repuestos ${diffRepuestos}\n`;
+  const datosLinea = `[test:todo] Datos que quedaron: usuarios ${diffUsuarios}, sectores ${diffSectores}, maquinas ${diffMaquinas}, intervenciones ${diffIntervenciones}, usuario_permiso ${diffUsuarioPermiso}, notificaciones ${diffNotificaciones}, auditoria_permisos ${diffAuditoriaPermisos}, repuestos ${diffRepuestos}, plantas ${diffPlantas}, criticidades ${diffCriticidades}, tipos_equipo ${diffTiposEquipo}\n`;
   process.stdout.write(datosLinea);
   logStream.write(datosLinea);
 
@@ -252,7 +264,10 @@ async function main() {
     diffUsuarioPermiso !== 0 ||
     diffNotificaciones !== 0 ||
     diffAuditoriaPermisos !== 0 ||
-    diffRepuestos !== 0
+    diffRepuestos !== 0 ||
+    diffPlantas !== 0 ||
+    diffCriticidades !== 0 ||
+    diffTiposEquipo !== 0
   );
 
   const exitCode = resStd.code !== 0 ? resStd.code : (huboDatosQueQuedaron ? 1 : 0);

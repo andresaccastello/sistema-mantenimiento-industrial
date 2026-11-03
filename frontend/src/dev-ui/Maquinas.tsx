@@ -5,7 +5,7 @@ interface Maquina {
   id: string;
   nombre: string;
   sector_id: string;
-  tipo: string;
+  modelo: string;
   estado: string;
   descripcion: string | null;
   ubicacion: string | null;
@@ -61,7 +61,7 @@ export function Maquinas() {
     setFormData({ 
       nombre: '', 
       sector_id: sectores.length > 0 ? sectores[0].id : '', 
-      tipo: '', 
+      modelo: '', 
       estado: 'OPERATIVA',
       descripcion: '',
       ubicacion: '',
@@ -78,7 +78,7 @@ export function Maquinas() {
       const payload = {
         nombre: formData.nombre,
         sector_id: formData.sector_id,
-        tipo: formData.tipo,
+        modelo: formData.modelo,
         descripcion: formData.descripcion,
         ubicacion: formData.ubicacion,
         activo: formData.activo
@@ -237,7 +237,7 @@ export function Maquinas() {
               <tr key={m.id}>
                 <td style={{ fontWeight: 500 }}>{m.nombre}</td>
                 <td>{getSectorNombre(m.sector_id)}</td>
-                <td>{m.tipo}</td>
+                <td>{m.modelo}</td>
                 <td>
                   <span style={{ 
                     padding: '2px 6px', 
@@ -333,11 +333,11 @@ export function Maquinas() {
                 </select>
               </div>
               <div className="dev-form-group">
-                <label>Tipo</label>
+                <label>Modelo</label>
                 <input 
                   type="text" 
-                  value={formData.tipo || ''} 
-                  onChange={e => setFormData({...formData, tipo: e.target.value})} 
+                  value={formData.modelo || ''} 
+                  onChange={e => setFormData({...formData, modelo: e.target.value})} 
                   required 
                 />
               </div>

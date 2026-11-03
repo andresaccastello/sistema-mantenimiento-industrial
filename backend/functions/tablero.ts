@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { pool } from './db.ts';
 import { jwtVerify, dbVerify, requirePermission, getUserScope } from './middleware.ts';
+import { badRequest } from './validations.ts';
 import { responderError } from './intervenciones/errores.ts';
 
 const tableroApp = new Hono();
@@ -8,7 +9,7 @@ tableroApp.use('*', jwtVerify, dbVerify);
 
 /**
  * GET /api/tablero
- * Resumen consolidado para el tablero del responsable de mantenimiento (API-03).
+ * Resumen consolidado para el tablero del responsable de mantenimiento (API-03, Etapa F3a).
  */
 tableroApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) => {
   const userId = (c.get as any)('userId') as number;
@@ -16,6 +17,22 @@ tableroApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) => {
   const userSectores = ((c.get as any)('userSectores') as number[]) || [];
 
   try {
+    const plantaParam = c.req.query('planta_id');
+    let plantaId: number | null = null;
+    if (plantaParam !== undefined && plantaParam !== '') {
+      if (!/^\d+$/.test(plantaParam)) {
+        return badRequest(c, 'El parámetro planta_id debe ser numérico');
+      }
+      plantaId = Number(plantaParam);
+      if (!Number.isSafeInteger(plantaId) || plantaId <= 0) {
+        return badRequest(c, 'El parámetro planta_id debe ser un entero positivo');
+      }
+      const resPlanta = await pool.query('SELECT id FROM plantas WHERE id = $1', [plantaId]);
+      if (resPlanta.rows.length === 0) {
+        return c.json({ error: 'Planta no encontrada', codigo: 'PLANTA_NO_ENCONTRADA' }, 404);
+      }
+    }
+
     // 1. Conteo de máquinas activas por estado
     // Con alcance TODAS: todas las activas.
     // Con alcance SECTORES o PROPIAS: las de sus sectores (criterio D-47).
@@ -29,10 +46,15 @@ tableroApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) => {
         maquinasWhere += ` AND m.sector_id = ANY($${maquinasParams.length})`;
       }
     }
+    if (plantaId !== null) {
+      maquinasParams.push(plantaId);
+      maquinasWhere += ` AND s.planta_id = $${maquinasParams.length}`;
+    }
 
     const resMaquinas = await pool.query(
       `SELECT m.estado, COUNT(*)::int AS cantidad
        FROM maquinas m
+       JOIN sectores s ON m.sector_id = s.id
        ${maquinasWhere}
        GROUP BY m.estado`,
       maquinasParams
@@ -66,6 +88,10 @@ tableroApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) => {
         intWhere += ` AND m.sector_id = ANY($${intParams.length})`;
       }
     }
+    if (plantaId !== null) {
+      intParams.push(plantaId);
+      intWhere += ` AND s.planta_id = $${intParams.length}`;
+    }
 
     intParams.push(userId);
     const userIdParamIdx = intParams.length;
@@ -79,6 +105,7 @@ tableroApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) => {
          COUNT(*) FILTER (WHERE i.estado IN ('PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS') AND i.responsable_usuario_id = $${userIdParamIdx})::int AS mias_abiertas
        FROM intervenciones i
        JOIN maquinas m ON i.maquina_id = m.id
+       JOIN sectores s ON m.sector_id = s.id
        ${intWhere}`,
       intParams
     );
@@ -104,6 +131,10 @@ tableroApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) => {
         detenidasWhere += ` AND m.sector_id = ANY($${detenidasParams.length})`;
       }
     }
+    if (plantaId !== null) {
+      detenidasParams.push(plantaId);
+      detenidasWhere += ` AND s.planta_id = $${detenidasParams.length}`;
+    }
 
     const resDetenidas = await pool.query(
       `SELECT 
@@ -111,8 +142,14 @@ tableroApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) => {
          m.nombre AS maquina_nombre,
          m.codigo AS maquina_codigo,
          m.estado AS maquina_estado,
+         c.id AS criticidad_id,
+         c.codigo AS criticidad_codigo,
+         c.nombre AS criticidad_nombre,
+         c.orden AS criticidad_orden,
          s.id AS sector_id,
          s.nombre AS sector_nombre,
+         p.id AS planta_id,
+         p.nombre AS planta_nombre,
          MIN(pd.desde) AS detenida_desde,
          ROUND(EXTRACT(EPOCH FROM (NOW() - MIN(pd.desde))) / 60)::int AS inactividad_en_curso_minutos,
          COUNT(DISTINCT CASE 
@@ -123,11 +160,13 @@ tableroApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) => {
        FROM intervencion_periodos_detencion pd
        JOIN intervenciones i ON pd.intervencion_id = i.id
        JOIN maquinas m ON pd.maquina_id = m.id
+       JOIN criticidades c ON m.criticidad_id = c.id
        JOIN sectores s ON m.sector_id = s.id
+       LEFT JOIN plantas p ON s.planta_id = p.id
        LEFT JOIN intervenciones i2 ON i2.maquina_id = m.id
        ${detenidasWhere}
-       GROUP BY m.id, m.nombre, m.codigo, m.estado, s.id, s.nombre
-       ORDER BY inactividad_en_curso_minutos DESC, m.id ASC`,
+       GROUP BY m.id, m.nombre, m.codigo, m.estado, c.id, c.codigo, c.nombre, c.orden, s.id, s.nombre, p.id, p.nombre
+       ORDER BY c.orden ASC, inactividad_en_curso_minutos DESC, m.id ASC`,
       detenidasParams
     );
 
@@ -136,9 +175,22 @@ tableroApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) => {
         id: Number(r.maquina_id),
         nombre: r.maquina_nombre,
         codigo: r.maquina_codigo,
+        criticidad: {
+          id: Number(r.criticidad_id),
+          codigo: r.criticidad_codigo,
+          nombre: r.criticidad_nombre,
+          orden: Number(r.criticidad_orden),
+        },
         sector: {
           id: Number(r.sector_id),
           nombre: r.sector_nombre,
+          planta:
+            r.planta_id != null
+              ? {
+                  id: Number(r.planta_id),
+                  nombre: r.planta_nombre,
+                }
+              : null,
         },
       },
       estado: r.maquina_estado,

@@ -11,6 +11,7 @@ import reportesApp from './reportes.ts';
 import configuracionApp from './configuracion.ts';
 import tableroApp from './tablero.ts';
 import tiposIntervencionApp from './tipos_intervencion.ts';
+import { criticidadesApp, tiposEquipoApp, plantasApp } from './catalogos.ts';
 
 import { JWT_SECRET } from './config.ts';
 
@@ -35,6 +36,9 @@ app.route('/api/reportes', reportesApp);
 app.route('/api/configuracion', configuracionApp);
 app.route('/api/tablero', tableroApp);
 app.route('/api/tipos-intervencion', tiposIntervencionApp);
+app.route('/api/criticidades', criticidadesApp);
+app.route('/api/tipos-equipo', tiposEquipoApp);
+app.route('/api/plantas', plantasApp);
 
 app.get('/health', (c) => {
   return c.json({

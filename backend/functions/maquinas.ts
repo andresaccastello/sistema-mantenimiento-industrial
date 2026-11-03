@@ -23,50 +23,117 @@ function getUsuarioContext(c: any): UsuarioVisibilidad {
   };
 }
 
+/**
+ * 3.1 y 3.2 Consulta base única y mapeo para lista, detalle, alta y edición de máquinas.
+ */
+function mapearFilaMaquina(r: any) {
+  return {
+    id: Number(r.id),
+    codigo: r.codigo ?? null,
+    nombre: r.nombre,
+    modelo: r.modelo ?? null,
+    estado: r.estado,
+    estado_desde: r.estado_desde,
+    ubicacion: r.ubicacion ?? null,
+    observaciones: r.observaciones ?? null,
+    activo: Boolean(r.activo),
+    creado_en: r.creado_en,
+    criticidad: {
+      id: Number(r.criticidad_id),
+      codigo: r.criticidad_codigo,
+      nombre: r.criticidad_nombre,
+      orden: Number(r.criticidad_orden),
+      prioridad_alta: Boolean(r.criticidad_prioridad_alta),
+    },
+    tipo_equipo: {
+      id: Number(r.tipo_equipo_id),
+      codigo: r.tipo_equipo_codigo,
+      nombre: r.tipo_equipo_nombre,
+    },
+    sector: {
+      id: Number(r.sector_id),
+      nombre: r.sector_nombre,
+      planta:
+        r.planta_id != null
+          ? {
+              id: Number(r.planta_id),
+              nombre: r.planta_nombre,
+            }
+          : null,
+    },
+    intervenciones_abiertas: Number(r.intervenciones_abiertas || 0),
+  };
+}
+
+async function consultarMaquinas(whereClause: string, params: any[] = []) {
+  const query = `
+    SELECT
+      m.id,
+      m.codigo,
+      m.nombre,
+      m.modelo,
+      m.estado,
+      COALESCE(
+        (
+          SELECT hm.cambiado_en
+          FROM historial_estados_maquina hm
+          WHERE hm.maquina_id = m.id
+            AND hm.estado_nuevo = m.estado
+            AND hm.estado_anterior IS DISTINCT FROM hm.estado_nuevo
+          ORDER BY hm.cambiado_en DESC, hm.id DESC
+          LIMIT 1
+        ),
+        m.creado_en
+      ) AS estado_desde,
+      m.ubicacion,
+      m.observaciones,
+      m.activo,
+      m.creado_en,
+      c.id AS criticidad_id,
+      c.codigo AS criticidad_codigo,
+      c.nombre AS criticidad_nombre,
+      c.orden AS criticidad_orden,
+      c.prioridad_alta AS criticidad_prioridad_alta,
+      te.id AS tipo_equipo_id,
+      te.codigo AS tipo_equipo_codigo,
+      te.nombre AS tipo_equipo_nombre,
+      s.id AS sector_id,
+      s.nombre AS sector_nombre,
+      p.id AS planta_id,
+      p.nombre AS planta_nombre,
+      COALESCE(ia.abiertas, 0)::int AS intervenciones_abiertas
+    FROM maquinas m
+    JOIN criticidades c ON m.criticidad_id = c.id
+    JOIN tipos_equipo te ON m.tipo_equipo_id = te.id
+    JOIN sectores s ON m.sector_id = s.id
+    LEFT JOIN plantas p ON s.planta_id = p.id
+    LEFT JOIN (
+      SELECT maquina_id, COUNT(*) AS abiertas
+      FROM intervenciones
+      WHERE estado IN ('PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS')
+        AND eliminado_en IS NULL
+      GROUP BY maquina_id
+    ) ia ON ia.maquina_id = m.id
+    ${whereClause}
+    ORDER BY m.nombre
+  `;
+  const { rows } = await pool.query(query, params);
+  return rows.map(mapearFilaMaquina);
+}
+
 maquinasApp.get('/', async (c) => {
   try {
     const showAll = c.req.query('all') === 'true';
-    
+
     if (showAll) {
       const permisos = (c.get as any)('userPermissions') as string[] | undefined;
       if (!permisos || !permisos.includes('MAQUINAS_GESTIONAR')) {
         return c.json({ error: 'No tienes permiso para ver máquinas desactivadas', codigo: 'PERMISO_INSUFICIENTE' }, 403);
       }
     }
-    
-    const activeFilter = showAll ? '' : 'WHERE m.activo = TRUE';
 
-    const query = `
-      SELECT m.id, m.codigo, m.nombre, m.tipo, m.estado, m.ubicacion, m.observaciones, m.activo, m.creado_en,
-             s.id as sector_id, s.nombre as sector_nombre,
-             COALESCE(ia.abiertas, 0)::int as intervenciones_abiertas
-      FROM maquinas m
-      JOIN sectores s ON m.sector_id = s.id
-      LEFT JOIN (
-        SELECT maquina_id, COUNT(*) AS abiertas
-        FROM intervenciones
-        WHERE estado IN ('PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS')
-          AND eliminado_en IS NULL
-        GROUP BY maquina_id
-      ) ia ON ia.maquina_id = m.id
-      ${activeFilter}
-      ORDER BY m.nombre
-    `;
-    const { rows } = await pool.query(query);
-    
-    const result = rows.map(r => ({
-      id: Number(r.id),
-      codigo: r.codigo ?? null,
-      nombre: r.nombre,
-      tipo: r.tipo,
-      estado: r.estado,
-      ubicacion: r.ubicacion,
-      observaciones: r.observaciones,
-      activo: r.activo,
-      creado_en: r.creado_en,
-      sector: { id: Number(r.sector_id), nombre: r.sector_nombre },
-      intervenciones_abiertas: Number(r.intervenciones_abiertas || 0)
-    }));
+    const activeFilter = showAll ? '' : 'WHERE m.activo = TRUE';
+    const result = await consultarMaquinas(activeFilter);
     return c.json(result);
   } catch (error) {
     console.error('Error obteniendo máquinas:', error);
@@ -79,46 +146,88 @@ maquinasApp.get('/:id', async (c) => {
     const id = parseId(c.req.param('id'));
     if (!id) return badRequest(c, 'ID inválido');
 
-    const { rows } = await pool.query(
-      `SELECT m.id, m.codigo, m.nombre, m.tipo, m.estado, m.ubicacion, m.observaciones, m.activo, m.creado_en,
-              s.id as sector_id, s.nombre as sector_nombre
-       FROM maquinas m
-       JOIN sectores s ON m.sector_id = s.id
-       WHERE m.id = $1`,
-      [id]
-    );
-
-    if (rows.length === 0) return c.json({ error: 'Máquina no encontrada', codigo: 'MAQUINA_NO_ENCONTRADA' }, 404);
-    const r = rows[0];
-    return c.json({
-      id: Number(r.id), codigo: r.codigo ?? null, nombre: r.nombre, tipo: r.tipo, estado: r.estado, 
-      ubicacion: r.ubicacion, observaciones: r.observaciones, activo: r.activo, creado_en: r.creado_en,
-      sector: { id: Number(r.sector_id), nombre: r.sector_nombre }
-    });
+    const result = await consultarMaquinas('WHERE m.id = $1', [id]);
+    if (result.length === 0) {
+      return c.json({ error: 'Máquina no encontrada', codigo: 'MAQUINA_NO_ENCONTRADA' }, 404);
+    }
+    return c.json(result[0]);
   } catch (error) {
     console.error('Error obteniendo máquina:', error);
     return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
   }
 });
 
-// Helper para chequear si el sector es válido y activo
+// Helpers para validar referencias activas
 async function validateSector(sector_id: number): Promise<boolean> {
   const sRes = await pool.query('SELECT activo FROM sectores WHERE id = $1', [sector_id]);
-  if (sRes.rows.length === 0 || !sRes.rows[0].activo) return false;
-  return true;
+  return sRes.rows.length > 0 && Boolean(sRes.rows[0].activo);
+}
+
+async function validateCriticidad(criticidad_id: number): Promise<boolean> {
+  const cRes = await pool.query('SELECT activo FROM criticidades WHERE id = $1', [criticidad_id]);
+  return cRes.rows.length > 0 && Boolean(cRes.rows[0].activo);
+}
+
+async function validateTipoEquipo(tipo_equipo_id: number): Promise<boolean> {
+  const tRes = await pool.query('SELECT activo FROM tipos_equipo WHERE id = $1', [tipo_equipo_id]);
+  return tRes.rows.length > 0 && Boolean(tRes.rows[0].activo);
+}
+
+/**
+ * 3.5 Reglas para desactivar máquina (DELETE y PUT con activo: false)
+ */
+async function verificarPuedeDesactivarMaquina(maquinaId: number) {
+  // 1. Intervenciones abiertas no eliminadas
+  const resInt = await pool.query(
+    `SELECT 1
+     FROM intervenciones
+     WHERE maquina_id = $1
+       AND estado IN ('PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS')
+       AND eliminado_en IS NULL
+     LIMIT 1`,
+    [maquinaId]
+  );
+  if (resInt.rows.length > 0) {
+    return {
+      ok: false,
+      status: 409 as const,
+      codigo: 'MAQUINA_CON_INTERVENCIONES_ABIERTAS',
+      error: 'No se puede desactivar la máquina porque tiene intervenciones abiertas',
+    };
+  }
+
+  // 2. Períodos de detención abiertos de intervenciones no eliminadas (aunque estén finalizadas)
+  const resDet = await pool.query(
+    `SELECT 1
+     FROM intervencion_periodos_detencion pd
+     JOIN intervenciones i ON i.id = pd.intervencion_id
+     WHERE pd.maquina_id = $1
+       AND pd.hasta IS NULL
+       AND i.eliminado_en IS NULL
+     LIMIT 1`,
+    [maquinaId]
+  );
+  if (resDet.rows.length > 0) {
+    return {
+      ok: false,
+      status: 409 as const,
+      codigo: 'MAQUINA_CON_DETENCIONES_ABIERTAS',
+      error: 'No se puede desactivar la máquina porque tiene períodos de detención abiertos',
+    };
+  }
+
+  return { ok: true as const };
 }
 
 maquinasApp.post('/', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
   try {
     const body = await c.req.json();
-    const nombre = parseString(body.nombre);
-    const sector_id = parseId(body.sector_id);
-    const tipo = parseString(body.tipo);
+
+    if ('tipo' in body) {
+      return badRequest(c, 'El campo tipo se reemplazó por modelo (texto) y tipo_equipo_id (catálogo)');
+    }
+
     const estado = parseString(body.estado);
-    const ubicacion = parseString(body.ubicacion);
-    const observaciones = parseString(body.observaciones);
-    const codigo = parseString(body.codigo);
-    
     if (estado && estado !== 'OPERATIVA') {
       return c.json(
         {
@@ -128,30 +237,68 @@ maquinasApp.post('/', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
         422
       );
     }
-    
-    if (!nombre || !sector_id) return badRequest(c, 'El nombre y el sector_id son requeridos y válidos');
-    
+
+    const nombre = parseString(body.nombre);
+    const sector_id = parseId(body.sector_id);
+    if (!nombre || !sector_id) {
+      return badRequest(c, 'El nombre y el sector_id son requeridos y válidos');
+    }
+
     if (!(await validateSector(sector_id))) {
       return badRequest(c, 'El sector especificado no existe o está inactivo');
     }
 
+    let criticidad_id: number | null = null;
+    if (body.criticidad_id !== undefined && body.criticidad_id !== null) {
+      criticidad_id = parseId(body.criticidad_id);
+      if (!criticidad_id || !(await validateCriticidad(criticidad_id))) {
+        return badRequest(c, 'La criticidad indicada no existe o está inactiva');
+      }
+    }
+
+    let tipo_equipo_id: number | null = null;
+    if (body.tipo_equipo_id !== undefined && body.tipo_equipo_id !== null) {
+      tipo_equipo_id = parseId(body.tipo_equipo_id);
+      if (!tipo_equipo_id || !(await validateTipoEquipo(tipo_equipo_id))) {
+        return badRequest(c, 'El tipo de equipo indicado no existe o está inactivo');
+      }
+    }
+
+    const codigo = parseString(body.codigo);
+    const modelo = parseString(body.modelo);
+    const ubicacion = parseString(body.ubicacion);
+    const observaciones = parseString(body.observaciones);
+
+    const cols = ['nombre', 'sector_id', 'estado', 'codigo', 'modelo', 'ubicacion', 'observaciones'];
+    const vals: any[] = [nombre, sector_id, 'OPERATIVA', codigo, modelo, ubicacion, observaciones];
+
+    if (criticidad_id !== null) {
+      cols.push('criticidad_id');
+      vals.push(criticidad_id);
+    }
+    if (tipo_equipo_id !== null) {
+      cols.push('tipo_equipo_id');
+      vals.push(tipo_equipo_id);
+    }
+
+    const placeholders = vals.map((_, i) => `$${i + 1}`).join(', ');
     const { rows } = await pool.query(
-      `INSERT INTO maquinas (nombre, sector_id, tipo, estado, ubicacion, observaciones, codigo) 
-       VALUES ($1, $2, $3, 'OPERATIVA', $4, $5, $6) 
-       RETURNING id, nombre, tipo, estado, ubicacion, observaciones, codigo, activo`,
-      [nombre, sector_id, tipo, ubicacion, observaciones, codigo]
+      `INSERT INTO maquinas (${cols.join(', ')}) VALUES (${placeholders}) RETURNING id`,
+      vals
     );
-    
-    const r = rows[0];
-    return c.json({
-      ...r,
-      id: Number(r.id),
-      sector_id: r.sector_id !== undefined ? Number(r.sector_id) : undefined,
-    }, 201);
+
+    const insertedId = Number(rows[0].id);
+    const [creada] = await consultarMaquinas('WHERE m.id = $1', [insertedId]);
+    return c.json(creada, 201);
   } catch (error: any) {
     console.error('Error creando máquina:', error);
     if (error.code === '23514') return badRequest(c, 'Estado de máquina inválido');
-    if (error.code === '23505') return badRequest(c, 'El código de máquina ya se encuentra registrado');
+    if (error.code === '23505') {
+      return c.json(
+        { error: 'El código de máquina ya se encuentra registrado', codigo: 'CODIGO_MAQUINA_DUPLICADO' },
+        409
+      );
+    }
     return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
   }
 });
@@ -162,8 +309,12 @@ maquinasApp.put('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
     if (!id) return badRequest(c, 'ID inválido');
 
     const body = await c.req.json();
-    
-    if (body.estado !== undefined) {
+
+    if ('tipo' in body) {
+      return badRequest(c, 'El campo tipo se reemplazó por modelo (texto) y tipo_equipo_id (catálogo)');
+    }
+
+    if ('estado' in body) {
       return c.json(
         {
           error: 'El estado no es editable desde el ABM de máquinas. Se gestiona desde las intervenciones o el cambio manual de estado.',
@@ -173,45 +324,109 @@ maquinasApp.put('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
       );
     }
 
-    const nombre = parseString(body.nombre);
-    const sector_id = body.sector_id ? parseId(body.sector_id) : null;
-    const tipo = parseString(body.tipo);
-    const ubicacion = parseString(body.ubicacion);
-    const observaciones = parseString(body.observaciones);
-    const codigo = body.codigo !== undefined ? parseString(body.codigo) : undefined;
-    const activo = typeof body.activo === 'boolean' ? body.activo : null;
-    
-    if (body.sector_id && !sector_id) return badRequest(c, 'El sector_id provisto es inválido');
-    
-    if (sector_id && !(await validateSector(sector_id))) {
-      return badRequest(c, 'El nuevo sector especificado no existe o está inactivo');
+    // Verificar existencia de la máquina primero
+    const resActual = await pool.query('SELECT id, sector_id, activo FROM maquinas WHERE id = $1', [id]);
+    if (resActual.rows.length === 0) {
+      return c.json({ error: 'Máquina no encontrada', codigo: 'MAQUINA_NO_ENCONTRADA' }, 404);
+    }
+    const maqActual = resActual.rows[0];
+
+    const sets: string[] = [];
+    const params: any[] = [];
+
+    if ('nombre' in body) {
+      const nombre = parseString(body.nombre);
+      if (!nombre) return badRequest(c, 'El nombre de la máquina es requerido');
+      params.push(nombre);
+      sets.push(`nombre = $${params.length}`);
     }
 
-    const { rows } = await pool.query(
-      `UPDATE maquinas 
-       SET nombre = COALESCE($1, nombre), 
-           sector_id = COALESCE($2, sector_id), 
-           tipo = COALESCE($3, tipo), 
-           ubicacion = COALESCE($4, ubicacion), 
-           observaciones = COALESCE($5, observaciones), 
-           codigo = COALESCE($6, codigo),
-           activo = COALESCE($7, activo),
-           actualizado_en = NOW()
-       WHERE id = $8 
-       RETURNING id, nombre, tipo, estado, codigo, activo`,
-      [nombre, sector_id, tipo, ubicacion, observaciones, codigo, activo, id]
+    let sectorEfectivoId = Number(maqActual.sector_id);
+    if ('sector_id' in body) {
+      const sector_id = parseId(body.sector_id);
+      if (!sector_id) return badRequest(c, 'El sector_id provisto es inválido');
+      if (!(await validateSector(sector_id))) {
+        return badRequest(c, 'El nuevo sector especificado no existe o está inactivo');
+      }
+      sectorEfectivoId = sector_id;
+      params.push(sector_id);
+      sets.push(`sector_id = $${params.length}`);
+    }
+
+    if ('criticidad_id' in body) {
+      const criticidad_id = parseId(body.criticidad_id);
+      if (!criticidad_id) return badRequest(c, 'La criticidad indicada es inválida');
+      if (!(await validateCriticidad(criticidad_id))) {
+        return badRequest(c, 'La criticidad indicada no existe o está inactiva');
+      }
+      params.push(criticidad_id);
+      sets.push(`criticidad_id = $${params.length}`);
+    }
+
+    if ('tipo_equipo_id' in body) {
+      const tipo_equipo_id = parseId(body.tipo_equipo_id);
+      if (!tipo_equipo_id) return badRequest(c, 'El tipo de equipo indicado es inválido');
+      if (!(await validateTipoEquipo(tipo_equipo_id))) {
+        return badRequest(c, 'El tipo de equipo indicado no existe o está inactivo');
+      }
+      params.push(tipo_equipo_id);
+      sets.push(`tipo_equipo_id = $${params.length}`);
+    }
+
+    for (const campo of ['codigo', 'modelo', 'ubicacion', 'observaciones'] as const) {
+      if (campo in body) {
+        const raw = body[campo];
+        let val: string | null = null;
+        if (raw === null || raw === '') {
+          val = null;
+        } else if (typeof raw === 'string') {
+          const trimmed = raw.trim();
+          val = trimmed === '' ? null : trimmed;
+        } else {
+          return badRequest(c, `El campo ${campo} es inválido`);
+        }
+        params.push(val);
+        sets.push(`${campo} = $${params.length}`);
+      }
+    }
+
+    if ('activo' in body) {
+      if (typeof body.activo !== 'boolean') {
+        return badRequest(c, 'El campo activo debe ser booleano');
+      }
+      if (body.activo === false) {
+        const checkDesact = await verificarPuedeDesactivarMaquina(id);
+        if (!checkDesact.ok) {
+          return c.json({ error: checkDesact.error, codigo: checkDesact.codigo }, checkDesact.status);
+        }
+      } else if (body.activo === true) {
+        if (!('sector_id' in body) && !(await validateSector(sectorEfectivoId))) {
+          return badRequest(c, 'El sector de la máquina está inactivo');
+        }
+      }
+      params.push(body.activo);
+      sets.push(`activo = $${params.length}`);
+    }
+
+    sets.push('actualizado_en = NOW()');
+    params.push(id);
+
+    await pool.query(
+      `UPDATE maquinas SET ${sets.join(', ')} WHERE id = $${params.length}`,
+      params
     );
 
-    if (rows.length === 0) return c.json({ error: 'Máquina no encontrada', codigo: 'MAQUINA_NO_ENCONTRADA' }, 404);
-    const r = rows[0];
-    return c.json({
-      ...r,
-      id: Number(r.id),
-      sector_id: r.sector_id !== undefined ? Number(r.sector_id) : undefined,
-    });
+    const [actualizada] = await consultarMaquinas('WHERE m.id = $1', [id]);
+    return c.json(actualizada);
   } catch (error: any) {
     console.error('Error actualizando máquina:', error);
     if (error.code === '23514') return badRequest(c, 'Estado de máquina inválido');
+    if (error.code === '23505') {
+      return c.json(
+        { error: 'El código de máquina ya se encuentra registrado', codigo: 'CODIGO_MAQUINA_DUPLICADO' },
+        409
+      );
+    }
     return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
   }
 });
@@ -220,13 +435,22 @@ maquinasApp.delete('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) =>
   try {
     const id = parseId(c.req.param('id'));
     if (!id) return badRequest(c, 'ID inválido');
-    
-    const { rows } = await pool.query(
-      'UPDATE maquinas SET activo = FALSE, actualizado_en = NOW() WHERE id = $1 RETURNING id',
+
+    const resActual = await pool.query('SELECT id FROM maquinas WHERE id = $1', [id]);
+    if (resActual.rows.length === 0) {
+      return c.json({ error: 'Máquina no encontrada', codigo: 'MAQUINA_NO_ENCONTRADA' }, 404);
+    }
+
+    const checkDesact = await verificarPuedeDesactivarMaquina(id);
+    if (!checkDesact.ok) {
+      return c.json({ error: checkDesact.error, codigo: checkDesact.codigo }, checkDesact.status);
+    }
+
+    await pool.query(
+      'UPDATE maquinas SET activo = FALSE, actualizado_en = NOW() WHERE id = $1',
       [id]
     );
 
-    if (rows.length === 0) return c.json({ error: 'Máquina no encontrada', codigo: 'MAQUINA_NO_ENCONTRADA' }, 404);
     return c.json({ message: 'Máquina desactivada correctamente' });
   } catch (error) {
     console.error('Error desactivando máquina:', error);

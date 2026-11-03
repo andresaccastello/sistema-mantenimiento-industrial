@@ -6,7 +6,8 @@ Este modelo traduce los requerimientos de la tesis a una primera estructura rela
 
 - Se mantiene una separación entre usuarios, perfiles y permisos.
 - El legajo identifica al usuario que opera el sistema.
-- Una máquina pertenece a un sector.
+- Una máquina pertenece a un sector, y cada sector puede pertenecer a una planta.
+- Cada máquina tiene criticidad y tipo de equipo provenientes de catálogos configurables con valor por omisión, además de marca y modelo (`modelo`).
 - Toda intervención queda asociada a una máquina, a un plan preventivo (si corresponde), a un tipo y al usuario que la registró.
 - Los estados de una intervención se conservan también en un historial para trazabilidad.
 - Los repuestos utilizados quedan vinculados a la intervención con cantidad y costo aplicado.
@@ -35,11 +36,20 @@ Relación muchos-a-muchos entre perfiles y permisos.
 ### usuarios
 Usuarios del sistema. El `legajo` es único.
 
+### plantas
+Plantas o naves físicas de la empresa. Sin datos iniciales por omisión (una instalación con una sola planta no necesita cargar ninguna).
+
 ### sectores
-Sectores físicos o funcionales donde se ubican las máquinas.
+Sectores físicos o funcionales donde se ubican las máquinas. Pueden asociarse opcionalmente a una planta (`planta_id`).
+
+### criticidades
+Catálogo configurable de niveles de criticidad de las máquinas (`codigo`, `nombre`, `orden`, `prioridad_alta`, `por_omision`, `activo`), con a lo sumo un nivel activo por omisión. Valores iniciales: `ALTA` (prioridad alta), `MEDIA` (por omisión) y `BAJA`.
+
+### tipos_equipo
+Catálogo configurable de tipos de equipo (`codigo`, `nombre`, `orden`, `por_omision`, `activo`), con a lo sumo un tipo activo por omisión. Valores iniciales: `MAQUINA` (por omisión), `VEHICULO`, `INSTALACION` y `HERRAMIENTA`.
 
 ### maquinas
-Equipos industriales administrados por el sistema.
+Equipos industriales administrados por el sistema. Incluye sector (`sector_id`), criticidad (`criticidad_id`), tipo de equipo (`tipo_equipo_id`), código único opcional (`codigo`) y marca/modelo en texto libre (`modelo`).
 
 ### tipos_intervencion
 Clasificación configurable de las intervenciones. Se cargan inicialmente CORRECTIVO y PREVENTIVO.
@@ -72,13 +82,13 @@ PERFILES ──< USUARIOS
    │
    └──< PERFIL_PERMISO >── PERMISOS
 
-SECTORES ──< MAQUINAS
-                │
-                └──< INTERVENCIONES >── USUARIOS
-                            │
-                            ├──< HISTORIAL_ESTADOS_INTERVENCION
-                            ├──< INTERVENCION_REPUESTOS >── REPUESTOS
-                            └──< DOCUMENTOS
+PLANTAS ──< SECTORES ──< MAQUINAS >── CRITICIDADES
+                            │     └── TIPOS_EQUIPO
+                            └──< INTERVENCIONES >── USUARIOS
+                                        │
+                                        ├──< HISTORIAL_ESTADOS_INTERVENCION
+                                        ├──< INTERVENCION_REPUESTOS >── REPUESTOS
+                                        └──< DOCUMENTOS
 
 MAQUINAS ──< PLANES_MANTENIMIENTO ──< INTERVENCIONES
 REPUESTOS ──< MOVIMIENTOS_STOCK

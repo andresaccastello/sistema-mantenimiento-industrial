@@ -18,6 +18,8 @@ export interface IntervencionDatosNotif {
   sector_id: number;
   sector_nombre: string;
   tiene_periodo_abierto: boolean;
+  criticidad_prioridad_alta: boolean;
+  criticidad_nombre: string;
 }
 
 export interface CandidatoNotificacion {
@@ -171,12 +173,15 @@ export async function registrarNotificaciones(
            m.codigo AS maquina_codigo,
            m.sector_id,
            s.nombre AS sector_nombre,
+           c.prioridad_alta AS criticidad_prioridad_alta,
+           c.nombre AS criticidad_nombre,
            EXISTS(
              SELECT 1 FROM intervencion_periodos_detencion ipd
              WHERE ipd.intervencion_id = i.id AND ipd.hasta IS NULL
            ) AS tiene_periodo_abierto
          FROM intervenciones i
          JOIN maquinas m ON m.id = i.maquina_id
+         LEFT JOIN criticidades c ON c.id = m.criticidad_id
          LEFT JOIN sectores s ON s.id = m.sector_id
          WHERE i.id = $1`,
         [intervencionId]
@@ -198,6 +203,8 @@ export async function registrarNotificaciones(
         sector_id: Number(r.sector_id),
         sector_nombre: r.sector_nombre || `Sector ${r.sector_id}`,
         tiene_periodo_abierto: Boolean(r.tiene_periodo_abierto),
+        criticidad_prioridad_alta: Boolean(r.criticidad_prioridad_alta),
+        criticidad_nombre: r.criticidad_nombre || '',
       };
       cacheIntervenciones.set(intervencionId, intervencion);
     }
@@ -211,10 +218,14 @@ export async function registrarNotificaciones(
     let responsableAnteriorId: number | null = null;
 
     if (ev.tipo === 'FALLA_REGISTRADA') {
-      const prioridad: 'ALTA' | 'NORMAL' = intervencion.tiene_periodo_abierto ? 'ALTA' : 'NORMAL';
+      const esCritica = Boolean(intervencion.criticidad_prioridad_alta);
+      const prioridad: 'ALTA' | 'NORMAL' =
+        intervencion.tiene_periodo_abierto || esCritica ? 'ALTA' : 'NORMAL';
       const titulo = intervencion.tiene_periodo_abierto
         ? `Nueva falla en ${maquinaNombre} — máquina detenida`
-        : `Nueva falla en ${maquinaNombre}`;
+        : esCritica
+          ? `Nueva falla en ${maquinaNombre} — criticidad ${intervencion.criticidad_nombre}`
+          : `Nueva falla en ${maquinaNombre}`;
       const mensaje = `Sector: ${sectorNombre}. ${descCorta}`;
 
       const usuariosFallas = await usuariosConPermiso(client, 'NOTIFICACIONES_FALLAS_RECIBIR');

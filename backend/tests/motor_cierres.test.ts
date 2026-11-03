@@ -254,7 +254,7 @@ test('Etapa 4B — Motor de estados: cierres, recuperación de la máquina y est
 
     // Crear máquina base
     const insMaq = await client.query(
-      `INSERT INTO maquinas (nombre, codigo, sector_id, tipo, estado)
+      `INSERT INTO maquinas (nombre, codigo, sector_id, modelo, estado)
        VALUES ($1, $2, $3, 'TORNO', 'OPERATIVA') RETURNING id`,
       ['Torno Test 4B ' + Date.now(), 'MAQ4B_' + Date.now(), sector1Id]
     );
@@ -303,7 +303,7 @@ test('Etapa 4B — Motor de estados: cierres, recuperación de la máquina y est
 
     const crearMaquina = async (datos: Partial<{ nombre: string; estado: string; sector_id: number }> = {}) => {
       const ins = await client.query(
-        `INSERT INTO maquinas (nombre, codigo, sector_id, tipo, estado)
+        `INSERT INTO maquinas (nombre, codigo, sector_id, modelo, estado)
          VALUES ($1, $2, $3, 'TORNO', $4) RETURNING id`,
         [
           datos.nombre || ('Torno 4B ' + Date.now() + '_' + Math.floor(Math.random() * 100000)),
@@ -1179,7 +1179,7 @@ test('Etapa 4B — Motor de estados: cierres, recuperación de la máquina y est
     await t.test('B-24: periodo_ids con errores (rollback y nada se cierra)', async () => {
       // Crear máquina 2 para prueba de período ajeno
       const insM2 = await client.query(
-        `INSERT INTO maquinas (nombre, codigo, sector_id, tipo, estado)
+        `INSERT INTO maquinas (nombre, codigo, sector_id, modelo, estado)
          VALUES ($1, $2, $3, 'FRESADORA', 'OPERATIVA') RETURNING id`,
         ['Fresadora 4B ' + Date.now(), 'MAQ2_4B_' + Date.now(), sector2Id]
       );
@@ -1373,7 +1373,7 @@ test('Etapa 4B — Motor de estados: cierres, recuperación de la máquina y est
     await t.test('B-29: GET /detenciones-abiertas con usuario de alcance SECTORES', async () => {
       // Máquina 1 en sector 1 (visible) y Máquina 2 en sector 2 (no visible)
       const insM2 = await client.query(
-        `INSERT INTO maquinas (nombre, codigo, sector_id, tipo, estado)
+        `INSERT INTO maquinas (nombre, codigo, sector_id, modelo, estado)
          VALUES ($1, $2, $3, 'FRESADORA B29', 'OPERATIVA') RETURNING id`,
         ['Fresadora B29 ' + Date.now(), 'MAQB29_' + Date.now(), sector2Id]
       );

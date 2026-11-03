@@ -114,3 +114,28 @@ React con Mantine (licencia MIT), versiones exactas. Escritorio primero; en celu
 
 Mapa de pantallas aprobado (`docs/front/mapa-pantallas.md`). Es la referencia de las etapas F0 a F5.
 
+---
+
+## D-012 — Principio de diseño frente al caso de estudio
+
+**Estado:** Aceptada
+
+**El sistema se desarrolla completo y general.** El caso de estudio sirve para ordenar prioridades, validar el diseño y tomar ejemplos reales, pero **no limita** lo que se construye. Las particularidades de cada empresa se resuelven por **configuración**: perfiles, permisos, marca, catálogos y qué módulos usa. Lo que una empresa no use queda disponible para otra.
+
+---
+
+## D-013 — Datos de la máquina: criticidad, tipo de equipo y planta
+
+**Estado:** Aceptada
+
+La máquina tiene **criticidad** y **tipo de equipo**, los dos de catálogos configurables con un valor por omisión. El **sector** puede pertenecer a una **planta**.
+
+Datos iniciales:
+
+- criticidades Alta, Media (por omisión) y Baja;
+- tipos de equipo Máquina (por omisión), Vehículo, Instalación y Herramienta menor;
+- ninguna planta.
+
+Una falla en una máquina cuya criticidad tiene `prioridad_alta` avisa con prioridad alta aunque no la detenga. El texto libre `tipo` pasa a llamarse `modelo` (marca y modelo).
+
+**Motivo:** relevamiento, requisitos 9 y 10. El tablero muestra primero las máquinas más críticas, y una empresa con varias plantas puede filtrar por planta.

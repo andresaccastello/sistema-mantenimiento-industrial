@@ -80,17 +80,47 @@ export interface ListaResultado<T> {
   total: number;
 }
 
+export interface Criticidad {
+  id: number;
+  codigo: string;
+  nombre: string;
+  orden: number;
+  prioridad_alta: boolean;
+  por_omision?: boolean;
+}
+
+export interface TipoEquipo {
+  id: number;
+  codigo: string;
+  nombre: string;
+  orden?: number;
+  por_omision?: boolean;
+}
+
+export interface Planta {
+  id: number;
+  nombre: string;
+  descripcion?: string | null;
+}
+
 export interface MaquinaLista {
   id: number;
   codigo: string | null;
   nombre: string;
-  tipo: string;
+  modelo: string | null;
   estado: string;
+  estado_desde: string;
   ubicacion: string | null;
   observaciones: string | null;
   activo: boolean;
   creado_en: string;
-  sector: SectorSimple;
+  criticidad: Criticidad;
+  tipo_equipo: TipoEquipo;
+  sector: {
+    id: number;
+    nombre: string;
+    planta: { id: number; nombre: string } | null;
+  };
   intervenciones_abiertas: number;
 }
 
@@ -171,6 +201,7 @@ export interface SectorLista {
   descripcion: string | null;
   activo: boolean;
   creado_en: string;
+  planta?: { id: number; nombre: string } | null;
 }
 
 export interface IntervencionDetalle {
