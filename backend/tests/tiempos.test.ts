@@ -1210,6 +1210,16 @@ test('Etapa 8 — Tiempos de gestión e inactividad real de las máquinas', asyn
 
     // R-02: /reportes/tiempos?agrupar=ejecucion con 2 internas (bruta 60 y 120) y 1 externa (bruta 300)
     await t.test('R-02: /reportes/tiempos?agrupar=ejecucion -> INTERNA: cant 2, prom 90, tot 180; EXTERNA: cant 1, prom 300, tot 300', async () => {
+      const respAntes = await app.request(
+        '/api/reportes/tiempos?desde=2026-08-01T00:00:00Z&hasta=2026-08-01T23:59:59Z&agrupar=ejecucion',
+        { headers: { Authorization: `Bearer ${adminToken}` } }
+      );
+      assert.strictEqual(respAntes.status, 200);
+      const jsonAntes = await respAntes.json();
+      assert.ok(Array.isArray(jsonAntes));
+      const internaAntes = jsonAntes.find((x: any) => x.grupo === 'INTERNA');
+      const externaAntes = jsonAntes.find((x: any) => x.grupo === 'EXTERNA');
+
       // Intervención Interna 1: inicio 08:00, fin 09:00 (bruta 60)
       const resI1 = await client.query(
         `INSERT INTO intervenciones (
@@ -1255,15 +1265,19 @@ test('Etapa 8 — Tiempos de gestión e inactividad real de las máquinas', asyn
 
       const interna = json.find((x: any) => x.grupo === 'INTERNA');
       assert.ok(interna, 'Debe existir grupo INTERNA');
-      assert.strictEqual(interna.cantidad, 2);
-      assert.strictEqual(interna.duracion_bruta_promedio_minutos, 90);
-      assert.strictEqual(interna.duracion_bruta_total_minutos, 180);
+      assert.strictEqual(interna.cantidad - (internaAntes?.cantidad ?? 0), 2);
+      assert.strictEqual(interna.duracion_bruta_total_minutos - (internaAntes?.duracion_bruta_total_minutos ?? 0), 180);
+      if (!internaAntes) {
+        assert.strictEqual(interna.duracion_bruta_promedio_minutos, 90);
+      }
 
       const externa = json.find((x: any) => x.grupo === 'EXTERNA');
       assert.ok(externa, 'Debe existir grupo EXTERNA');
-      assert.strictEqual(externa.cantidad, 1);
-      assert.strictEqual(externa.duracion_bruta_promedio_minutos, 300);
-      assert.strictEqual(externa.duracion_bruta_total_minutos, 300);
+      assert.strictEqual(externa.cantidad - (externaAntes?.cantidad ?? 0), 1);
+      assert.strictEqual(externa.duracion_bruta_total_minutos - (externaAntes?.duracion_bruta_total_minutos ?? 0), 300);
+      if (!externaAntes) {
+        assert.strictEqual(externa.duracion_bruta_promedio_minutos, 300);
+      }
     });
 
     // R-03: Fechas inválidas o sin zona; desde >= hasta; intervalo de 400 días; agrupar inválido -> 422 DATOS_INVALIDOS

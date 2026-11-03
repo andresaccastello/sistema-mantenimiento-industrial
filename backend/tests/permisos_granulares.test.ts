@@ -24,6 +24,7 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 test('Etapa 2 — Catálogo de Permisos Granulares y Alcance', async (t) => {
   const client = await pool.connect();
   let testUserId: number | null = null;
+  let testSectorId: number | null = null;
 
   try {
     // 1. Aplicación de la migración 004
@@ -66,8 +67,12 @@ test('Etapa 2 — Catálogo de Permisos Granulares y Alcance', async (t) => {
     const resAdmin = await client.query("SELECT id FROM usuarios WHERE legajo = 'ADMIN001' LIMIT 1");
     const adminId = resAdmin.rows.length > 0 ? resAdmin.rows[0].id : testUserId;
 
-    const resSector = await client.query('SELECT id FROM sectores LIMIT 1');
+    const resSector = await client.query(
+      'INSERT INTO sectores (nombre, activo) VALUES ($1, TRUE) RETURNING id',
+      [`Sector Permisos Test ${Date.now()}`]
+    );
     const sectorId = resSector.rows[0].id;
+    testSectorId = sectorId;
 
     // 4. Verificar permisos base de Operario
     await t.test('4. Operario tiene INTERVENCIONES_VER con alcance PROPIAS y no tiene COSTOS_VER', async () => {
@@ -182,6 +187,10 @@ test('Etapa 2 — Catálogo de Permisos Granulares y Alcance', async (t) => {
       await client.query('DELETE FROM usuario_sector WHERE usuario_id = $1', [testUserId]);
       await client.query('DELETE FROM usuario_permiso WHERE usuario_id = $1', [testUserId]);
       await client.query('DELETE FROM usuarios WHERE id = $1', [testUserId]);
+    }
+    if (testSectorId !== null) {
+      await client.query('DELETE FROM usuario_sector WHERE sector_id = $1', [testSectorId]);
+      await client.query('DELETE FROM sectores WHERE id = $1', [testSectorId]);
     }
     client.release();
   }

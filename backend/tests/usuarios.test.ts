@@ -77,24 +77,18 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
       if (r.nombre === 'DIRECCION') direccionPerfilId = Number(r.id);
     }
 
-    // Sectores
-    const resSectoresActivos = await client.query('SELECT id FROM sectores WHERE activo = TRUE ORDER BY id ASC LIMIT 2');
-    if (resSectoresActivos.rows.length >= 2) {
-      sector1Id = Number(resSectoresActivos.rows[0].id);
-      sector2Id = Number(resSectoresActivos.rows[1].id);
-    } else {
-      const insS1 = await client.query(`
-        INSERT INTO sectores (nombre, activo) VALUES ('Sector U1', TRUE)
-        ON CONFLICT (nombre) DO UPDATE SET activo = TRUE RETURNING id
-      `);
-      sector1Id = Number(insS1.rows[0].id);
+    // Sectores propios de la prueba
+    const insS1 = await client.query(
+      "INSERT INTO sectores (nombre, activo) VALUES ($1, TRUE) RETURNING id",
+      [`Sector U1 ${Date.now()}`]
+    );
+    sector1Id = Number(insS1.rows[0].id);
 
-      const insS2 = await client.query(`
-        INSERT INTO sectores (nombre, activo) VALUES ('Sector U2', TRUE)
-        ON CONFLICT (nombre) DO UPDATE SET activo = TRUE RETURNING id
-      `);
-      sector2Id = Number(insS2.rows[0].id);
-    }
+    const insS2 = await client.query(
+      "INSERT INTO sectores (nombre, activo) VALUES ($1, TRUE) RETURNING id",
+      [`Sector U2 ${Date.now()}`]
+    );
+    sector2Id = Number(insS2.rows[0].id);
 
     // Sector inactivo para pruebas
     const insSInact = await client.query(
@@ -1066,7 +1060,7 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
       }
 
       // 3. Borrar sectores creados por la prueba
-      const secIds = [sectorPropioId, sectorInactivoId].filter(id => id > 0);
+      const secIds = [sector1Id, sector2Id, sectorPropioId, sectorInactivoId].filter(id => id > 0);
       if (secIds.length > 0) {
         await client.query('DELETE FROM usuario_sector WHERE sector_id = ANY($1)', [secIds]);
         await client.query('DELETE FROM sectores WHERE id = ANY($1)', [secIds]);

@@ -42,6 +42,20 @@ function sanitizarMensajeError(err) {
   return msg;
 }
 
+const TABLAS_CONTROL = [
+  'usuarios',
+  'sectores',
+  'maquinas',
+  'intervenciones',
+  'usuario_permiso',
+  'notificaciones',
+  'auditoria_permisos',
+  'repuestos',
+  'plantas',
+  'criticidades',
+  'tipos_equipo',
+];
+
 async function contarFilas() {
   const client = new pg.Client({
     connectionString: process.env.DATABASE_URL,
@@ -49,37 +63,45 @@ async function contarFilas() {
   });
   await client.connect();
   try {
-    const res = await client.query(`
-      SELECT 
-        (SELECT COUNT(*)::integer FROM usuarios) AS usuarios,
-        (SELECT COUNT(*)::integer FROM sectores) AS sectores,
-        (SELECT COUNT(*)::integer FROM maquinas) AS maquinas,
-        (SELECT COUNT(*)::integer FROM intervenciones) AS intervenciones,
-        (SELECT COUNT(*)::integer FROM usuario_permiso) AS usuario_permiso,
-        (SELECT COUNT(*)::integer FROM notificaciones) AS notificaciones,
-        (SELECT COUNT(*)::integer FROM auditoria_permisos) AS auditoria_permisos,
-        (SELECT COUNT(*)::integer FROM repuestos) AS repuestos,
-        (SELECT COUNT(*)::integer FROM plantas) AS plantas,
-        (SELECT COUNT(*)::integer FROM criticidades) AS criticidades,
-        (SELECT COUNT(*)::integer FROM tipos_equipo) AS tipos_equipo
-    `);
-    const row = res.rows[0];
-    return {
-      usuarios: Number(row.usuarios),
-      sectores: Number(row.sectores),
-      maquinas: Number(row.maquinas),
-      intervenciones: Number(row.intervenciones),
-      usuario_permiso: Number(row.usuario_permiso),
-      notificaciones: Number(row.notificaciones),
-      auditoria_permisos: Number(row.auditoria_permisos),
-      repuestos: Number(row.repuestos),
-      plantas: Number(row.plantas),
-      criticidades: Number(row.criticidades),
-      tipos_equipo: Number(row.tipos_equipo),
-    };
+    const resultado = {};
+    for (const tabla of TABLAS_CONTROL) {
+      const resExiste = await client.query(
+        'SELECT to_regclass($1) IS NOT NULL AS existe',
+        [`public.${tabla}`]
+      );
+      if (resExiste.rows[0]?.existe) {
+        const resCount = await client.query(`SELECT COUNT(*)::integer AS total FROM ${tabla}`);
+        resultado[tabla] = Number(resCount.rows[0].total);
+      } else {
+        resultado[tabla] = null;
+      }
+    }
+    return resultado;
   } finally {
     await client.end();
   }
+}
+
+function verificarTablasExisten(recuento) {
+  for (const tabla of TABLAS_CONTROL) {
+    if (recuento[tabla] === null || recuento[tabla] === undefined) {
+      throw new Error(`relation "${tabla}" does not exist`);
+    }
+  }
+}
+
+function calcularDiferencias(recInicial, recPostMig, recFinal) {
+  const diffs = {};
+  for (const tabla of TABLAS_CONTROL) {
+    const base = recInicial[tabla] !== null ? recInicial[tabla] : recPostMig[tabla];
+    diffs[tabla] = recFinal[tabla] - base;
+  }
+  return diffs;
+}
+
+function formatearLineaDatos(diffs) {
+  const partes = TABLAS_CONTROL.map((tabla) => `${tabla} ${diffs[tabla]}`).join(', ');
+  return `[test:todo] Datos que quedaron: ${partes}\n`;
 }
 
 // Argumento de etapa: npm run test:todo -- etapa-8.1 -> process.argv[2] = 'etapa-8.1'
@@ -189,18 +211,9 @@ async function main() {
 
     try {
       const recFinalMig = await contarFilas();
-      const diffUsuarios = recFinalMig.usuarios - recInicial.usuarios;
-      const diffSectores = recFinalMig.sectores - recInicial.sectores;
-      const diffMaquinas = recFinalMig.maquinas - recInicial.maquinas;
-      const diffIntervenciones = recFinalMig.intervenciones - recInicial.intervenciones;
-      const diffUsuarioPermiso = recFinalMig.usuario_permiso - recInicial.usuario_permiso;
-      const diffNotificaciones = recFinalMig.notificaciones - recInicial.notificaciones;
-      const diffAuditoriaPermisos = recFinalMig.auditoria_permisos - recInicial.auditoria_permisos;
-      const diffRepuestos = recFinalMig.repuestos - recInicial.repuestos;
-      const diffPlantas = recFinalMig.plantas - recInicial.plantas;
-      const diffCriticidades = recFinalMig.criticidades - recInicial.criticidades;
-      const diffTiposEquipo = recFinalMig.tipos_equipo - recInicial.tipos_equipo;
-      const datosLinea = `[test:todo] Datos que quedaron: usuarios ${diffUsuarios}, sectores ${diffSectores}, maquinas ${diffMaquinas}, intervenciones ${diffIntervenciones}, usuario_permiso ${diffUsuarioPermiso}, notificaciones ${diffNotificaciones}, auditoria_permisos ${diffAuditoriaPermisos}, repuestos ${diffRepuestos}, plantas ${diffPlantas}, criticidades ${diffCriticidades}, tipos_equipo ${diffTiposEquipo}\n`;
+      verificarTablasExisten(recFinalMig);
+      const diffs = calcularDiferencias(recInicial, recFinalMig, recFinalMig);
+      const datosLinea = formatearLineaDatos(diffs);
       process.stdout.write(datosLinea);
       logStream.write(datosLinea);
     } catch (err) {
@@ -212,6 +225,20 @@ async function main() {
     logStream.end(() => {
       console.log(`[test:todo] Finalizado con fallos en migraciones (código: ${resMig.code})`);
       process.exit(resMig.code);
+    });
+    return;
+  }
+
+  let recPostMig = null;
+  try {
+    recPostMig = await contarFilas();
+    verificarTablasExisten(recPostMig);
+  } catch (err) {
+    const errLine = `[test:todo] No se pudo controlar los datos que quedaron: ${sanitizarMensajeError(err)}\n`;
+    process.stdout.write(errLine);
+    logStream.write(errLine);
+    logStream.end(() => {
+      process.exit(1);
     });
     return;
   }
@@ -230,6 +257,7 @@ async function main() {
   let recFinal = null;
   try {
     recFinal = await contarFilas();
+    verificarTablasExisten(recFinal);
   } catch (err) {
     const errLine = `[test:todo] No se pudo controlar los datos que quedaron: ${sanitizarMensajeError(err)}\n`;
     process.stdout.write(errLine);
@@ -240,35 +268,12 @@ async function main() {
     return;
   }
 
-  const diffUsuarios = recFinal.usuarios - recInicial.usuarios;
-  const diffSectores = recFinal.sectores - recInicial.sectores;
-  const diffMaquinas = recFinal.maquinas - recInicial.maquinas;
-  const diffIntervenciones = recFinal.intervenciones - recInicial.intervenciones;
-  const diffUsuarioPermiso = recFinal.usuario_permiso - recInicial.usuario_permiso;
-  const diffNotificaciones = recFinal.notificaciones - recInicial.notificaciones;
-  const diffAuditoriaPermisos = recFinal.auditoria_permisos - recInicial.auditoria_permisos;
-  const diffRepuestos = recFinal.repuestos - recInicial.repuestos;
-  const diffPlantas = recFinal.plantas - recInicial.plantas;
-  const diffCriticidades = recFinal.criticidades - recInicial.criticidades;
-  const diffTiposEquipo = recFinal.tipos_equipo - recInicial.tipos_equipo;
-
-  const datosLinea = `[test:todo] Datos que quedaron: usuarios ${diffUsuarios}, sectores ${diffSectores}, maquinas ${diffMaquinas}, intervenciones ${diffIntervenciones}, usuario_permiso ${diffUsuarioPermiso}, notificaciones ${diffNotificaciones}, auditoria_permisos ${diffAuditoriaPermisos}, repuestos ${diffRepuestos}, plantas ${diffPlantas}, criticidades ${diffCriticidades}, tipos_equipo ${diffTiposEquipo}\n`;
+  const diffs = calcularDiferencias(recInicial, recPostMig, recFinal);
+  const datosLinea = formatearLineaDatos(diffs);
   process.stdout.write(datosLinea);
   logStream.write(datosLinea);
 
-  const huboDatosQueQuedaron = (
-    diffUsuarios !== 0 ||
-    diffSectores !== 0 ||
-    diffMaquinas !== 0 ||
-    diffIntervenciones !== 0 ||
-    diffUsuarioPermiso !== 0 ||
-    diffNotificaciones !== 0 ||
-    diffAuditoriaPermisos !== 0 ||
-    diffRepuestos !== 0 ||
-    diffPlantas !== 0 ||
-    diffCriticidades !== 0 ||
-    diffTiposEquipo !== 0
-  );
+  const huboDatosQueQuedaron = TABLAS_CONTROL.some((tabla) => diffs[tabla] !== 0);
 
   const exitCode = resStd.code !== 0 ? resStd.code : (huboDatosQueQuedaron ? 1 : 0);
 

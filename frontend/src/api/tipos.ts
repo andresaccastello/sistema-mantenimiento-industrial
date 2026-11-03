@@ -201,7 +201,7 @@ export interface SectorLista {
   descripcion: string | null;
   activo: boolean;
   creado_en: string;
-  planta?: { id: number; nombre: string } | null;
+  planta: { id: number; nombre: string } | null;
 }
 
 export interface IntervencionDetalle {
