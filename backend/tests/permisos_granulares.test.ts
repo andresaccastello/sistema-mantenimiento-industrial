@@ -177,6 +177,7 @@ test('Etapa 2 — Catálogo de Permisos Granulares y Alcance', async (t) => {
     });
 
     // Limpieza
+    await client.query('DELETE FROM usuario_permiso WHERE usuario_id = $1', [testUserId]);
     await client.query('DELETE FROM usuarios WHERE id = $1', [testUserId]);
 
   } finally {

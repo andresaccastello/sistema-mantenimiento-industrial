@@ -67,59 +67,7 @@ test('Etapa 8 — Tiempos de gestión e inactividad real de las máquinas', asyn
     const hash = await bcrypt.hash('pass123', 10);
     const testSuffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
-    // Limpieza preventiva de corridas anteriores abortadas
-    await client.query(`
-      DELETE FROM intervencion_periodos_detencion WHERE intervencion_id IN (
-        SELECT id FROM intervenciones WHERE maquina_id IN (
-          SELECT id FROM maquinas WHERE sector_id IN (
-            SELECT id FROM sectores WHERE nombre LIKE 'Sector Tiempos%'
-          )
-        )
-      );
-      DELETE FROM historial_estados_intervencion WHERE intervencion_id IN (
-        SELECT id FROM intervenciones WHERE maquina_id IN (
-          SELECT id FROM maquinas WHERE sector_id IN (
-            SELECT id FROM sectores WHERE nombre LIKE 'Sector Tiempos%'
-          )
-        )
-      );
-      DELETE FROM intervencion_auditoria WHERE intervencion_id IN (
-        SELECT id FROM intervenciones WHERE maquina_id IN (
-          SELECT id FROM maquinas WHERE sector_id IN (
-            SELECT id FROM sectores WHERE nombre LIKE 'Sector Tiempos%'
-          )
-        )
-      );
-      DELETE FROM notificaciones WHERE intervencion_id IN (
-        SELECT id FROM intervenciones WHERE maquina_id IN (
-          SELECT id FROM maquinas WHERE sector_id IN (
-            SELECT id FROM sectores WHERE nombre LIKE 'Sector Tiempos%'
-          )
-        )
-      );
-      DELETE FROM intervenciones WHERE maquina_id IN (
-        SELECT id FROM maquinas WHERE sector_id IN (
-          SELECT id FROM sectores WHERE nombre LIKE 'Sector Tiempos%'
-        )
-      );
-      DELETE FROM intervencion_periodos_detencion WHERE maquina_id IN (
-        SELECT id FROM maquinas WHERE sector_id IN (
-          SELECT id FROM sectores WHERE nombre LIKE 'Sector Tiempos%'
-        )
-      );
-      DELETE FROM historial_estados_maquina WHERE maquina_id IN (
-        SELECT id FROM maquinas WHERE sector_id IN (
-          SELECT id FROM sectores WHERE nombre LIKE 'Sector Tiempos%'
-        )
-      );
-      DELETE FROM maquinas WHERE sector_id IN (
-        SELECT id FROM sectores WHERE nombre LIKE 'Sector Tiempos%'
-      );
-      DELETE FROM usuario_sector WHERE sector_id IN (
-        SELECT id FROM sectores WHERE nombre LIKE 'Sector Tiempos%'
-      );
-      DELETE FROM sectores WHERE nombre LIKE 'Sector Tiempos%';
-    `);
+
 
     // 1. Admin login
     const resAdmin = await client.query("SELECT id FROM usuarios WHERE legajo = 'ADMIN001' LIMIT 1");

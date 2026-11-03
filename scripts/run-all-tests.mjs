@@ -33,6 +33,15 @@ if (!process.env.DATABASE_URL && fs.existsSync(path.join(rootDir, '.env'))) {
   }
 }
 
+function sanitizarMensajeError(err) {
+  let msg = err && err.message ? err.message : String(err);
+  if (process.env.DATABASE_URL) {
+    msg = msg.split(process.env.DATABASE_URL).join('[REDACTED]');
+  }
+  msg = msg.replace(/postgres(?:ql)?:\/\/[^\s'"]+/g, '[REDACTED]');
+  return msg;
+}
+
 async function contarFilas() {
   const client = new pg.Client({
     connectionString: process.env.DATABASE_URL,
@@ -45,7 +54,9 @@ async function contarFilas() {
         (SELECT COUNT(*)::integer FROM usuarios) AS usuarios,
         (SELECT COUNT(*)::integer FROM sectores) AS sectores,
         (SELECT COUNT(*)::integer FROM maquinas) AS maquinas,
-        (SELECT COUNT(*)::integer FROM intervenciones) AS intervenciones
+        (SELECT COUNT(*)::integer FROM intervenciones) AS intervenciones,
+        (SELECT COUNT(*)::integer FROM usuario_permiso) AS usuario_permiso,
+        (SELECT COUNT(*)::integer FROM notificaciones) AS notificaciones
     `);
     const row = res.rows[0];
     return {
@@ -53,6 +64,8 @@ async function contarFilas() {
       sectores: Number(row.sectores),
       maquinas: Number(row.maquinas),
       intervenciones: Number(row.intervenciones),
+      usuario_permiso: Number(row.usuario_permiso),
+      notificaciones: Number(row.notificaciones),
     };
   } finally {
     await client.end();
@@ -148,7 +161,13 @@ async function main() {
   try {
     recInicial = await contarFilas();
   } catch (err) {
-    console.error('[test:todo] Error al contar filas iniciales:', err.message);
+    const errLine = `[test:todo] No se pudo controlar los datos que quedaron: ${sanitizarMensajeError(err)}\n`;
+    process.stdout.write(errLine);
+    logStream.write(errLine);
+    logStream.end(() => {
+      process.exit(1);
+    });
+    return;
   }
 
   // 1. Ejecutar grupo de migraciones
@@ -158,17 +177,21 @@ async function main() {
     process.stdout.write(totalLine);
     logStream.write(totalLine);
 
-    if (recInicial) {
-      try {
-        const recFinal = await contarFilas();
-        const diffUsuarios = recFinal.usuarios - recInicial.usuarios;
-        const diffSectores = recFinal.sectores - recInicial.sectores;
-        const diffMaquinas = recFinal.maquinas - recInicial.maquinas;
-        const diffIntervenciones = recFinal.intervenciones - recInicial.intervenciones;
-        const datosLinea = `[test:todo] Datos que quedaron: usuarios ${diffUsuarios}, sectores ${diffSectores}, maquinas ${diffMaquinas}, intervenciones ${diffIntervenciones}\n`;
-        process.stdout.write(datosLinea);
-        logStream.write(datosLinea);
-      } catch {}
+    try {
+      const recFinalMig = await contarFilas();
+      const diffUsuarios = recFinalMig.usuarios - recInicial.usuarios;
+      const diffSectores = recFinalMig.sectores - recInicial.sectores;
+      const diffMaquinas = recFinalMig.maquinas - recInicial.maquinas;
+      const diffIntervenciones = recFinalMig.intervenciones - recInicial.intervenciones;
+      const diffUsuarioPermiso = recFinalMig.usuario_permiso - recInicial.usuario_permiso;
+      const diffNotificaciones = recFinalMig.notificaciones - recInicial.notificaciones;
+      const datosLinea = `[test:todo] Datos que quedaron: usuarios ${diffUsuarios}, sectores ${diffSectores}, maquinas ${diffMaquinas}, intervenciones ${diffIntervenciones}, usuario_permiso ${diffUsuarioPermiso}, notificaciones ${diffNotificaciones}\n`;
+      process.stdout.write(datosLinea);
+      logStream.write(datosLinea);
+    } catch (err) {
+      const errLine = `[test:todo] No se pudo controlar los datos que quedaron: ${sanitizarMensajeError(err)}\n`;
+      process.stdout.write(errLine);
+      logStream.write(errLine);
     }
 
     logStream.end(() => {
@@ -190,29 +213,37 @@ async function main() {
   logStream.write(totalLine);
 
   let recFinal = null;
-  if (recInicial) {
-    try {
-      recFinal = await contarFilas();
-    } catch (err) {
-      console.error('[test:todo] Error al contar filas finales:', err.message);
-    }
+  try {
+    recFinal = await contarFilas();
+  } catch (err) {
+    const errLine = `[test:todo] No se pudo controlar los datos que quedaron: ${sanitizarMensajeError(err)}\n`;
+    process.stdout.write(errLine);
+    logStream.write(errLine);
+    logStream.end(() => {
+      process.exit(1);
+    });
+    return;
   }
 
-  let huboDatosQueQuedaron = false;
-  if (recInicial && recFinal) {
-    const diffUsuarios = recFinal.usuarios - recInicial.usuarios;
-    const diffSectores = recFinal.sectores - recInicial.sectores;
-    const diffMaquinas = recFinal.maquinas - recInicial.maquinas;
-    const diffIntervenciones = recFinal.intervenciones - recInicial.intervenciones;
+  const diffUsuarios = recFinal.usuarios - recInicial.usuarios;
+  const diffSectores = recFinal.sectores - recInicial.sectores;
+  const diffMaquinas = recFinal.maquinas - recInicial.maquinas;
+  const diffIntervenciones = recFinal.intervenciones - recInicial.intervenciones;
+  const diffUsuarioPermiso = recFinal.usuario_permiso - recInicial.usuario_permiso;
+  const diffNotificaciones = recFinal.notificaciones - recInicial.notificaciones;
 
-    const datosLinea = `[test:todo] Datos que quedaron: usuarios ${diffUsuarios}, sectores ${diffSectores}, maquinas ${diffMaquinas}, intervenciones ${diffIntervenciones}\n`;
-    process.stdout.write(datosLinea);
-    logStream.write(datosLinea);
+  const datosLinea = `[test:todo] Datos que quedaron: usuarios ${diffUsuarios}, sectores ${diffSectores}, maquinas ${diffMaquinas}, intervenciones ${diffIntervenciones}, usuario_permiso ${diffUsuarioPermiso}, notificaciones ${diffNotificaciones}\n`;
+  process.stdout.write(datosLinea);
+  logStream.write(datosLinea);
 
-    if (diffUsuarios !== 0 || diffSectores !== 0 || diffMaquinas !== 0 || diffIntervenciones !== 0) {
-      huboDatosQueQuedaron = true;
-    }
-  }
+  const huboDatosQueQuedaron = (
+    diffUsuarios !== 0 ||
+    diffSectores !== 0 ||
+    diffMaquinas !== 0 ||
+    diffIntervenciones !== 0 ||
+    diffUsuarioPermiso !== 0 ||
+    diffNotificaciones !== 0
+  );
 
   const exitCode = resStd.code !== 0 ? resStd.code : (huboDatosQueQuedaron ? 1 : 0);
 

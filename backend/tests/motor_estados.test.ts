@@ -58,6 +58,7 @@ test('Etapa 4A — Motor de estados: núcleo, asignación e inicio del trabajo',
   let sector1Id = 0;
   let sector2Id = 0;
   let maquinaId = 0;
+  let inactivoId = 0;
 
   try {
     const bcrypt = await import('bcryptjs');
@@ -241,7 +242,7 @@ test('Etapa 4A — Motor de estados: núcleo, asignación e inicio del trabajo',
         "INSERT INTO usuarios (legajo, nombre, perfil_id, activo) VALUES ($1, 'Inactivo', $2, FALSE) RETURNING id",
         ['INAC_' + Date.now(), perfilMap['RESPONSABLE_MANTENIMIENTO']]
       );
-      const inactivoId = Number(resInactivo.rows[0].id);
+      inactivoId = Number(resInactivo.rows[0].id);
 
       const rA = await app.request(`/api/intervenciones/${intId}/responsable`, {
         method: 'PUT',
@@ -251,6 +252,7 @@ test('Etapa 4A — Motor de estados: núcleo, asignación e inicio del trabajo',
       assert.strictEqual(rA.status, 422);
       assert.strictEqual((await rA.json()).codigo, 'RESPONSABLE_NO_HABILITADO');
       await client.query('DELETE FROM usuarios WHERE id = $1', [inactivoId]);
+      inactivoId = 0;
 
       // (b) Usuario sin RECIBIR_ASIGNACION (Operario)
       const rB = await app.request(`/api/intervenciones/${intId}/responsable`, {
@@ -1474,13 +1476,10 @@ test('Etapa 4A — Motor de estados: núcleo, asignación e inicio del trabajo',
   } finally {
     // Cleanup general
     try {
-      await client.query('DELETE FROM usuario_permiso WHERE otorgado_por_usuario_id = $1', [adminId]);
-      await client.query('DELETE FROM usuario_sector WHERE usuario_id IN ($1, $2, $3)', [resp1Id, resp2Id, operarioId]);
-      
-      // Intervenciones creadas durante el test
+      // Intervenciones creadas en las máquinas de los sectores creados por el test
       const intCreadas = await client.query(
-        'SELECT id FROM intervenciones WHERE creado_por_usuario_id IN ($1, $2, $3, $4)',
-        [resp1Id, resp2Id, operarioId, adminId]
+        'SELECT id FROM intervenciones WHERE maquina_id IN (SELECT id FROM maquinas WHERE sector_id IN ($1, $2))',
+        [sector1Id, sector2Id]
       );
       const intIds = intCreadas.rows.map(r => Number(r.id));
       if (intIds.length > 0) {
@@ -1490,8 +1489,12 @@ test('Etapa 4A — Motor de estados: núcleo, asignación e inicio del trabajo',
       await client.query('DELETE FROM historial_estados_maquina WHERE maquina_id IN (SELECT id FROM maquinas WHERE sector_id IN ($1, $2))', [sector1Id, sector2Id]);
       await client.query('DELETE FROM maquinas WHERE sector_id IN ($1, $2)', [sector1Id, sector2Id]);
       await client.query('DELETE FROM sectores WHERE id IN ($1, $2)', [sector1Id, sector2Id]);
+      await client.query('DELETE FROM usuario_sector WHERE usuario_id IN ($1, $2, $3)', [resp1Id, resp2Id, operarioId]);
+      await client.query('DELETE FROM usuario_permiso WHERE usuario_id IN ($1, $2, $3)', [resp1Id, resp2Id, operarioId]);
       await client.query('DELETE FROM usuarios WHERE id IN ($1, $2, $3)', [resp1Id, resp2Id, operarioId]);
-      await client.query("DELETE FROM usuarios WHERE legajo LIKE 'INAC_%'");
+      if (inactivoId > 0) {
+        await client.query('DELETE FROM usuarios WHERE id = $1', [inactivoId]);
+      }
     } catch (error: any) {
       console.error('[limpieza] motor_estados.test.ts:', error.message);
     } finally {

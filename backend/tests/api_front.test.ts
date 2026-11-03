@@ -1673,7 +1673,7 @@ test('Etapa API — API para el frontend', async (t) => {
         await client.query('DELETE FROM notificacion_envios WHERE notificacion_id IN (SELECT id FROM notificaciones WHERE usuario_id = $1 OR generada_por_usuario_id = $1)', [uId]);
         await client.query('DELETE FROM notificaciones WHERE usuario_id = $1 OR generada_por_usuario_id = $1', [uId]);
         await client.query('DELETE FROM auditoria_permisos WHERE sobre_usuario_id = $1 OR realizado_por_usuario_id = $1', [uId]);
-        await client.query('DELETE FROM usuario_permiso WHERE usuario_id = $1 OR otorgado_por_usuario_id = $1', [uId]);
+        await client.query('DELETE FROM usuario_permiso WHERE usuario_id = $1', [uId]);
         await client.query('DELETE FROM usuario_sector WHERE usuario_id = $1', [uId]);
         await client.query('DELETE FROM usuarios WHERE id = $1', [uId]);
       } catch (error: any) {

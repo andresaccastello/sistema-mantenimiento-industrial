@@ -64,15 +64,9 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
   let sectorPropioId = 0;
   let maquinaId = 0;
   const createdIntervencionIds: number[] = [];
-  const initialUserIds = new Set<number>();
+  const createdUsuarioIds: number[] = [];
 
   try {
-    // Registrar usuarios iniciales antes de la prueba
-    const resInitialUsers = await client.query('SELECT id FROM usuarios');
-    for (const r of resInitialUsers.rows) {
-      initialUserIds.add(Number(r.id));
-    }
-
     // Setup inicial
     const resPerfiles = await client.query('SELECT id, nombre FROM perfiles');
     for (const r of resPerfiles.rows) {
@@ -166,6 +160,7 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
       const data = await res.json();
       assert.ok(data.id);
       operarioU01Id = data.id;
+      createdUsuarioIds.push(operarioU01Id);
       assert.strictEqual(data.debe_cambiar_password, true);
       assert.strictEqual(data.activo, true);
       assert.deepStrictEqual(data.sectores, [sector1Id, sector2Id]);
@@ -341,6 +336,7 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
         VALUES ($1, 'Usuario U05', $2, $3, TRUE, FALSE) RETURNING id
       `, [legajoEx, hash, operarioPerfilId]);
       const uId = Number(insU.rows[0].id);
+      createdUsuarioIds.push(uId);
 
       // Asignar sector
       await client.query('INSERT INTO usuario_sector (usuario_id, sector_id) VALUES ($1, $2)', [uId, sector1Id]);
@@ -466,6 +462,7 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
         VALUES ($1, 'Resp Gestor', $2, $3, TRUE, FALSE) RETURNING id
       `, [legajoR, hash, responsablePerfilId]);
       const respId = Number(insR.rows[0].id);
+      createdUsuarioIds.push(respId);
 
       // Conceder USUARIOS_GESTIONAR por excepción individual
       const resPermUg = await client.query("SELECT id FROM permisos WHERE codigo = 'USUARIOS_GESTIONAR'");
@@ -498,6 +495,8 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
         password_temporal: 'temporalOp123',
       }, tokenResp);
       assert.strictEqual(resOpOk.status, 201);
+      const dataOp = await resOpOk.json();
+      createdUsuarioIds.push(Number(dataOp.id));
     });
 
     // U-09: Único administrador activo: otro usuario con USUARIOS_GESTIONAR intenta desactivarlo o cambiarle el perfil
@@ -517,6 +516,7 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
           VALUES ($1, 'Gestor Secundario', $2, $3, TRUE, FALSE) RETURNING id
         `, [legajoG, hash, responsablePerfilId]);
         const gestorId = Number(insG.rows[0].id);
+      createdUsuarioIds.push(gestorId);
 
         const resUg = await client.query("SELECT id FROM permisos WHERE codigo = 'USUARIOS_GESTIONAR'");
         await client.query(`
@@ -548,6 +548,7 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
           VALUES ($1, 'Admin 2', $2, $3, TRUE, FALSE) RETURNING id
         `, [legajoA2, hash, adminPerfilId]);
         const admin2Id = Number(insA2.rows[0].id);
+      createdUsuarioIds.push(admin2Id);
 
         // Ahora hay 2 admins. Desactivar admin2Id -> 200
         const resDesactOk = await postJson(`/api/usuarios/${admin2Id}/desactivar`, {
@@ -575,12 +576,14 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
           VALUES ($1, 'Admin Conc 1', $2, $3, TRUE, FALSE) RETURNING id
         `, [legajoA1, hash, adminPerfilId]);
         const idA1 = Number(insA1.rows[0].id);
+        createdUsuarioIds.push(idA1);
 
         const insA2 = await client.query(`
           INSERT INTO usuarios (legajo, nombre, password_hash, perfil_id, activo, debe_cambiar_password)
           VALUES ($1, 'Admin Conc 2', $2, $3, TRUE, FALSE) RETURNING id
         `, [legajoA2, hash, adminPerfilId]);
         const idA2 = Number(insA2.rows[0].id);
+        createdUsuarioIds.push(idA2);
 
         const login1 = await postJson('/api/auth/login', { legajo: legajoA1, password: 'adminMutuo123' });
         const tokenA1 = (await login1.json()).token;
@@ -626,12 +629,14 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
           VALUES ($1, 'Admin Solap 1', $2, $3, TRUE, FALSE) RETURNING id
         `, [legajoB1, hash, adminPerfilId]);
         const idB1 = Number(insB1.rows[0].id);
+        createdUsuarioIds.push(idB1);
 
         const insB2 = await client.query(`
           INSERT INTO usuarios (legajo, nombre, password_hash, perfil_id, activo, debe_cambiar_password)
           VALUES ($1, 'Admin Solap 2', $2, $3, TRUE, FALSE) RETURNING id
         `, [legajoB2, hash, adminPerfilId]);
         const idB2 = Number(insB2.rows[0].id);
+        createdUsuarioIds.push(idB2);
 
         const loginB1 = await postJson('/api/auth/login', { legajo: legajoB1, password: 'adminMutuo123' });
         const tokenB1 = (await loginB1.json()).token;
@@ -694,6 +699,7 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
         VALUES ($1, 'Resp Abiertas', $2, $3, TRUE, FALSE) RETURNING id
       `, [legajoR, hash, responsablePerfilId]);
       const respId = Number(insR.rows[0].id);
+      createdUsuarioIds.push(respId);
 
       // Login previo para obtener token
       const loginR = await postJson('/api/auth/login', { legajo: legajoR, password: 'clave12345678' });
@@ -738,6 +744,7 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
         VALUES ($1, 'Usuario Inactivo U12', $2, $3, FALSE, FALSE) RETURNING id
       `, [legajoInact, hash, operarioPerfilId]);
       const uId = Number(ins.rows[0].id);
+      createdUsuarioIds.push(uId);
 
       // 1. Reactivar exitoso -> 200
       const resReact = await postJson(`/api/usuarios/${uId}/reactivar`, {
@@ -769,6 +776,7 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
         VALUES ($1, 'Usuario Reset', $2, $3, TRUE, FALSE) RETURNING id
       `, [legajoRst, hash, operarioPerfilId]);
       const uId = Number(ins.rows[0].id);
+      createdUsuarioIds.push(uId);
 
       // Usuario ingresa con clave vieja
       const loginOld = await postJson('/api/auth/login', { legajo: legajoRst, password: 'claveVieja123' });
@@ -813,6 +821,7 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
         VALUES ($1, 'Operario Sin Perm', $2, $3, TRUE, FALSE) RETURNING id
       `, [legajoOp, hash, operarioPerfilId]);
       const opId = Number(ins.rows[0].id);
+      createdUsuarioIds.push(opId);
 
       const loginOp = await postJson('/api/auth/login', { legajo: legajoOp, password: 'operario123' });
       const opToken = (await loginOp.json()).token;
@@ -865,6 +874,7 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
         VALUES ($1, 'Usuario I+D', $2, $3, TRUE, FALSE) RETURNING id
       `, [legajoID, hash, idPerfilId]);
       const idUserId = Number(insID.rows[0].id);
+      createdUsuarioIds.push(idUserId);
 
       // Crear usuario DIRECCION
       const legajoDir = `DIR_${Date.now()}`;
@@ -873,6 +883,7 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
         VALUES ($1, 'Usuario Direccion', $2, $3, TRUE, FALSE) RETURNING id
       `, [legajoDir, hash, direccionPerfilId]);
       const dirUserId = Number(insDir.rows[0].id);
+      createdUsuarioIds.push(dirUserId);
 
       const loginID = await postJson('/api/auth/login', { legajo: legajoID, password: 'clave12345678' });
       const tokenID = (await loginID.json()).token;
@@ -987,6 +998,7 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
         VALUES ($1, 'Usuario U19', $2, $3, TRUE, FALSE) RETURNING id
       `, [legajoU19, hash19, responsablePerfilId]);
       const u19Id = Number(ins19.rows[0].id);
+      createdUsuarioIds.push(u19Id);
 
       // Login inicial -> obtener token viejo
       const loginRes = await postJson('/api/auth/login', {
@@ -1051,19 +1063,14 @@ test('Etapa U — Usuarios, perfiles y contraseñas', async (t) => {
         await client.query('DELETE FROM sectores WHERE id = ANY($1)', [secIds]);
       }
 
-      // 4. Identificar todos los usuarios creados por la prueba
-      const resCurrentUsers = await client.query('SELECT id FROM usuarios');
-      const usersToDelete = resCurrentUsers.rows
-        .map(r => Number(r.id))
-        .filter(id => !initialUserIds.has(id));
-
-      if (usersToDelete.length > 0) {
-        await client.query('DELETE FROM notificacion_envios WHERE notificacion_id IN (SELECT id FROM notificaciones WHERE usuario_id = ANY($1) OR generada_por_usuario_id = ANY($1))', [usersToDelete]);
-        await client.query('DELETE FROM notificaciones WHERE usuario_id = ANY($1) OR generada_por_usuario_id = ANY($1)', [usersToDelete]);
-        await client.query('DELETE FROM auditoria_permisos WHERE sobre_usuario_id = ANY($1) OR realizado_por_usuario_id = ANY($1)', [usersToDelete]);
-        await client.query('DELETE FROM usuario_permiso WHERE usuario_id = ANY($1) OR otorgado_por_usuario_id = ANY($1)', [usersToDelete]);
-        await client.query('DELETE FROM usuario_sector WHERE usuario_id = ANY($1)', [usersToDelete]);
-        await client.query('DELETE FROM usuarios WHERE id = ANY($1)', [usersToDelete]);
+      // 4. Borrar únicamente los usuarios creados por la prueba
+      if (createdUsuarioIds.length > 0) {
+        await client.query('DELETE FROM notificacion_envios WHERE notificacion_id IN (SELECT id FROM notificaciones WHERE usuario_id = ANY($1) OR generada_por_usuario_id = ANY($1))', [createdUsuarioIds]);
+        await client.query('DELETE FROM notificaciones WHERE usuario_id = ANY($1) OR generada_por_usuario_id = ANY($1)', [createdUsuarioIds]);
+        await client.query('DELETE FROM auditoria_permisos WHERE sobre_usuario_id = ANY($1) OR realizado_por_usuario_id = ANY($1)', [createdUsuarioIds]);
+        await client.query('DELETE FROM usuario_permiso WHERE usuario_id = ANY($1)', [createdUsuarioIds]);
+        await client.query('DELETE FROM usuario_sector WHERE usuario_id = ANY($1)', [createdUsuarioIds]);
+        await client.query('DELETE FROM usuarios WHERE id = ANY($1)', [createdUsuarioIds]);
       }
 
       // Reasegurar que ADMIN001 quede activo
