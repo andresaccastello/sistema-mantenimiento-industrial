@@ -6,6 +6,7 @@ import {
   escribirFiltros,
   paramsListado,
   hayFiltros,
+  paginaValida,
   FILTROS_POR_DEFECTO,
   FiltrosIntervenciones,
 } from './listado';
@@ -138,5 +139,15 @@ describe('FE-23: paramsListado y hayFiltros', () => {
 
     assert.equal(hayFiltros({ ...FILTROS_POR_DEFECTO, sectorId: 2 }), true);
     assert.equal(hayFiltros({ ...FILTROS_POR_DEFECTO, texto: 'bomba' }), true);
+  });
+});
+
+describe('FE-26: paginaValida', () => {
+  it('ajusta la página según total y tamaño de página', () => {
+    assert.equal(paginaValida(1, 0, 25), 1);
+    assert.equal(paginaValida(3, 60, 25), 3);
+    assert.equal(paginaValida(40, 9, 25), 1);
+    assert.equal(paginaValida(5, 60, 25), 3);
+    assert.equal(paginaValida(2, 50, 25), 2);
   });
 });

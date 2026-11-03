@@ -229,3 +229,17 @@ export function hayFiltros(filtros: FiltrosIntervenciones): boolean {
     filtros.texto.trim().length > 0
   );
 }
+
+/**
+ * Valida y ajusta la página actual según el total de elementos y tamaño de página:
+ * - 1, si total es 0 o página < 1;
+ * - la última página, si página es mayor;
+ * - si no, página.
+ */
+export function paginaValida(pagina: number, total: number, tamanio: number): number {
+  if (total <= 0 || tamanio <= 0) return 1;
+  const ultimaPagina = Math.ceil(total / tamanio);
+  if (pagina < 1) return 1;
+  if (pagina > ultimaPagina) return ultimaPagina;
+  return pagina;
+}

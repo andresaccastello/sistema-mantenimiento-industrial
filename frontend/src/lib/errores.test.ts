@@ -89,6 +89,7 @@ describe('FE-20: requiereRecargar y mensajeError', () => {
     assert.equal(requiereRecargar(new ApiError(409, 'ESTADO_DESACTUALIZADO')), true);
     assert.equal(requiereRecargar(new ApiError(409, 'INTERVENCION_YA_ASIGNADA')), true);
     assert.equal(requiereRecargar(new ApiError(409, 'PERIODO_INVALIDO')), true);
+    assert.equal(requiereRecargar(new ApiError(409, 'RESPONSABLE_SIN_CAMBIOS')), true);
   });
 
   it('requiereRecargar devuelve false para errores de validación o red', () => {

@@ -196,9 +196,13 @@ export function DetalleIntervencion() {
       });
       await invalidarConsultas();
     } catch (err: unknown) {
+      const mensaje =
+        err instanceof ApiError && err.codigo === 'RESPONSABLE_SIN_CAMBIOS'
+          ? 'Ya sos el responsable de esta intervención.'
+          : mensajeError(err);
       notifications.show({
         color: 'red',
-        message: mensajeError(err),
+        message: mensaje,
       });
       if (requiereRecargar(err)) {
         await queryClient.invalidateQueries({ queryKey: ['intervencion', idValido] });
@@ -625,8 +629,13 @@ export function DetalleIntervencion() {
           message: `Intervención N.º ${idValido} eliminada.`,
         });
         cerrarModal();
-        await invalidarConsultas();
         navigate(destinoVolver);
+        queryClient.removeQueries({ queryKey: ['intervencion', idValido] });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['intervenciones'] }),
+          queryClient.invalidateQueries({ queryKey: ['maquinas'] }),
+          queryClient.invalidateQueries({ queryKey: ['notificaciones-contador'] }),
+        ]);
         return;
       }
 
@@ -714,18 +723,17 @@ export function DetalleIntervencion() {
           ← Intervenciones
         </Anchor>
 
-        <Group justify="space-between" align="center" wrap="wrap" gap="md">
-          <Group gap="sm" align="center" wrap="wrap">
-            <Title order={2} c="#0f172a">
-              Intervención N.º {reporte.id}
-            </Title>
-            <EstadoBadge entidad="intervencion" estado={reporte.estado} size="lg" />
-            {tieneDetencionAbierta && (
-              <Badge color="red" variant="filled" size="md">
-                Máquina detenida
-              </Badge>
-            )}
-          </Group>
+        <Group gap="sm" align="center" wrap="wrap">
+          <Title order={2} c="#0f172a">
+            Intervención N.º {reporte.id}
+          </Title>
+          <EstadoBadge entidad="intervencion" estado={reporte.estado} size="lg" />
+          {tieneDetencionAbierta && (
+            <Badge color="red" variant="filled" size="md">
+              Máquina detenida
+            </Badge>
+          )}
+        </Group>
 
           {/* 7.1 Barra de acciones */}
           {reporte.acciones_disponibles.length > 0 && (
@@ -799,7 +807,6 @@ export function DetalleIntervencion() {
               )}
             </Group>
           )}
-        </Group>
       </Stack>
 
       {/* 6.3 Distribución */}

@@ -16,6 +16,7 @@ import {
   Alert,
   Pagination,
   Box,
+  SimpleGrid,
 } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import { IconSearch, IconAlertCircle, IconPlus } from '@tabler/icons-react';
@@ -32,6 +33,7 @@ import {
   escribirFiltros,
   paramsListado,
   hayFiltros,
+  paginaValida,
   FILTROS_POR_DEFECTO,
   VistaIntervenciones,
 } from '../lib/listado';
@@ -95,9 +97,11 @@ export function IntervencionesLista() {
   const [busquedaLocal, setBusquedaLocal] = useState(filtros.texto);
   const [debouncedBusqueda] = useDebouncedValue(busquedaLocal, 400);
 
-  // Sincronizar input si los query params cambian externamente (ej: volver atrás)
+  // Sincronizar input si los query params cambian externamente (ej: volver atrás, limpiar filtros)
   useEffect(() => {
-    setBusquedaLocal(filtros.texto);
+    if (filtros.texto !== busquedaLocal.trim()) {
+      setBusquedaLocal(filtros.texto);
+    }
   }, [filtros.texto]);
 
   // Actualizar filtros cuando termina el debounce
@@ -144,6 +148,22 @@ export function IntervencionesLista() {
     placeholderData: keepPreviousData,
     refetchInterval: 60000,
   });
+
+  // Reajustar página si queda fuera de rango
+  useEffect(() => {
+    if (data && data.total !== undefined) {
+      const paginaAjustada = paginaValida(filtros.pagina, data.total, 25);
+      if (paginaAjustada !== filtros.pagina) {
+        setSearchParams(
+          escribirFiltros({
+            ...filtros,
+            pagina: paginaAjustada,
+          }),
+          { replace: true }
+        );
+      }
+    }
+  }, [data, filtros, setSearchParams]);
 
   const puedeCrear = Boolean(usuario?.permisos?.['INTERVENCIONES_CREAR']);
   const tieneFiltrosActivos = hayFiltros(filtros);
@@ -268,27 +288,27 @@ export function IntervencionesLista() {
       </Tabs>
 
       {/* 5.2 Filtros */}
-      <Group align="flex-end" wrap="wrap" gap="sm">
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 3, xl: 5 }} spacing="sm">
         <TextInput
+          aria-label="Buscar"
           placeholder="Máquina, código o descripción"
           leftSection={<IconSearch size={16} />}
           value={busquedaLocal}
           onChange={(e) => setBusquedaLocal(e.currentTarget.value)}
-          style={{ minWidth: 220, flexGrow: 1 }}
         />
 
-        {filtros.vista !== 'sin-asignar' && (
-          <MultiSelect
-            placeholder="Estado"
-            data={ESTADOS_OPCIONES[filtros.vista]}
-            value={filtros.estados}
-            onChange={handleEstadosChange}
-            clearable
-            style={{ minWidth: 160 }}
-          />
-        )}
+        <MultiSelect
+          aria-label="Estado"
+          placeholder="Estado"
+          data={ESTADOS_OPCIONES[filtros.vista]}
+          value={filtros.estados}
+          onChange={handleEstadosChange}
+          clearable
+          disabled={filtros.vista === 'sin-asignar'}
+        />
 
         <Select
+          aria-label="Sector"
           placeholder="Sector"
           data={(sectores || []).map((s) => ({
             value: String(s.id),
@@ -297,10 +317,10 @@ export function IntervencionesLista() {
           value={filtros.sectorId ? String(filtros.sectorId) : null}
           onChange={handleSectorChange}
           clearable
-          style={{ minWidth: 160 }}
         />
 
         <Select
+          aria-label="Máquina"
           placeholder="Máquina"
           searchable
           data={maquinasFiltradas.map((m) => ({
@@ -320,11 +340,12 @@ export function IntervencionesLista() {
           value={filtros.maquinaId ? String(filtros.maquinaId) : null}
           onChange={handleMaquinaChange}
           clearable
-          style={{ minWidth: 200 }}
         />
 
         <DatePickerInput
+          aria-label="Reportadas entre"
           type="range"
+          allowSingleDateInRange
           placeholder="Reportadas entre"
           valueFormat="DD/MM/YYYY"
           clearable
@@ -346,15 +367,8 @@ export function IntervencionesLista() {
               ]);
             }
           }}
-          style={{ minWidth: 200 }}
         />
-
-        {tieneFiltrosActivos && (
-          <Button variant="subtle" color="gray" onClick={handleLimpiarFiltros}>
-            Limpiar filtros
-          </Button>
-        )}
-      </Group>
+      </SimpleGrid>
 
       {/* 5.4 Mensaje de error al pedir */}
       {isError && (
@@ -363,11 +377,18 @@ export function IntervencionesLista() {
         </Alert>
       )}
 
-      {/* Conteo total */}
+      {/* Conteo total y limpiar filtros */}
       {data && (
-        <Text size="sm" c="dimmed">
-          {data.total} {data.total === 1 ? 'intervención' : 'intervenciones'}
-        </Text>
+        <Group justify="space-between" align="center">
+          <Text size="sm" c="dimmed">
+            {data.total} {data.total === 1 ? 'intervención' : 'intervenciones'}
+          </Text>
+          {tieneFiltrosActivos && (
+            <Button variant="subtle" color="gray" size="sm" onClick={handleLimpiarFiltros}>
+              Limpiar filtros
+            </Button>
+          )}
+        </Group>
       )}
 
       {/* 5.3 y 5.4 Tabla / Carga / Vacío */}
@@ -401,7 +422,7 @@ export function IntervencionesLista() {
                   <Table.Th style={{ minWidth: 180 }}>Estado</Table.Th>
                   <Table.Th style={{ minWidth: 160 }}>Responsable</Table.Th>
                   <Table.Th style={{ minWidth: 130 }}>Reportada</Table.Th>
-                  <Table.Th style={{ minWidth: 150 }}>Tiempo</Table.Th>
+                  <Table.Th style={{ minWidth: 210, whiteSpace: 'nowrap' }}>Tiempo</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -466,9 +487,9 @@ export function IntervencionesLista() {
                         </Text>
                       </Table.Td>
 
-                      <Table.Td>
+                      <Table.Td style={{ minWidth: 210, whiteSpace: 'nowrap' }}>
                         <Group gap={6} align="center" wrap="nowrap">
-                          <Text size="sm">
+                          <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
                             {t.etiqueta ? `${t.etiqueta} ${t.texto}` : t.texto}
                           </Text>
                           {t.enCurso && (
