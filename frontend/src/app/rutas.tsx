@@ -17,6 +17,9 @@ import { ReportarFalla } from '../pantallas/ReportarFalla';
 import { DetalleReporteOperario } from '../pantallas/DetalleReporteOperario';
 import { IntervencionesLista } from '../pantallas/IntervencionesLista';
 import { DetalleIntervencion } from '../pantallas/DetalleIntervencion';
+import { Tablero } from '../pantallas/Tablero';
+import { MaquinasLista } from '../pantallas/MaquinasLista';
+import { DetalleMaquina } from '../pantallas/DetalleMaquina';
 import { vistaDetalle } from '../lib/intervenciones';
 
 // Componentes generales
@@ -86,12 +89,11 @@ export function RutasApp() {
         <Route path="/notificaciones" element={<Notificaciones />} />
         <Route path="/mi-cuenta" element={<MiCuenta />} />
 
-        {/* Pantallas en construcción */}
         <Route
           path="/tablero"
           element={
             <RutaProtegida permiso="INTERVENCIONES_VER">
-              <EnConstruccion titulo="Tablero" etapa="F3" />
+              <Tablero />
             </RutaProtegida>
           }
         />
@@ -125,11 +127,11 @@ export function RutasApp() {
         />
         <Route
           path="/maquinas"
-          element={<EnConstruccion titulo="Máquinas" etapa="F3" />}
+          element={<MaquinasLista />}
         />
         <Route
           path="/maquinas/:id"
-          element={<EnConstruccion titulo="Detalle de máquina" etapa="F3" />}
+          element={<DetalleMaquina />}
         />
         <Route
           path="/reportes"

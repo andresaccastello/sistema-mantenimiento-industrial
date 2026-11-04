@@ -6,27 +6,27 @@ import {
   Group,
   Button,
   Alert,
+  Text,
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { IconAlertCircle } from '@tabler/icons-react';
 import { clienteApi } from '../../api/cliente';
 import { SelectorMomento } from '../SelectorMomento';
 import { validarMomento, momentoAIso, Momento } from '../../lib/fechas';
-import type { PeriodoDetencion } from '../../api/tipos';
 import { useAccionIntervencion } from './useAccionIntervencion';
 
 export interface ModalConfirmarRecuperacionProps {
   abierto: boolean;
   onCerrar: () => void;
   maquinaId: number;
-  periodo: PeriodoDetencion | null;
+  periodos: { id: number; desde: string }[];
 }
 
 export function ModalConfirmarRecuperacion({
   abierto,
   onCerrar,
   maquinaId,
-  periodo,
+  periodos,
 }: ModalConfirmarRecuperacionProps) {
   const isMobile = useMediaQuery('(max-width: 48em)');
 
@@ -46,22 +46,29 @@ export function ModalConfirmarRecuperacion({
     }
   }, [abierto, setErrorModal]);
 
+  const desdeMasReciente =
+    periodos.length > 0
+      ? periodos.reduce((max, p) =>
+          new Date(p.desde).getTime() > new Date(max).getTime() ? p.desde : max
+        , periodos[0].desde)
+      : null;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!periodo) return;
+    if (!desdeMasReciente || periodos.length === 0) return;
 
     const ahora = new Date();
-    const errMom = validarMomento(momentoAccion, periodo.desde, ahora);
+    const errMom = validarMomento(momentoAccion, desdeMasReciente, ahora);
     if (errMom) {
       setErrorModal(errMom);
       return;
     }
-    const fRecIso = momentoAIso(momentoAccion, periodo.desde);
+    const fRecIso = momentoAIso(momentoAccion, desdeMasReciente);
     const obsTrim = observacionTexto.trim();
 
     ejecutar(() =>
       clienteApi.post(`/api/maquinas/${maquinaId}/confirmar-recuperacion`, {
-        periodo_ids: [periodo.id],
+        periodo_ids: periodos.map((p) => p.id),
         fecha_recuperacion: fRecIso,
         observacion: obsTrim.length > 0 ? obsTrim : undefined,
       })
@@ -85,11 +92,17 @@ export function ModalConfirmarRecuperacion({
             </Alert>
           )}
 
-          {periodo && (
+          {periodos.length > 1 && (
+            <Text size="sm" c="dimmed">
+              Se confirman las {periodos.length} detenciones abiertas de esta máquina.
+            </Text>
+          )}
+
+          {desdeMasReciente && (
             <SelectorMomento
               label="¿Desde cuándo funciona?"
               opcionAhoraLabel="Ahora"
-              minimo={periodo.desde}
+              minimo={desdeMasReciente}
               value={momentoAccion}
               onChange={setMomentoAccion}
               disabled={guardando}

@@ -12,6 +12,7 @@ export interface FiltrosIntervenciones {
   vista: VistaIntervenciones;
   estados: string[];          // vacío = todos los de la vista
   sectorId: number | null;
+  plantaId: number | null;
   maquinaId: number | null;
   desde: string | null;       // 'YYYY-MM-DD', fecha de reporte
   hasta: string | null;
@@ -23,6 +24,7 @@ export const FILTROS_POR_DEFECTO: FiltrosIntervenciones = {
   vista: 'abiertas',
   estados: [],
   sectorId: null,
+  plantaId: null,
   maquinaId: null,
   desde: null,
   hasta: null,
@@ -93,6 +95,7 @@ export function leerFiltros(
   }
 
   const sectorId = parsearId(params.get('sector'));
+  const plantaId = parsearId(params.get('planta'));
   const maquinaId = parsearId(params.get('maquina'));
 
   const desdeParam = params.get('desde');
@@ -111,6 +114,7 @@ export function leerFiltros(
     vista: vistaValida,
     estados,
     sectorId,
+    plantaId,
     maquinaId,
     desde,
     hasta,
@@ -135,6 +139,10 @@ export function escribirFiltros(filtros: FiltrosIntervenciones): URLSearchParams
 
   if (filtros.sectorId !== null) {
     params.set('sector', String(filtros.sectorId));
+  }
+
+  if (filtros.plantaId !== null) {
+    params.set('planta', String(filtros.plantaId));
   }
 
   if (filtros.maquinaId !== null) {
@@ -199,6 +207,9 @@ export function paramsListado(
   if (filtros.sectorId !== null) {
     p.sector_id = filtros.sectorId;
   }
+  if (filtros.plantaId !== null) {
+    p.planta_id = filtros.plantaId;
+  }
   if (filtros.maquinaId !== null) {
     p.maquina_id = filtros.maquinaId;
   }
@@ -216,13 +227,14 @@ export function paramsListado(
 }
 
 /**
- * Devuelve true si hay filtros activos (estados, sector, máquina, fechas o texto).
+ * Devuelve true si hay filtros activos (estados, sector, planta, máquina, fechas o texto).
  * La vista y la página no cuentan.
  */
 export function hayFiltros(filtros: FiltrosIntervenciones): boolean {
   return (
     filtros.estados.length > 0 ||
     filtros.sectorId !== null ||
+    filtros.plantaId !== null ||
     filtros.maquinaId !== null ||
     filtros.desde !== null ||
     filtros.hasta !== null ||

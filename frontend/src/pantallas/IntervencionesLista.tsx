@@ -43,7 +43,7 @@ import { nombreCompleto } from '../lib/personas';
 import { formatHace, formatFechaHora } from '../lib/formato';
 import { obtenerInfoEstado } from '../lib/estados';
 import { mensajeError } from '../lib/errores';
-import type { IntervencionLista, SectorLista, MaquinaLista } from '../api/tipos';
+import type { IntervencionLista, SectorLista, MaquinaLista, Planta } from '../api/tipos';
 
 const ESTADOS_OPCIONES: Record<VistaIntervenciones, Array<{ value: string; label: string }>> = {
   'sin-asignar': [],
@@ -117,7 +117,13 @@ export function IntervencionesLista() {
     }
   }, [debouncedBusqueda]);
 
-  // Sectores y máquinas para los selects de filtro
+  // Plantas, sectores y máquinas para los selects de filtro
+  const { data: plantas } = useQuery<Planta[]>({
+    queryKey: ['plantas'],
+    queryFn: () => clienteApi.get<Planta[]>('/api/plantas'),
+    staleTime: 300000,
+  });
+
   const { data: sectores } = useQuery<SectorLista[]>({
     queryKey: ['sectores'],
     queryFn: () => clienteApi.get<SectorLista[]>('/api/sectores'),
@@ -130,11 +136,26 @@ export function IntervencionesLista() {
     staleTime: 300000,
   });
 
+  const mostrarPlanta = (plantas?.length ?? 0) >= 2;
+
+  const sectoresVisibles = useMemo(() => {
+    if (!sectores) return [];
+    if (filtros.plantaId === null) return sectores;
+    return sectores.filter((s) => s.planta?.id === filtros.plantaId);
+  }, [sectores, filtros.plantaId]);
+
   const maquinasFiltradas = useMemo(() => {
     if (!maquinas) return [];
-    if (filtros.sectorId === null) return maquinas;
-    return maquinas.filter((m) => m.sector.id === filtros.sectorId);
-  }, [maquinas, filtros.sectorId]);
+    return maquinas.filter((m) => {
+      if (filtros.sectorId !== null && m.sector.id !== filtros.sectorId) {
+        return false;
+      }
+      if (filtros.plantaId !== null && m.sector.planta?.id !== filtros.plantaId) {
+        return false;
+      }
+      return true;
+    });
+  }, [maquinas, filtros.sectorId, filtros.plantaId]);
 
   // Petición del listado de intervenciones
   const queryParams = useMemo(() => paramsListado(filtros, 25), [filtros]);
@@ -177,6 +198,37 @@ export function IntervencionesLista() {
         ...filtros,
         vista: nuevaVista,
         estados: [],
+        pagina: 1,
+      })
+    );
+  };
+
+  const handlePlantaChange = (val: string | null) => {
+    const nuevaPlantaId = val ? Number(val) : null;
+    let nuevoSectorId = filtros.sectorId;
+    if (nuevaPlantaId !== null && nuevoSectorId !== null && sectores) {
+      const sec = sectores.find((s) => s.id === nuevoSectorId);
+      if (!sec || sec.planta?.id !== nuevaPlantaId) {
+        nuevoSectorId = null;
+      }
+    }
+    let nuevaMaquinaId = filtros.maquinaId;
+    if (nuevaMaquinaId !== null && maquinas) {
+      const maq = maquinas.find((m) => m.id === nuevaMaquinaId);
+      if (
+        maq &&
+        ((nuevoSectorId !== null && maq.sector.id !== nuevoSectorId) ||
+          (nuevaPlantaId !== null && maq.sector.planta?.id !== nuevaPlantaId))
+      ) {
+        nuevaMaquinaId = null;
+      }
+    }
+    setSearchParams(
+      escribirFiltros({
+        ...filtros,
+        plantaId: nuevaPlantaId,
+        sectorId: nuevoSectorId,
+        maquinaId: nuevaMaquinaId,
         pagina: 1,
       })
     );
@@ -288,7 +340,10 @@ export function IntervencionesLista() {
       </Tabs>
 
       {/* 5.2 Filtros */}
-      <SimpleGrid cols={{ base: 1, sm: 2, lg: 3, xl: 5 }} spacing="sm">
+      <SimpleGrid
+        cols={{ base: 1, sm: 2, lg: 3, xl: mostrarPlanta ? 6 : 5 }}
+        spacing="sm"
+      >
         <TextInput
           aria-label="Buscar"
           placeholder="Máquina, código o descripción"
@@ -307,10 +362,24 @@ export function IntervencionesLista() {
           disabled={filtros.vista === 'sin-asignar'}
         />
 
+        {mostrarPlanta && (
+          <Select
+            aria-label="Planta"
+            placeholder="Planta"
+            data={(plantas || []).map((p) => ({
+              value: String(p.id),
+              label: p.nombre,
+            }))}
+            value={filtros.plantaId ? String(filtros.plantaId) : null}
+            onChange={handlePlantaChange}
+            clearable
+          />
+        )}
+
         <Select
           aria-label="Sector"
           placeholder="Sector"
-          data={(sectores || []).map((s) => ({
+          data={sectoresVisibles.map((s) => ({
             value: String(s.id),
             label: s.nombre,
           }))}

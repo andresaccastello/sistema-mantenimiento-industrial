@@ -90,12 +90,16 @@ describe('FE-20: requiereRecargar y mensajeError', () => {
     assert.equal(requiereRecargar(new ApiError(409, 'INTERVENCION_YA_ASIGNADA')), true);
     assert.equal(requiereRecargar(new ApiError(409, 'PERIODO_INVALIDO')), true);
     assert.equal(requiereRecargar(new ApiError(409, 'RESPONSABLE_SIN_CAMBIOS')), true);
+    assert.equal(requiereRecargar(new ApiError(409, 'MAQUINA_CON_INTERVENCIONES_ABIERTAS')), true);
+    assert.equal(requiereRecargar(new ApiError(409, 'MAQUINA_CON_DETENCIONES_ABIERTAS')), true);
   });
 
   it('requiereRecargar devuelve false para errores de validación o red', () => {
     assert.equal(requiereRecargar(new ApiError(422, 'MOTIVO_REQUERIDO')), false);
     assert.equal(requiereRecargar(new ApiError(422, 'FECHA_INCOHERENTE')), false);
     assert.equal(requiereRecargar(new ApiError(0, 'SIN_CONEXION')), false);
+    assert.equal(requiereRecargar(new ApiError(409, 'CODIGO_MAQUINA_DUPLICADO')), false);
+    assert.equal(requiereRecargar(new ApiError(404, 'PLANTA_NO_ENCONTRADA')), false);
   });
 
   it('mensajeError devuelve texto oficial de la sección 3.4 aunque el error traiga otro mensaje', () => {
@@ -107,5 +111,22 @@ describe('FE-20: requiereRecargar y mensajeError', () => {
 
     const errRecuperacion = new ApiError(422, 'DECISION_RECUPERACION_REQUERIDA', 'Another message');
     assert.equal(mensajeError(errRecuperacion), 'Indicá si la máquina volvió a funcionar.');
+
+    assert.equal(
+      mensajeError(new ApiError(409, 'CODIGO_MAQUINA_DUPLICADO', 'Raw dup')),
+      'Ya hay otra máquina con ese código.'
+    );
+    assert.equal(
+      mensajeError(new ApiError(409, 'MAQUINA_CON_INTERVENCIONES_ABIERTAS')),
+      'No se puede desactivar: la máquina tiene intervenciones abiertas.'
+    );
+    assert.equal(
+      mensajeError(new ApiError(409, 'MAQUINA_CON_DETENCIONES_ABIERTAS')),
+      'La máquina tiene detenciones sin confirmar.'
+    );
+    assert.equal(
+      mensajeError(new ApiError(404, 'PLANTA_NO_ENCONTRADA')),
+      'No encontramos esa planta.'
+    );
   });
 });

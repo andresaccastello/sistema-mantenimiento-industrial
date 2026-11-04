@@ -39,6 +39,8 @@ export function useAccionIntervencion(options?: UseAccionIntervencionOptions) {
       const invalidaciones: Promise<unknown>[] = [
         queryClient.invalidateQueries({ queryKey: ['intervenciones'] }),
         queryClient.invalidateQueries({ queryKey: ['maquinas'] }),
+        queryClient.invalidateQueries({ queryKey: ['maquina'] }),
+        queryClient.invalidateQueries({ queryKey: ['tablero'] }),
         queryClient.invalidateQueries({ queryKey: ['notificaciones-contador'] }),
       ];
 
@@ -66,11 +68,15 @@ export function useAccionIntervencion(options?: UseAccionIntervencionOptions) {
           color: 'red',
           message: mensajeError(err),
         });
-        await queryClient.invalidateQueries({
-          queryKey: options?.intervencionId
-            ? ['intervencion', options.intervencionId]
-            : ['intervencion'],
-        });
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: options?.intervencionId
+              ? ['intervencion', options.intervencionId]
+              : ['intervencion'],
+          }),
+          queryClient.invalidateQueries({ queryKey: ['maquina'] }),
+          queryClient.invalidateQueries({ queryKey: ['tablero'] }),
+        ]);
       } else {
         setErrorModal(mensajeError(err));
       }

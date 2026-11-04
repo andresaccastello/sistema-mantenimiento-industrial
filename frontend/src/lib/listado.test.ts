@@ -67,6 +67,10 @@ describe('FE-22: vistasDisponibles, leerFiltros y escribirFiltros', () => {
     const p3 = new URLSearchParams('sector=abc');
     assert.equal(leerFiltros(p3).sectorId, null);
 
+    // planta=abc -> null
+    const pPlanta = new URLSearchParams('planta=abc');
+    assert.equal(leerFiltros(pPlanta).plantaId, null);
+
     // desde=2026-02-30 -> null
     const p4 = new URLSearchParams('desde=2026-02-30');
     assert.equal(leerFiltros(p4).desde, null);
@@ -81,6 +85,7 @@ describe('FE-22: vistasDisponibles, leerFiltros y escribirFiltros', () => {
       vista: 'cerradas',
       estados: ['FINALIZADA'],
       sectorId: 3,
+      plantaId: 5,
       maquinaId: 12,
       desde: '2026-11-01',
       hasta: '2026-11-05',
@@ -129,15 +134,19 @@ describe('FE-23: paramsListado y hayFiltros', () => {
     const pPag = paramsListado({ ...FILTROS_POR_DEFECTO, pagina: 3 }, 25);
     assert.equal(pPag.limit, 25);
     assert.equal(pPag.offset, 50);
+
+    const pPlanta = paramsListado({ ...FILTROS_POR_DEFECTO, plantaId: 4 }, 25);
+    assert.equal(pPlanta.planta_id, 4);
   });
 
-  it('hayFiltros no cuenta vista ni página, pero sí sector y otros', () => {
+  it('hayFiltros no cuenta vista ni página, pero sí sector, planta y otros', () => {
     assert.equal(hayFiltros(FILTROS_POR_DEFECTO), false);
 
     assert.equal(hayFiltros({ ...FILTROS_POR_DEFECTO, vista: 'cerradas' }), false);
     assert.equal(hayFiltros({ ...FILTROS_POR_DEFECTO, pagina: 5 }), false);
 
     assert.equal(hayFiltros({ ...FILTROS_POR_DEFECTO, sectorId: 2 }), true);
+    assert.equal(hayFiltros({ ...FILTROS_POR_DEFECTO, plantaId: 4 }), true);
     assert.equal(hayFiltros({ ...FILTROS_POR_DEFECTO, texto: 'bomba' }), true);
   });
 });

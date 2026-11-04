@@ -246,3 +246,92 @@ export interface IntervencionCreada {
     sector: SectorSimple;
   };
 }
+
+export interface TableroDetenidaAhora {
+  maquina: {
+    id: number;
+    nombre: string;
+    codigo: string | null;
+    criticidad: {
+      id: number;
+      codigo: string;
+      nombre: string;
+      orden: number;
+      prioridad_alta?: boolean;
+    };
+    sector: {
+      id: number;
+      nombre: string;
+      planta: { id: number; nombre: string } | null;
+    };
+  };
+  estado: string;
+  detenida_desde: string;
+  inactividad_en_curso_minutos: number;
+  intervenciones_abiertas: number;
+}
+
+export interface TableroResumen {
+  maquinas: {
+    OPERATIVA: number;
+    DETENIDA: number;
+    EN_MANTENIMIENTO: number;
+    FUERA_DE_SERVICIO: number;
+    [key: string]: number;
+  };
+  intervenciones: {
+    PENDIENTE: number;
+    EN_PROCESO: number;
+    EN_ESPERA_REPUESTOS: number;
+    sin_asignar: number;
+    mias_abiertas: number;
+  };
+  detenidas_ahora: TableroDetenidaAhora[];
+}
+
+export interface DetencionAbiertaMaquina {
+  periodo: {
+    id: number;
+    desde: string;
+    observacion: string | null;
+    abierto_por_usuario_id: number | null;
+    abierto_por_nombre: string | null;
+  };
+  intervencion: {
+    id: number;
+    descripcion: string;
+    estado: string;
+    responsable_usuario_id: number | null;
+    responsable_nombre: string | null;
+  };
+}
+
+export interface InactividadMaquina {
+  maquina: {
+    id: number;
+    nombre: string;
+    codigo: string | null;
+    sector: {
+      id: number;
+      nombre: string;
+    };
+  };
+  intervalo: {
+    desde: string;
+    hasta: string;
+  };
+  inactividad_minutos: number;
+  por_tipo: {
+    CORRECTIVO: number;
+    PREVENTIVO: number;
+  };
+  fuera_de_servicio_descontado_minutos: number;
+  periodos: {
+    id: number;
+    intervencion_id: number;
+    tipo: string;
+    desde: string;
+    hasta: string | null;
+    abierto: boolean;
+  }[];
+}

@@ -6,6 +6,9 @@ import {
   coincideMaquina,
   agruparMaquinas,
   textoFallasAbiertas,
+  accionesMaquina,
+  motivoNoDesactivable,
+  rangoUltimosDias,
 } from './maquinas.js';
 
 describe('FE-12: normalizarTexto, etiquetaMaquina y coincideMaquina', () => {
@@ -65,5 +68,108 @@ describe('FE-14: textoFallasAbiertas', () => {
     assert.equal(textoFallasAbiertas(-1), null);
     assert.equal(textoFallasAbiertas(1), 'Esta máquina ya tiene 1 falla abierta.');
     assert.equal(textoFallasAbiertas(3), 'Esta máquina ya tiene 3 fallas abiertas.');
+  });
+});
+
+describe('FE-30: accionesMaquina y motivoNoDesactivable', () => {
+  const permisosResponsable = {
+    INTERVENCIONES_VER: 'TODAS',
+    INTERVENCIONES_CREAR: 'TODAS',
+    INTERVENCIONES_CONFIRMAR_RECUPERACION: 'TODAS',
+    MAQUINAS_CAMBIAR_ESTADO: 'TODAS',
+  };
+
+  const permisosAdmin = {
+    INTERVENCIONES_VER: 'TODAS',
+    INTERVENCIONES_CREAR: 'TODAS',
+    INTERVENCIONES_CONFIRMAR_RECUPERACION: 'TODAS',
+    MAQUINAS_CAMBIAR_ESTADO: 'TODAS',
+    MAQUINAS_GESTIONAR: 'TODAS',
+  };
+
+  const permisosOperario = {
+    INTERVENCIONES_VER: 'PROPIAS',
+    INTERVENCIONES_CREAR: 'TODAS',
+  };
+
+  it('RESPONSABLE con máquina activa detenida y 1 detención', () => {
+    const res = accionesMaquina(
+      { activo: true, estado: 'DETENIDA' },
+      permisosResponsable,
+      1
+    );
+    assert.deepEqual(res.todas, [
+      'CONFIRMAR_RECUPERACION',
+      'REPORTAR_FALLA',
+      'FUERA_DE_SERVICIO',
+    ]);
+    assert.equal(res.principal, 'CONFIRMAR_RECUPERACION');
+    assert.deepEqual(res.botones, ['REPORTAR_FALLA', 'FUERA_DE_SERVICIO']);
+    assert.deepEqual(res.menu, []);
+  });
+
+  it('ADMINISTRADOR con máquina activa fuera de servicio sin detenciones', () => {
+    const res = accionesMaquina(
+      { activo: true, estado: 'FUERA_DE_SERVICIO' },
+      permisosAdmin,
+      0
+    );
+    assert.deepEqual(res.todas, [
+      'REPORTAR_FALLA',
+      'VOLVER_A_SERVICIO',
+      'EDITAR',
+      'DESACTIVAR',
+    ]);
+    assert.equal(res.principal, 'REPORTAR_FALLA');
+    assert.deepEqual(res.botones, ['VOLVER_A_SERVICIO', 'EDITAR']);
+    assert.deepEqual(res.menu, ['DESACTIVAR']);
+  });
+
+  it('máquina desactivada muestra REACTIVAR y no REPORTAR_FALLA', () => {
+    const res = accionesMaquina(
+      { activo: false, estado: 'OPERATIVA' },
+      permisosAdmin,
+      0
+    );
+    assert.ok(res.todas.includes('REACTIVAR'));
+    assert.ok(!res.todas.includes('REPORTAR_FALLA'));
+    assert.ok(!res.todas.includes('DESACTIVAR'));
+    assert.equal(res.principal, null);
+  });
+
+  it('OPERARIO con máquina activa solo ve REPORTAR_FALLA', () => {
+    const res = accionesMaquina(
+      { activo: true, estado: 'OPERATIVA' },
+      permisosOperario,
+      0
+    );
+    assert.deepEqual(res.todas, ['REPORTAR_FALLA']);
+    assert.equal(res.principal, 'REPORTAR_FALLA');
+  });
+
+  it('motivoNoDesactivable según intervenciones abiertas y detenciones', () => {
+    assert.equal(
+      motivoNoDesactivable({ intervenciones_abiertas: 2 }, 0),
+      'Tiene 2 intervenciones abiertas. Cerralas o cancelalas antes de desactivarla.'
+    );
+    assert.equal(
+      motivoNoDesactivable({ intervenciones_abiertas: 1 }, 0),
+      'Tiene 1 intervención abierta. Cerralas o cancelalas antes de desactivarla.'
+    );
+    assert.equal(
+      motivoNoDesactivable({ intervenciones_abiertas: 0 }, 1),
+      'Tiene detenciones sin confirmar. Confirmá que volvió a funcionar antes de desactivarla.'
+    );
+    assert.equal(motivoNoDesactivable({ intervenciones_abiertas: 0 }, 0), null);
+  });
+});
+
+describe('FE-31: rangoUltimosDias', () => {
+  it('calcula 30 días contando hoy y cruza bien el cambio de mes', () => {
+    const r = rangoUltimosDias(30, new Date(2026, 10, 3, 15, 0));
+    assert.deepEqual(r, {
+      desde: '2026-10-05',
+      hasta: '2026-11-03',
+    });
   });
 });

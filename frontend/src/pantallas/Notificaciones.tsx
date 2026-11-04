@@ -131,6 +131,8 @@ export function Notificaciones() {
 
     if (notif.intervencion_id) {
       navigate(`/intervenciones/${notif.intervencion_id}`);
+    } else if (notif.maquina_id) {
+      navigate(`/maquinas/${notif.maquina_id}`);
     }
   };
 
@@ -195,7 +197,7 @@ export function Notificaciones() {
                 padding="md"
                 onClick={() => handleClickNotificacion(notif)}
                 style={{
-                  cursor: notif.intervencion_id ? 'pointer' : 'default',
+                  cursor: notif.intervencion_id || notif.maquina_id ? 'pointer' : 'default',
                   backgroundColor: noLeida ? '#f0fdf4' : '#ffffff',
                   borderColor: noLeida ? '#bbf7d0' : 'rgba(0, 0, 0, 0.08)',
                   transition: 'background-color 150ms ease',

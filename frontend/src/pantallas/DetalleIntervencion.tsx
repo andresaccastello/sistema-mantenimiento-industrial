@@ -301,7 +301,17 @@ export function DetalleIntervencion() {
                 <Text fw={700} size="sm" tt="uppercase" c="#64748b">Datos</Text>
                 <Group justify="space-between" align="flex-start">
                   <Text size="sm" c="dimmed">Máquina</Text>
-                  <Text size="sm" fw={600} ta="right">{etiquetaMaquina(reporte.maquina)}</Text>
+                  <Text
+                    component={Link}
+                    to={`/maquinas/${reporte.maquina.id}`}
+                    size="sm"
+                    fw={600}
+                    c="blue"
+                    ta="right"
+                    style={{ textDecoration: 'none' }}
+                  >
+                    {etiquetaMaquina(reporte.maquina)}
+                  </Text>
                 </Group>
                 <Group justify="space-between" align="flex-start">
                   <Text size="sm" c="dimmed">Sector</Text>
@@ -493,7 +503,7 @@ export function DetalleIntervencion() {
       />
       <ModalConfirmarRecuperacion
         abierto={modalActivo === 'CONFIRMAR_RECUPERACION'} onCerrar={cerrarModal}
-        maquinaId={reporte.maquina.id} periodo={periodoParaRecuperar}
+        maquinaId={reporte.maquina.id} periodos={periodoParaRecuperar ? [periodoParaRecuperar] : []}
       />
     </Stack>
   );

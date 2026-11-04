@@ -70,8 +70,9 @@ Tipos nuevos, con la forma exacta de las respuestas:
 | `CODIGO_MAQUINA_DUPLICADO` | Ya hay otra máquina con ese código. | no |
 | `MAQUINA_CON_INTERVENCIONES_ABIERTAS` | No se puede desactivar: la máquina tiene intervenciones abiertas. | sí |
 | `MAQUINA_CON_DETENCIONES_ABIERTAS` | La máquina tiene detenciones sin confirmar. | sí |
-| `SIN_CAMBIOS` | La máquina ya está en ese estado. | sí |
 | `PLANTA_NO_ENCONTRADA` | No encontramos esa planta. | no |
+
+`SIN_CAMBIOS` no cambia en el mapa general. En el diálogo de la sección 6.6 se muestra "La máquina ya está en ese estado.", se cierra el diálogo y se recarga.
 
 "Recarga" quiere decir que se agrega a `requiereRecargar`: el diálogo se cierra y se vuelve a pedir la pantalla.
 

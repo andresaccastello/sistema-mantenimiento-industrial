@@ -76,6 +76,10 @@ const MENSAJES_POR_CODIGO: Record<string, string> = {
   ELIMINACION_NO_PERMITIDA: 'No se puede eliminar: la intervención ya tiene actividad registrada.',
   PERIODO_INVALIDO: 'Esa detención ya se cerró o no se puede confirmar.',
   INTERVENCION_NO_ENCONTRADA: 'No encontramos esta intervención.',
+  CODIGO_MAQUINA_DUPLICADO: 'Ya hay otra máquina con ese código.',
+  MAQUINA_CON_INTERVENCIONES_ABIERTAS: 'No se puede desactivar: la máquina tiene intervenciones abiertas.',
+  MAQUINA_CON_DETENCIONES_ABIERTAS: 'La máquina tiene detenciones sin confirmar.',
+  PLANTA_NO_ENCONTRADA: 'No encontramos esa planta.',
 };
 
 const CODIGOS_RECARGA = new Set([
@@ -90,6 +94,8 @@ const CODIGOS_RECARGA = new Set([
   'PERIODO_INVALIDO',
   'ELIMINACION_NO_PERMITIDA',
   'INTERVENCION_NO_ENCONTRADA',
+  'MAQUINA_CON_INTERVENCIONES_ABIERTAS',
+  'MAQUINA_CON_DETENCIONES_ABIERTAS',
 ]);
 
 /**
