@@ -256,6 +256,16 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
       sectorIdFiltro = parsed;
     }
 
+    const plantaIdParam = c.req.query('planta_id');
+    let plantaIdFiltro: number | null = null;
+    if (plantaIdParam !== undefined && plantaIdParam !== null && plantaIdParam.trim() !== '') {
+      const parsed = parseId(plantaIdParam);
+      if (!parsed) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El parámetro planta_id debe ser un número entero positivo');
+      }
+      plantaIdFiltro = parsed;
+    }
+
     const tipoParam = c.req.query('tipo');
     let tipoFiltro: string | null = null;
     if (tipoParam !== undefined && tipoParam !== null && tipoParam.trim() !== '') {
@@ -358,6 +368,11 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
     if (sectorIdFiltro !== null) {
       params.push(sectorIdFiltro);
       conditions.push(`m.sector_id = $${params.length}`);
+    }
+
+    if (plantaIdFiltro !== null) {
+      params.push(plantaIdFiltro);
+      conditions.push(`s.planta_id = $${params.length}`);
     }
 
     if (tipoFiltro !== null) {

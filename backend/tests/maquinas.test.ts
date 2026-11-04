@@ -1084,6 +1084,117 @@ test('Etapa F3a — Datos de la máquina y API para el tablero y las máquinas',
       assert.strictEqual(resNotifC.rows[0].prioridad, 'NORMAL');
       assert.strictEqual(resNotifC.rows[0].titulo, `Nueva falla en ${nombreMaqNorm}`);
     });
+
+    // =========================================================================
+    // MQ-11: Filtro planta_id en GET /api/intervenciones
+    // =========================================================================
+    await t.test('MQ-11: GET /api/intervenciones filtrado por planta_id (solo, combinado con estado y 422 con abc)', async () => {
+      const rP1 = await client.query(
+        'INSERT INTO plantas (nombre, activo) VALUES ($1, TRUE) RETURNING id',
+        [`Planta MQ11 A ${suf}`]
+      );
+      const p1Id = Number(rP1.rows[0].id);
+      createdPlantaIds.push(p1Id);
+
+      const rP2 = await client.query(
+        'INSERT INTO plantas (nombre, activo) VALUES ($1, TRUE) RETURNING id',
+        [`Planta MQ11 B ${suf}`]
+      );
+      const p2Id = Number(rP2.rows[0].id);
+      createdPlantaIds.push(p2Id);
+
+      const rSec1 = await client.query(
+        'INSERT INTO sectores (nombre, planta_id, activo) VALUES ($1, $2, TRUE) RETURNING id',
+        [`Sector MQ11 A ${suf}`, p1Id]
+      );
+      const s1Id = Number(rSec1.rows[0].id);
+      createdSectorIds.push(s1Id);
+
+      const rSec2 = await client.query(
+        'INSERT INTO sectores (nombre, planta_id, activo) VALUES ($1, $2, TRUE) RETURNING id',
+        [`Sector MQ11 B ${suf}`, p2Id]
+      );
+      const s2Id = Number(rSec2.rows[0].id);
+      createdSectorIds.push(s2Id);
+
+      const rMaq1 = await client.query(
+        "INSERT INTO maquinas (nombre, sector_id, estado) VALUES ($1, $2, 'OPERATIVA') RETURNING id",
+        [`Maq MQ11 A ${suf}`, s1Id]
+      );
+      const m1Id = Number(rMaq1.rows[0].id);
+      createdMaquinaIds.push(m1Id);
+
+      const rMaq2 = await client.query(
+        "INSERT INTO maquinas (nombre, sector_id, estado) VALUES ($1, $2, 'OPERATIVA') RETURNING id",
+        [`Maq MQ11 B ${suf}`, s2Id]
+      );
+      const m2Id = Number(rMaq2.rows[0].id);
+      createdMaquinaIds.push(m2Id);
+
+      const rTipo = await client.query("SELECT id FROM tipos_intervencion WHERE codigo = 'CORRECTIVO' LIMIT 1");
+      const tipoId = Number(rTipo.rows[0].id);
+
+      const rInt1 = await client.query(
+        `INSERT INTO intervenciones (maquina_id, tipo_intervencion_id, creado_por_usuario_id, estado, descripcion)
+         VALUES ($1, $2, $3, 'PENDIENTE', 'Int MQ11 P1 Pendiente') RETURNING id`,
+        [m1Id, tipoId, opId]
+      );
+      const int1Id = Number(rInt1.rows[0].id);
+      createdIntervencionIds.push(int1Id);
+
+      const rInt2 = await client.query(
+        `INSERT INTO intervenciones (maquina_id, tipo_intervencion_id, creado_por_usuario_id, responsable_usuario_id, estado, descripcion, fecha_inicio)
+         VALUES ($1, $2, $3, $4, 'EN_PROCESO', 'Int MQ11 P1 En Proceso', NOW()) RETURNING id`,
+        [m1Id, tipoId, opId, respId]
+      );
+      const int2Id = Number(rInt2.rows[0].id);
+      createdIntervencionIds.push(int2Id);
+
+      const rInt3 = await client.query(
+        `INSERT INTO intervenciones (maquina_id, tipo_intervencion_id, creado_por_usuario_id, estado, descripcion)
+         VALUES ($1, $2, $3, 'PENDIENTE', 'Int MQ11 P2 Pendiente') RETURNING id`,
+        [m2Id, tipoId, opId]
+      );
+      const int3Id = Number(rInt3.rows[0].id);
+      createdIntervencionIds.push(int3Id);
+
+      // (a) Con planta_id salen solo las de esa planta y X-Total-Count coincide
+      const resA = await app.request(`/api/intervenciones?planta_id=${p1Id}`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resA.status, 200);
+      assert.strictEqual(resA.headers.get('X-Total-Count'), '2');
+      const itemsA = (await resA.json()) as any[];
+      assert.strictEqual(itemsA.length, 2);
+      const idsA = itemsA.map((i) => i.id).sort((a, b) => a - b);
+      assert.deepStrictEqual(idsA, [int1Id, int2Id].sort((a, b) => a - b));
+
+      // (b) Combinado con estado
+      const resB = await app.request(`/api/intervenciones?planta_id=${p1Id}&estado=EN_PROCESO`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resB.status, 200);
+      assert.strictEqual(resB.headers.get('X-Total-Count'), '1');
+      const itemsB = (await resB.json()) as any[];
+      assert.strictEqual(itemsB.length, 1);
+      assert.strictEqual(itemsB[0].id, int2Id);
+
+      // Planta inexistente -> vacía
+      const resInex = await app.request('/api/intervenciones?planta_id=999999999', {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resInex.status, 200);
+      assert.strictEqual(resInex.headers.get('X-Total-Count'), '0');
+      assert.deepStrictEqual(await resInex.json(), []);
+
+      // (c) Con abc: 422 DATOS_INVALIDOS
+      const resC = await app.request('/api/intervenciones?planta_id=abc', {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.strictEqual(resC.status, 422);
+      const errC = await resC.json();
+      assert.strictEqual(errC.codigo, 'DATOS_INVALIDOS');
+    });
   } finally {
     await limpiarIntervenciones(createdIntervencionIds);
 
