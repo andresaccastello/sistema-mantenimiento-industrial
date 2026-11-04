@@ -154,7 +154,7 @@ describe('FE-30: accionesMaquina y motivoNoDesactivable', () => {
     );
     assert.equal(
       motivoNoDesactivable({ intervenciones_abiertas: 1 }, 0),
-      'Tiene 1 intervención abierta. Cerralas o cancelalas antes de desactivarla.'
+      'Tiene 1 intervención abierta. Cerrala o cancelala antes de desactivarla.'
     );
     assert.equal(
       motivoNoDesactivable({ intervenciones_abiertas: 0 }, 1),

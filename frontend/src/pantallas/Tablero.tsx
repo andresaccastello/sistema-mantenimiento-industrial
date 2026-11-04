@@ -40,6 +40,7 @@ import {
   ClaveContadorIntervencion,
 } from '../lib/tablero';
 import { CriticidadBadge } from '../componentes/CriticidadBadge';
+import { EstadoBadge } from '../componentes/EstadoBadge';
 
 const ICONOS_ESTADO: Record<
   string,
@@ -290,7 +291,12 @@ export function Tablero() {
 
       {/* Bloque: Detenidas ahora */}
       <Stack gap="xs">
-        <Title order={4}>Detenidas ahora</Title>
+        <div>
+          <Title order={4}>Detenidas ahora</Title>
+          <Text size="sm" c="dimmed">
+            Máquinas paradas ahora, estén detenidas o en mantenimiento.
+          </Text>
+        </div>
         <Paper withBorder radius="md" p={0} style={{ overflow: 'hidden' }}>
           {tableroQuery.isPending ? (
             <Stack p="md" gap="sm">
@@ -329,16 +335,21 @@ export function Tablero() {
                     return (
                       <Table.Tr key={item.maquina.id}>
                         <Table.Td>
-                          <Text
-                            component={Link}
-                            to={`/maquinas/${item.maquina.id}`}
-                            size="sm"
-                            fw={600}
-                            c="blue"
-                            style={{ textDecoration: 'none' }}
-                          >
-                            {etiquetaMaquina(item.maquina)}
-                          </Text>
+                          <Stack gap={2}>
+                            <Text
+                              component={Link}
+                              to={`/maquinas/${item.maquina.id}`}
+                              size="sm"
+                              fw={600}
+                              c="blue"
+                              style={{ textDecoration: 'none' }}
+                            >
+                              {etiquetaMaquina(item.maquina)}
+                            </Text>
+                            <div>
+                              <EstadoBadge entidad="maquina" estado={item.estado} />
+                            </div>
+                          </Stack>
                         </Table.Td>
                         <Table.Td>
                           <CriticidadBadge

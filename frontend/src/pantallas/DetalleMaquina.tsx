@@ -6,6 +6,7 @@ import {
   Group,
   Title,
   Text,
+  Anchor,
   Button,
   Paper,
   Badge,
@@ -23,7 +24,6 @@ import { DatePickerInput } from '@mantine/dates';
 import { useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import {
-  IconArrowLeft,
   IconChevronDown,
   IconAlertCircle,
   IconAlertTriangle,
@@ -758,17 +758,15 @@ export function DetalleMaquina() {
     <Stack gap="md">
       {/* Cabecera (6.2) */}
       <Stack gap="xs">
-        <div>
-          <Button
-            component={Link}
-            to={volverA}
-            variant="subtle"
-            size="compact-sm"
-            leftSection={<IconArrowLeft size={16} />}
-          >
-            ← Máquinas
-          </Button>
-        </div>
+        <Anchor
+          component={Link}
+          to={volverA}
+          size="sm"
+          c="dimmed"
+          style={{ textDecoration: 'none' }}
+        >
+          ← Máquinas
+        </Anchor>
 
         <Group gap="sm" align="center" wrap="wrap">
           <Title order={2}>{etiquetaMaquina(maquina)}</Title>

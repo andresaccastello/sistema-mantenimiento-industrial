@@ -208,7 +208,7 @@ export function motivoNoDesactivable(
 ): string | null {
   if (maquina.intervenciones_abiertas > 0) {
     if (maquina.intervenciones_abiertas === 1) {
-      return 'Tiene 1 intervención abierta. Cerralas o cancelalas antes de desactivarla.';
+      return 'Tiene 1 intervención abierta. Cerrala o cancelala antes de desactivarla.';
     }
     return `Tiene ${maquina.intervenciones_abiertas} intervenciones abiertas. Cerralas o cancelalas antes de desactivarla.`;
   }

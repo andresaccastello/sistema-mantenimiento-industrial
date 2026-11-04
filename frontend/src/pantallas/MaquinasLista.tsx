@@ -286,7 +286,9 @@ export function MaquinasLista() {
               <Text size="sm" c="dimmed">
                 {maquinasQuery.isPending
                   ? 'Cargando...'
-                  : `${maquinasFiltradas.length} máquinas`}
+                  : `${maquinasFiltradas.length} ${
+                      maquinasFiltradas.length === 1 ? 'máquina' : 'máquinas'
+                    }`}
               </Text>
               {tieneFiltrosActivos && (
                 <Button
