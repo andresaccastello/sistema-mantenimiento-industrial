@@ -639,6 +639,108 @@ test('Etapa API-05 — Excepciones de permisos por usuario (EX-01 a EX-10)', asy
       }
     });
 
+    // EX-11: Dos pedidos a la vez sobre una excepción (5 rondas de concurrencia)
+    await t.test('EX-11: Dos pedidos a la vez sobre una excepción (5 rondas)', async () => {
+      const insUserEx11 = await client.query(
+        `INSERT INTO usuarios (legajo, nombre, apellido, password_hash, perfil_id, activo, debe_cambiar_password, sesion_version)
+         VALUES ($1, $2, $3, $4, $5, TRUE, FALSE, 1) RETURNING id`,
+        [`CONC_EX_${suf}`, 'Usuario', 'ConcurrenciaEX', passHash, operarioPerfilId]
+      );
+      const userEx11Id = Number(insUserEx11.rows[0].id);
+      createdUserIds.push(userEx11Id);
+
+      let rondasFallidas = 0;
+
+      for (let r = 1; r <= 5; r++) {
+        let rondaOk = true;
+
+        // (a) Dos PUT iguales a la vez
+        const countCreadasAntesRes = await client.query(
+          "SELECT COUNT(*)::integer AS total FROM auditoria_permisos WHERE sobre_usuario_id = $1 AND accion = 'EXCEPCION_CREADA'",
+          [userEx11Id]
+        );
+        const countCreadasAntes = Number(countCreadasAntesRes.rows[0].total);
+
+        const putBody = {
+          efecto: 'CONCEDER',
+          alcance: 'SECTORES',
+          motivo: `Prueba concurrente PUT ronda ${r}`,
+        };
+
+        const [resPut1, resPut2] = await Promise.all([
+          putJson(`/api/usuarios/${userEx11Id}/excepciones/INTERVENCIONES_VER`, putBody, testAdminToken),
+          putJson(`/api/usuarios/${userEx11Id}/excepciones/INTERVENCIONES_VER`, putBody, testAdminToken),
+        ]);
+
+        const putStatuses = [resPut1.status, resPut2.status].sort((a, b) => a - b);
+        const countCreadasDespuesRes = await client.query(
+          "SELECT COUNT(*)::integer AS total FROM auditoria_permisos WHERE sobre_usuario_id = $1 AND accion = 'EXCEPCION_CREADA'",
+          [userEx11Id]
+        );
+        const countCreadasDespues = Number(countCreadasDespuesRes.rows[0].total);
+        const diffCreadas = countCreadasDespues - countCreadasAntes;
+
+        let putSinCambiosCodeOk = true;
+        if (putStatuses[1] === 422) {
+          const res422 = resPut1.status === 422 ? resPut1 : resPut2;
+          const body422 = await res422.json().catch(() => ({}));
+          putSinCambiosCodeOk = body422.codigo === 'SIN_CAMBIOS';
+        }
+
+        const putOk = (putStatuses[0] === 200 && putStatuses[1] === 422 && putSinCambiosCodeOk && diffCreadas === 1);
+        if (!putOk) {
+          rondaOk = false;
+        }
+
+        // (b) Dos DELETE a la vez
+        const countEliminadasAntesRes = await client.query(
+          "SELECT COUNT(*)::integer AS total FROM auditoria_permisos WHERE sobre_usuario_id = $1 AND accion = 'EXCEPCION_ELIMINADA'",
+          [userEx11Id]
+        );
+        const countEliminadasAntes = Number(countEliminadasAntesRes.rows[0].total);
+
+        const delBody = { motivo: `Prueba concurrente DELETE ronda ${r}` };
+
+        const [resDel1, resDel2] = await Promise.all([
+          deleteJson(`/api/usuarios/${userEx11Id}/excepciones/INTERVENCIONES_VER`, delBody, testAdminToken),
+          deleteJson(`/api/usuarios/${userEx11Id}/excepciones/INTERVENCIONES_VER`, delBody, testAdminToken),
+        ]);
+
+        const delStatuses = [resDel1.status, resDel2.status].sort((a, b) => a - b);
+        const countEliminadasDespuesRes = await client.query(
+          "SELECT COUNT(*)::integer AS total FROM auditoria_permisos WHERE sobre_usuario_id = $1 AND accion = 'EXCEPCION_ELIMINADA'",
+          [userEx11Id]
+        );
+        const countEliminadasDespues = Number(countEliminadasDespuesRes.rows[0].total);
+        const diffEliminadas = countEliminadasDespues - countEliminadasAntes;
+
+        let delNoEncontradaCodeOk = true;
+        if (delStatuses[1] === 404) {
+          const res404 = resDel1.status === 404 ? resDel1 : resDel2;
+          const body404 = await res404.json().catch(() => ({}));
+          delNoEncontradaCodeOk = body404.codigo === 'EXCEPCION_NO_ENCONTRADA';
+        }
+
+        const delOk = (delStatuses[0] === 200 && delStatuses[1] === 404 && delNoEncontradaCodeOk && diffEliminadas === 1);
+        if (!delOk) {
+          rondaOk = false;
+        }
+
+        if (!rondaOk) {
+          rondasFallidas++;
+          console.log(`[EX-11] Ronda ${r} FALLÓ: PUT statuses=${putStatuses.join(',')}, diffCreadas=${diffCreadas} | DELETE statuses=${delStatuses.join(',')}, diffEliminadas=${diffEliminadas}`);
+        } else {
+          console.log(`[EX-11] Ronda ${r} OK`);
+        }
+
+        // Asegurar que la excepción quede eliminada para la siguiente ronda si quedó colgada
+        await client.query('DELETE FROM usuario_permiso WHERE usuario_id = $1', [userEx11Id]);
+      }
+
+      console.log(`[EX-11] Total rondas fallidas: ${rondasFallidas} de 5`);
+      assert.strictEqual(rondasFallidas, 0, `EX-11 falló en ${rondasFallidas} de 5 rondas`);
+    });
+
   } finally {
     // Limpieza estricta de datos creados en la suite
     await client.query(`

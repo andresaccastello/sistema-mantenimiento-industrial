@@ -1188,20 +1188,6 @@ usuariosApp.put('/:id/excepciones/:codigo', async (c) => {
     }
   }
 
-  // 10. PUT con el mismo efecto y alcance que la excepción que ya tiene
-  const resEx = await pool.query(`
-    SELECT id, efecto, alcance, motivo
-    FROM usuario_permiso
-    WHERE usuario_id = $1 AND permiso_id = $2
-  `, [targetUserId, permisoId]);
-
-  if (resEx.rows.length > 0) {
-    const existing = resEx.rows[0];
-    if (existing.efecto === body.efecto && existing.alcance === alcanceParaGuardar) {
-      return c.json({ error: 'La excepción ya posee el mismo efecto y alcance', codigo: 'SIN_CAMBIOS' }, 422);
-    }
-  }
-
   // Último administrador: No hace falta controlarlo aquí porque quien hace el cambio tiene USUARIOS_GESTIONAR y PERMISOS_GESTIONAR,
   // y no puede cambiarse a sí mismo (regla 4: AUTOGESTION_NO_PERMITIDA), por lo que siempre queda al menos un usuario activo con ambos permisos.
 
@@ -1209,8 +1195,25 @@ usuariosApp.put('/:id/excepciones/:codigo', async (c) => {
   try {
     await client.query('BEGIN');
 
+    // Bloqueo del usuario para serializar cambios concurrentes sobre sus excepciones.
+    // Se bloquea el usuario y no la excepción porque si es una creación todavía no existe la fila a bloquear.
+    await client.query('SELECT id FROM usuarios WHERE id = $1 FOR UPDATE', [targetUserId]);
+
+    // 10. PUT con el mismo efecto y alcance que la excepción que ya tiene
+    const resEx = await client.query(`
+      SELECT id, efecto, alcance, motivo
+      FROM usuario_permiso
+      WHERE usuario_id = $1 AND permiso_id = $2
+    `, [targetUserId, permisoId]);
+
     const yaExistia = resEx.rows.length > 0;
     const existing = yaExistia ? resEx.rows[0] : null;
+
+    if (yaExistia && existing.efecto === body.efecto && existing.alcance === alcanceParaGuardar) {
+      await client.query('ROLLBACK');
+      return c.json({ error: 'La excepción ya posee el mismo efecto y alcance', codigo: 'SIN_CAMBIOS' }, 422);
+    }
+
     const accion = yaExistia ? 'EXCEPCION_MODIFICADA' : 'EXCEPCION_CREADA';
 
     await client.query(`
@@ -1311,24 +1314,28 @@ usuariosApp.delete('/:id/excepciones/:codigo', async (c) => {
     return c.json({ error: 'No puede gestionar un permiso que no posee entre sus permisos efectivos', codigo: 'PERMISO_NO_OTORGABLE' }, 403);
   }
 
-  // 11. DELETE de una excepción que no existe
-  const resEx = await pool.query(`
-    SELECT id, efecto, alcance, motivo
-    FROM usuario_permiso
-    WHERE usuario_id = $1 AND permiso_id = $2
-  `, [targetUserId, permisoId]);
-
-  if (resEx.rows.length === 0) {
-    return c.json({ error: 'Excepción no encontrada para este usuario y permiso', codigo: 'EXCEPCION_NO_ENCONTRADA' }, 404);
-  }
-  const existing = resEx.rows[0];
-
   // Último administrador: No hace falta controlarlo aquí porque quien hace el cambio tiene USUARIOS_GESTIONAR y PERMISOS_GESTIONAR,
   // y no puede cambiarse a sí mismo (regla 4: AUTOGESTION_NO_PERMITIDA), por lo que siempre queda al menos un usuario activo con ambos permisos.
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // Bloqueo del usuario para serializar cambios concurrentes sobre sus excepciones.
+    await client.query('SELECT id FROM usuarios WHERE id = $1 FOR UPDATE', [targetUserId]);
+
+    // 11. DELETE de una excepción que no existe
+    const resEx = await client.query(`
+      SELECT id, efecto, alcance, motivo
+      FROM usuario_permiso
+      WHERE usuario_id = $1 AND permiso_id = $2
+    `, [targetUserId, permisoId]);
+
+    if (resEx.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return c.json({ error: 'Excepción no encontrada para este usuario y permiso', codigo: 'EXCEPCION_NO_ENCONTRADA' }, 404);
+    }
+    const existing = resEx.rows[0];
 
     await client.query(`
       DELETE FROM usuario_permiso
