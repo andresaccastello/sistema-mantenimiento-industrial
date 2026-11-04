@@ -37,6 +37,7 @@
     "test:api-front": "tsx --env-file=.env --test backend/tests/api_front.test.ts",
     "test:maquinas": "tsx --env-file=.env --test backend/tests/maquinas.test.ts",
     "test:excepciones": "tsx --env-file=.env --test backend/tests/excepciones.test.ts",
+    "test:administracion": "tsx --env-file=.env --test backend/tests/administracion.test.ts",
     "test:front": "tsx --test frontend/src/lib/*.test.ts",
     "test:e2e": "tsx --env-file=.env --test backend/tests/crud.test.ts",
     "test:todo": "node scripts/run-all-tests.mjs",

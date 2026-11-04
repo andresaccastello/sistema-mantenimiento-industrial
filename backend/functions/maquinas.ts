@@ -325,7 +325,7 @@ maquinasApp.put('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
     }
 
     // Verificar existencia de la máquina primero
-    const resActual = await pool.query('SELECT id, sector_id, activo FROM maquinas WHERE id = $1', [id]);
+    const resActual = await pool.query('SELECT id, sector_id, criticidad_id, tipo_equipo_id, activo FROM maquinas WHERE id = $1', [id]);
     if (resActual.rows.length === 0) {
       return c.json({ error: 'Máquina no encontrada', codigo: 'MAQUINA_NO_ENCONTRADA' }, 404);
     }
@@ -353,22 +353,26 @@ maquinasApp.put('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
       sets.push(`sector_id = $${params.length}`);
     }
 
+    let criticidadEfectivaId = Number(maqActual.criticidad_id);
     if ('criticidad_id' in body) {
       const criticidad_id = parseId(body.criticidad_id);
       if (!criticidad_id) return badRequest(c, 'La criticidad indicada es inválida');
       if (!(await validateCriticidad(criticidad_id))) {
         return badRequest(c, 'La criticidad indicada no existe o está inactiva');
       }
+      criticidadEfectivaId = criticidad_id;
       params.push(criticidad_id);
       sets.push(`criticidad_id = $${params.length}`);
     }
 
+    let tipoEquipoEfectivoId = Number(maqActual.tipo_equipo_id);
     if ('tipo_equipo_id' in body) {
       const tipo_equipo_id = parseId(body.tipo_equipo_id);
       if (!tipo_equipo_id) return badRequest(c, 'El tipo de equipo indicado es inválido');
       if (!(await validateTipoEquipo(tipo_equipo_id))) {
         return badRequest(c, 'El tipo de equipo indicado no existe o está inactivo');
       }
+      tipoEquipoEfectivoId = tipo_equipo_id;
       params.push(tipo_equipo_id);
       sets.push(`tipo_equipo_id = $${params.length}`);
     }
@@ -402,6 +406,12 @@ maquinasApp.put('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
       } else if (body.activo === true) {
         if (!('sector_id' in body) && !(await validateSector(sectorEfectivoId))) {
           return badRequest(c, 'El sector de la máquina está inactivo');
+        }
+        if (!('criticidad_id' in body) && !(await validateCriticidad(criticidadEfectivaId))) {
+          return badRequest(c, 'La criticidad de la máquina está inactiva');
+        }
+        if (!('tipo_equipo_id' in body) && !(await validateTipoEquipo(tipoEquipoEfectivoId))) {
+          return badRequest(c, 'El tipo de equipo de la máquina está inactivo');
         }
       }
       params.push(body.activo);
