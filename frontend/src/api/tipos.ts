@@ -87,6 +87,8 @@ export interface Criticidad {
   orden: number;
   prioridad_alta: boolean;
   por_omision?: boolean;
+  activo?: boolean;
+  maquinas_activas?: number;
 }
 
 export interface TipoEquipo {
@@ -95,12 +97,17 @@ export interface TipoEquipo {
   nombre: string;
   orden?: number;
   por_omision?: boolean;
+  activo?: boolean;
+  maquinas_activas?: number;
 }
 
 export interface Planta {
   id: number;
   nombre: string;
   descripcion?: string | null;
+  activo?: boolean;
+  creado_en?: string;
+  sectores_activos?: number;
 }
 
 export interface MaquinaLista {
@@ -202,6 +209,8 @@ export interface SectorLista {
   activo: boolean;
   creado_en: string;
   planta: { id: number; nombre: string } | null;
+  maquinas_activas?: number;
+  usuarios_activos?: number;
 }
 
 export interface IntervencionDetalle {
@@ -334,4 +343,119 @@ export interface InactividadMaquina {
     hasta: string | null;
     abierto: boolean;
   }[];
+}
+
+/* =====================================================================
+ * Tipos para la API de administración (sección 6 - Etapa F4a)
+ * ===================================================================== */
+
+export interface SectorAdmin extends SectorLista {
+  maquinas_activas: number;
+  usuarios_activos: number;
+}
+
+export interface PlantaAdmin extends Planta {
+  activo: boolean;
+  creado_en: string;
+  sectores_activos: number;
+}
+
+export interface CriticidadAdmin extends Criticidad {
+  por_omision: boolean;
+  activo: boolean;
+  maquinas_activas: number;
+}
+
+export interface TipoEquipoAdmin extends TipoEquipo {
+  orden: number;
+  por_omision: boolean;
+  activo: boolean;
+  maquinas_activas: number;
+}
+
+export interface PerfilDetalle {
+  id: number;
+  nombre: string;
+  descripcion: string | null;
+  activo: boolean;
+  usuarios_activos: number;
+  permisos: {
+    codigo: string;
+    nombre: string;
+    alcance: AlcancePermiso | null;
+  }[];
+}
+
+export interface PermisoCatalogo {
+  id: number;
+  codigo: string;
+  nombre: string;
+  descripcion: string | null;
+  usa_alcance: boolean;
+}
+
+export interface UsuarioListaItem {
+  id: number;
+  legajo: string;
+  nombre: string;
+  apellido: string | null;
+  activo: boolean;
+  ultimo_acceso_en: string | null;
+  debe_cambiar_password: boolean;
+  perfil: PerfilUsuario;
+  sectores: SectorUsuario[];
+}
+
+export interface ExcepcionPermisoDetalle {
+  id: number;
+  codigo: string;
+  nombre: string;
+  efecto: 'CONCEDER' | 'DENEGAR';
+  alcance: AlcancePermiso | null;
+  motivo: string;
+  creado_en: string;
+  usa_alcance: boolean;
+  otorgado_por: {
+    id: number;
+    nombre: string;
+    apellido: string | null;
+  } | null;
+}
+
+export interface UsuarioDetalleAdmin {
+  id: number;
+  legajo: string;
+  nombre: string;
+  apellido: string | null;
+  activo: boolean;
+  ultimo_acceso_en: string | null;
+  debe_cambiar_password: boolean;
+  creado_en: string;
+  actualizado_en: string | null;
+  perfil: PerfilUsuario;
+  sectores: SectorUsuario[];
+  permisos: Record<string, AlcancePermiso | string>;
+  excepciones: ExcepcionPermisoDetalle[];
+  intervenciones_abiertas_como_responsable: number;
+}
+
+export interface UsuarioAuditoriaRegistro {
+  id: number;
+  accion: string;
+  creado_en: string;
+  realizado_por: {
+    id: number;
+    nombre: string;
+    apellido: string | null;
+  } | null;
+  detalle: any;
+}
+
+export interface UsuarioAuditoriaResponse {
+  total: number;
+  registros: UsuarioAuditoriaRegistro[];
+  referencias: {
+    perfiles: Record<string, string>;
+    sectores: Record<string, string>;
+  };
 }

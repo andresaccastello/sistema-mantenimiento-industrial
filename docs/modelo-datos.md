@@ -49,10 +49,10 @@ Plantas o naves físicas de la empresa. Sin datos iniciales por omisión (una in
 Sectores físicos o funcionales donde se ubican las máquinas. Pueden asociarse opcionalmente a una planta (`planta_id`).
 
 ### criticidades
-Catálogo configurable de niveles de criticidad de las máquinas (`codigo`, `nombre`, `orden`, `prioridad_alta`, `por_omision`, `activo`), con a lo sumo un nivel activo por omisión. Valores iniciales: `ALTA` (prioridad alta), `MEDIA` (por omisión) y `BAJA`.
+Catálogo configurable de niveles de criticidad de las máquinas (`codigo`, `nombre`, `orden`, `prioridad_alta`, `por_omision`, `activo`), con a lo sumo un nivel activo por omisión. Valores iniciales: `ALTA` (prioridad alta), `MEDIA` (por omisión) y `BAJA`. Siempre hay un valor por omisión activo; se cambia marcando otro (D-015).
 
 ### tipos_equipo
-Catálogo configurable de tipos de equipo (`codigo`, `nombre`, `orden`, `por_omision`, `activo`), con a lo sumo un tipo activo por omisión. Valores iniciales: `MAQUINA` (por omisión), `VEHICULO`, `INSTALACION` y `HERRAMIENTA`.
+Catálogo configurable de tipos de equipo (`codigo`, `nombre`, `orden`, `por_omision`, `activo`), con a lo sumo un tipo activo por omisión. Valores iniciales: `MAQUINA` (por omisión), `VEHICULO`, `INSTALACION` y `HERRAMIENTA`. Siempre hay un valor por omisión activo; se cambia marcando otro (D-015).
 
 ### maquinas
 Equipos industriales administrados por el sistema. Incluye sector (`sector_id`), criticidad (`criticidad_id`), tipo de equipo (`tipo_equipo_id`), código único opcional (`codigo`) y marca/modelo en texto libre (`modelo`).

@@ -49,6 +49,16 @@ async function putJson(path: string, body: any, token?: string) {
   });
 }
 
+async function patchJson(path: string, body: any, token?: string) {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return app.request(path, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify(body),
+  });
+}
+
 async function deleteJson(path: string, token?: string) {
   const headers: Record<string, string> = {};
   if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -105,9 +115,22 @@ test('Etapa F4a — API para las pantallas de administración', async (t) => {
     const resPerfiles = await client.query('SELECT id, nombre FROM perfiles');
     let adminPerfilId = 0;
     let operarioPerfilId = 0;
+    let tecnicoPerfilId = 0;
+    let tecnicoPerfilNombre = '';
     for (const r of resPerfiles.rows) {
       if (r.nombre === 'ADMINISTRADOR') adminPerfilId = Number(r.id);
       if (r.nombre === 'OPERARIO') operarioPerfilId = Number(r.id);
+      if (r.nombre === 'TECNICO') {
+        tecnicoPerfilId = Number(r.id);
+        tecnicoPerfilNombre = r.nombre;
+      }
+    }
+    if (!tecnicoPerfilId) {
+      const other = resPerfiles.rows.find((r: any) => r.nombre !== 'OPERARIO' && r.nombre !== 'ADMINISTRADOR');
+      if (other) {
+        tecnicoPerfilId = Number(other.id);
+        tecnicoPerfilNombre = other.nombre;
+      }
     }
 
     const passHash = await bcrypt.hash('pass123', 10);
@@ -784,6 +807,231 @@ test('Etapa F4a — API para las pantallas de administración', async (t) => {
       const res404 = await deleteJson('/api/tipos-equipo/99999999', adminToken);
       assert.strictEqual(res404.status, 404);
       assert.strictEqual((await res404.json()).codigo, 'TIPO_EQUIPO_NO_ENCONTRADO');
+    });
+
+    // =========================================================================
+    // AD-13: Perfiles
+    // =========================================================================
+    await t.test('AD-13: Perfiles', async () => {
+      const resAntes = await getJson('/api/perfiles', adminToken);
+      assert.strictEqual(resAntes.status, 200);
+      const perfilesAntes: any[] = await resAntes.json();
+      const opAntes = perfilesAntes.find((p) => p.id === operarioPerfilId);
+      assert.ok(opAntes, 'El perfil operario debe existir');
+      const usuariosActivosAntes = Number(opAntes.usuarios_activos);
+
+      // Crear 2 usuarios activos y 1 inactivo con ese perfil
+      const u1 = await client.query(
+        `INSERT INTO usuarios (legajo, nombre, apellido, password_hash, perfil_id, activo, debe_cambiar_password, sesion_version)
+         VALUES ($1, 'U1', 'AD13', $2, $3, TRUE, FALSE, 1) RETURNING id`,
+        [`U1_AD13_${suf}`, passHash, operarioPerfilId]
+      );
+      const u2 = await client.query(
+        `INSERT INTO usuarios (legajo, nombre, apellido, password_hash, perfil_id, activo, debe_cambiar_password, sesion_version)
+         VALUES ($1, 'U2', 'AD13', $2, $3, TRUE, FALSE, 1) RETURNING id`,
+        [`U2_AD13_${suf}`, passHash, operarioPerfilId]
+      );
+      const u3 = await client.query(
+        `INSERT INTO usuarios (legajo, nombre, apellido, password_hash, perfil_id, activo, debe_cambiar_password, sesion_version)
+         VALUES ($1, 'U3', 'AD13', $2, $3, FALSE, FALSE, 1) RETURNING id`,
+        [`U3_AD13_${suf}`, passHash, operarioPerfilId]
+      );
+      createdUserIds.push(Number(u1.rows[0].id), Number(u2.rows[0].id), Number(u3.rows[0].id));
+
+      const resDespues = await getJson('/api/perfiles', adminToken);
+      assert.strictEqual(resDespues.status, 200);
+      const perfilesDespues: any[] = await resDespues.json();
+      const opDespues = perfilesDespues.find((p) => p.id === operarioPerfilId);
+      assert.strictEqual(Number(opDespues.usuarios_activos), usuariosActivosAntes + 2, 'usuarios_activos debe subir en 2');
+    });
+
+    // =========================================================================
+    // AD-14: Auditoría de un usuario
+    // =========================================================================
+    await t.test('AD-14: Auditoría de un usuario', async () => {
+      // Crear sectores de prueba
+      const insSec1 = await client.query('INSERT INTO sectores (nombre, activo) VALUES ($1, TRUE) RETURNING id', [`Sec_AD14_1_${suf}`]);
+      const s1Id = Number(insSec1.rows[0].id);
+      const insSec2 = await client.query('INSERT INTO sectores (nombre, activo) VALUES ($1, TRUE) RETURNING id', [`Sec_AD14_2_${suf}`]);
+      const s2Id = Number(insSec2.rows[0].id);
+      createdSectorIds.push(s1Id, s2Id);
+
+      // Crear usuario por la API
+      const resCreate = await postJson('/api/usuarios', {
+        legajo: `L_AD14_${suf}`,
+        nombre: 'OriginalNombre',
+        apellido: 'OriginalApellido',
+        perfil_id: operarioPerfilId,
+        sectores: [s1Id],
+        password_temporal: 'temporal123',
+      }, adminToken);
+      assert.strictEqual(resCreate.status, 201);
+      const createJson = await resCreate.json();
+      const targetUserId = Number(createJson.id);
+      const tempPassword = 'temporal123';
+      createdUserIds.push(targetUserId);
+
+      // Pedidos separados:
+      // 1. Cambio de nombre
+      const resPatch1 = await patchJson(`/api/usuarios/${targetUserId}`, { nombre: 'NuevoNombre' }, adminToken);
+      assert.strictEqual(resPatch1.status, 200);
+
+      // 2. Cambio de perfil
+      const resPatch2 = await patchJson(`/api/usuarios/${targetUserId}`, { perfil_id: tecnicoPerfilId }, adminToken);
+      assert.strictEqual(resPatch2.status, 200);
+
+      // 3. Cambio de sectores
+      const resPatch3 = await patchJson(`/api/usuarios/${targetUserId}`, { sectores: [s2Id] }, adminToken);
+      assert.strictEqual(resPatch3.status, 200);
+
+      // 4. Excepción
+      const resEx = await putJson(`/api/usuarios/${targetUserId}/excepciones/INTERVENCIONES_VER`, {
+        efecto: 'CONCEDER',
+        alcance: 'TODAS',
+        motivo: 'Prueba AD-14',
+      }, adminToken);
+      assert.strictEqual(resEx.status, 200);
+
+      // 5. Desactivación
+      const resDesact = await postJson(`/api/usuarios/${targetUserId}/desactivar`, {
+        motivo: 'Motivo desactivacion AD14',
+      }, adminToken);
+      assert.strictEqual(resDesact.status, 200);
+
+      // (a) 6 registros, del más nuevo al más viejo, con realizado_por y con detalle como objeto
+      const resAud = await getJson(`/api/usuarios/${targetUserId}/auditoria`, adminToken);
+      assert.strictEqual(resAud.status, 200);
+      const dataAud = await resAud.json();
+      assert.strictEqual(dataAud.total, 6);
+      assert.strictEqual(dataAud.registros.length, 6);
+
+      // Orden descendente por id
+      for (let i = 0; i < dataAud.registros.length - 1; i++) {
+        assert.ok(dataAud.registros[i].id > dataAud.registros[i + 1].id, 'Los registros deben estar ordenados id descendente');
+      }
+
+      const accionesEsperadas = [
+        'USUARIO_DESACTIVADO',
+        'EXCEPCION_CREADA',
+        'SECTORES_CAMBIADOS',
+        'PERFIL_CAMBIADO',
+        'USUARIO_MODIFICADO',
+        'USUARIO_CREADO',
+      ];
+      assert.deepStrictEqual(dataAud.registros.map((r: any) => r.accion), accionesEsperadas);
+
+      for (const reg of dataAud.registros) {
+        assert.ok(reg.realizado_por && typeof reg.realizado_por.id === 'number', 'realizado_por debe incluir el id');
+        assert.ok(reg.realizado_por.nombre, 'realizado_por debe incluir el nombre');
+        if (reg.accion !== 'USUARIO_DESACTIVADO') {
+          assert.strictEqual(typeof reg.detalle, 'object', `detalle de ${reg.accion} debe ser objeto`);
+          assert.notStrictEqual(reg.detalle, null);
+        }
+      }
+
+      // (b) referencias trae los nombres de los perfiles y sectores que aparecen
+      assert.ok(dataAud.referencias, 'Debe incluir referencias');
+      assert.ok(dataAud.referencias.perfiles, 'Debe incluir referencias.perfiles');
+      assert.ok(dataAud.referencias.sectores, 'Debe incluir referencias.sectores');
+      assert.strictEqual(dataAud.referencias.perfiles[String(operarioPerfilId)], 'OPERARIO');
+      assert.strictEqual(dataAud.referencias.perfiles[String(tecnicoPerfilId)], tecnicoPerfilNombre);
+      assert.ok(dataAud.referencias.sectores[String(s1Id)].includes(`Sec_AD14_1_${suf}`));
+      assert.ok(dataAud.referencias.sectores[String(s2Id)].includes(`Sec_AD14_2_${suf}`));
+
+      // (c) limit=2: 2 registros y total 6. offset=4: los 2 más viejos
+      const resLim2 = await getJson(`/api/usuarios/${targetUserId}/auditoria?limit=2`, adminToken);
+      assert.strictEqual(resLim2.status, 200);
+      const dataLim2 = await resLim2.json();
+      assert.strictEqual(dataLim2.total, 6);
+      assert.strictEqual(dataLim2.registros.length, 2);
+      assert.strictEqual(dataLim2.registros[0].id, dataAud.registros[0].id);
+      assert.strictEqual(dataLim2.registros[1].id, dataAud.registros[1].id);
+
+      const resOff4 = await getJson(`/api/usuarios/${targetUserId}/auditoria?limit=2&offset=4`, adminToken);
+      assert.strictEqual(resOff4.status, 200);
+      const dataOff4 = await resOff4.json();
+      assert.strictEqual(dataOff4.total, 6);
+      assert.strictEqual(dataOff4.registros.length, 2);
+      assert.strictEqual(dataOff4.registros[0].id, dataAud.registros[4].id);
+      assert.strictEqual(dataOff4.registros[1].id, dataAud.registros[5].id);
+
+      // (d) limit 0, 201 o abc, y offset -1: 400
+      for (const lim of ['0', '201', 'abc']) {
+        const resBadLim = await getJson(`/api/usuarios/${targetUserId}/auditoria?limit=${lim}`, adminToken);
+        assert.strictEqual(resBadLim.status, 400, `limit=${lim} debe responder 400`);
+      }
+      const resBadOff = await getJson(`/api/usuarios/${targetUserId}/auditoria?offset=-1`, adminToken);
+      assert.strictEqual(resBadOff.status, 400);
+
+      // (e) Usuario inexistente: 404
+      const res404 = await getJson('/api/usuarios/99999999/auditoria', adminToken);
+      assert.strictEqual(res404.status, 404);
+      assert.strictEqual((await res404.json()).codigo, 'USUARIO_NO_ENCONTRADO');
+
+      // (f) Sin USUARIOS_GESTIONAR: 403
+      const res403 = await getJson(`/api/usuarios/${targetUserId}/auditoria`, opToken);
+      assert.strictEqual(res403.status, 403);
+      assert.strictEqual((await res403.json()).codigo, 'PERMISO_INSUFICIENTE');
+
+      // (g) La contraseña temporal no aparece en ninguna parte de la respuesta
+      if (tempPassword) {
+        const strAud = JSON.stringify(dataAud);
+        assert.ok(!strAud.includes(tempPassword), 'La contraseña temporal no debe figurar en la respuesta');
+      }
+    });
+
+    // =========================================================================
+    // AD-15: Sector inactivo ya asignado
+    // =========================================================================
+    await t.test('AD-15: Sector inactivo ya asignado', async () => {
+      // 3 sectores: S, T, U
+      const insS = await client.query('INSERT INTO sectores (nombre, activo) VALUES ($1, TRUE) RETURNING id', [`Sec_AD15_S_${suf}`]);
+      const sId = Number(insS.rows[0].id);
+      const insT = await client.query('INSERT INTO sectores (nombre, activo) VALUES ($1, TRUE) RETURNING id', [`Sec_AD15_T_${suf}`]);
+      const tId = Number(insT.rows[0].id);
+      const insU = await client.query('INSERT INTO sectores (nombre, activo) VALUES ($1, TRUE) RETURNING id', [`Sec_AD15_U_${suf}`]);
+      const uId = Number(insU.rows[0].id);
+      createdSectorIds.push(sId, tId, uId);
+
+      // Usuario inactivo con el sector S
+      const insUser = await client.query(
+        `INSERT INTO usuarios (legajo, nombre, apellido, password_hash, perfil_id, activo, debe_cambiar_password, sesion_version)
+         VALUES ($1, 'User', 'AD15', $2, $3, FALSE, FALSE, 1) RETURNING id`,
+        [`L_AD15_${suf}`, passHash, operarioPerfilId]
+      );
+      const targetUserId = Number(insUser.rows[0].id);
+      createdUserIds.push(targetUserId);
+
+      await client.query('INSERT INTO usuario_sector (usuario_id, sector_id) VALUES ($1, $2)', [targetUserId, sId]);
+
+      // Desactivar S
+      const resDelS = await deleteJson(`/api/sectores/${sId}`, adminToken);
+      assert.strictEqual(resDelS.status, 200);
+
+      // Reactivar al usuario
+      const resReact = await postJson(`/api/usuarios/${targetUserId}/reactivar`, {
+        motivo: 'Motivo reactivacion AD15',
+      }, adminToken);
+      assert.strictEqual(resReact.status, 200);
+
+      // Desactivar U
+      const resDelU = await deleteJson(`/api/sectores/${uId}`, adminToken);
+      assert.strictEqual(resDelU.status, 200);
+
+      // (a) PATCH con sectores [S, T]: 200
+      const resPatchA = await patchJson(`/api/usuarios/${targetUserId}`, { sectores: [sId, tId] }, adminToken);
+      assert.strictEqual(resPatchA.status, 200);
+      const userA = await resPatchA.json();
+      const secIdsA = Array.isArray(userA.sectores) && typeof userA.sectores[0] === 'object'
+        ? userA.sectores.map((s: any) => s.id)
+        : userA.sectores;
+      assert.ok(secIdsA.includes(sId));
+      assert.ok(secIdsA.includes(tId));
+
+      // (b) PATCH con sectores [S, T, U], con U inactivo: 422
+      const resPatchB = await patchJson(`/api/usuarios/${targetUserId}`, { sectores: [sId, tId, uId] }, adminToken);
+      assert.strictEqual(resPatchB.status, 422);
+      assert.strictEqual((await resPatchB.json()).codigo, 'DATOS_INVALIDOS');
     });
 
     // =========================================================================

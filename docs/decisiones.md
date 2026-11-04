@@ -157,3 +157,22 @@ Reglas (sección 8.5 del análisis):
 El cambio vale desde el siguiente pedido del usuario, sin volver a entrar.
 
 **Motivo:** relevamiento, "una persona cumple varios roles". Las excepciones cubren esos casos sin crear un perfil por persona.
+
+---
+
+## D-015 — Bajas en sectores, plantas y catálogos
+
+**Estado:** Aceptada
+
+Un sector, una planta, una criticidad o un tipo de equipo no se desactiva mientras algo activo lo use:
+
+- un sector, mientras tenga máquinas activas o usuarios activos;
+- una planta, mientras tenga sectores activos;
+- una criticidad o un tipo de equipo, mientras lo use una máquina activa.
+
+Cada catálogo tiene siempre un valor por omisión activo. Se cambia marcando otro, y el valor por omisión no se puede desactivar.
+
+Lo que ya estaba asignado se conserva: una máquina o un usuario inactivos pueden quedar con un valor inactivo. Una máquina no se reactiva con su sector, criticidad o tipo inactivos. Un usuario sí, porque un sector inactivo no tiene máquinas activas y no le da acceso a nada.
+
+**Motivo:** que ningún dato activo dependa de uno inactivo, y que el alta de una máquina siempre encuentre sus valores por omisión.
+

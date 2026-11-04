@@ -148,6 +148,11 @@ perfilesApp.get('/', async (c) => {
         p.descripcion,
         p.activo,
         (
+          SELECT COUNT(*)::integer
+          FROM usuarios u
+          WHERE u.perfil_id = p.id AND u.activo = TRUE
+        ) AS usuarios_activos,
+        (
           SELECT COALESCE(json_agg(
             json_build_object('codigo', pe.codigo, 'nombre', pe.nombre, 'alcance', pp.alcance)
             ORDER BY pe.codigo ASC
@@ -167,6 +172,7 @@ perfilesApp.get('/', async (c) => {
         nombre: r.nombre,
         descripcion: r.descripcion,
         activo: Boolean(r.activo),
+        usuarios_activos: Number(r.usuarios_activos),
         permisos: r.permisos,
       }))
     );
@@ -405,6 +411,160 @@ usuariosApp.get('/:id', async (c) => {
     return c.json(detalle);
   } catch (error) {
     console.error('Error al obtener usuario por id:', error);
+    return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
+  }
+});
+
+/* =====================================================================
+ * GET /api/usuarios/:id/auditoria (Historial de usuario - sección 5.3)
+ * ===================================================================== */
+usuariosApp.get('/:id/auditoria', async (c) => {
+  const idStr = c.req.param('id');
+  const userId = parseId(idStr);
+
+  if (!userId) {
+    return c.json({ error: 'Identificador de usuario inválido', codigo: 'DATOS_INVALIDOS' }, 400);
+  }
+
+  const limitParam = c.req.query('limit');
+  let limit = 50;
+  if (limitParam !== undefined) {
+    if (!/^\d+$/.test(limitParam)) {
+      return c.json({ error: 'Parámetro limit inválido', codigo: 'DATOS_INVALIDOS' }, 400);
+    }
+    limit = Number(limitParam);
+    if (limit < 1 || limit > 200) {
+      return c.json({ error: 'limit debe estar entre 1 y 200', codigo: 'DATOS_INVALIDOS' }, 400);
+    }
+  }
+
+  const offsetParam = c.req.query('offset');
+  let offset = 0;
+  if (offsetParam !== undefined) {
+    if (!/^\d+$/.test(offsetParam)) {
+      return c.json({ error: 'Parámetro offset inválido', codigo: 'DATOS_INVALIDOS' }, 400);
+    }
+    offset = Number(offsetParam);
+    if (offset < 0) {
+      return c.json({ error: 'offset no puede ser negativo', codigo: 'DATOS_INVALIDOS' }, 400);
+    }
+  }
+
+  try {
+    const resExiste = await pool.query('SELECT id FROM usuarios WHERE id = $1', [userId]);
+    if (resExiste.rows.length === 0) {
+      return c.json({ error: 'Usuario no encontrado', codigo: 'USUARIO_NO_ENCONTRADO' }, 404);
+    }
+
+    const resCount = await pool.query(`
+      SELECT COUNT(*)::integer AS total
+      FROM auditoria_permisos
+      WHERE sobre_usuario_id = $1
+    `, [userId]);
+    const total = Number(resCount.rows[0].total);
+
+    const resRows = await pool.query(`
+      SELECT 
+        a.id,
+        a.accion,
+        a.creado_en,
+        a.realizado_por_usuario_id,
+        u.nombre AS realizado_por_nombre,
+        u.apellido AS realizado_por_apellido,
+        a.detalle
+      FROM auditoria_permisos a
+      LEFT JOIN usuarios u ON u.id = a.realizado_por_usuario_id
+      WHERE a.sobre_usuario_id = $1
+      ORDER BY a.creado_en DESC, a.id DESC
+      LIMIT $2 OFFSET $3
+    `, [userId, limit, offset]);
+
+    const perfilIdsSet = new Set<number>();
+    const sectorIdsSet = new Set<number>();
+
+    const registros = resRows.rows.map((r) => {
+      let detalleParsed: any = null;
+      if (r.detalle !== null && r.detalle !== undefined) {
+        try {
+          detalleParsed = JSON.parse(r.detalle);
+        } catch {
+          detalleParsed = r.detalle;
+        }
+      }
+
+      // Recolectar referencias de perfiles y sectores
+      if (detalleParsed && typeof detalleParsed === 'object') {
+        if (r.accion === 'PERFIL_CAMBIADO') {
+          if (detalleParsed.anterior) perfilIdsSet.add(Number(detalleParsed.anterior));
+          if (detalleParsed.nuevo) perfilIdsSet.add(Number(detalleParsed.nuevo));
+        } else if (r.accion === 'SECTORES_CAMBIADOS') {
+          if (Array.isArray(detalleParsed.anterior)) {
+            detalleParsed.anterior.forEach((s: any) => sectorIdsSet.add(Number(s)));
+          }
+          if (Array.isArray(detalleParsed.nuevo)) {
+            detalleParsed.nuevo.forEach((s: any) => sectorIdsSet.add(Number(s)));
+          }
+        } else if (r.accion === 'USUARIO_CREADO') {
+          if (detalleParsed.perfil_id) perfilIdsSet.add(Number(detalleParsed.perfil_id));
+          if (Array.isArray(detalleParsed.sectores)) {
+            detalleParsed.sectores.forEach((s: any) => sectorIdsSet.add(Number(s)));
+          }
+        }
+      }
+
+      let realizado_por: { id: number; nombre: string; apellido: string | null } | null = null;
+      if (r.realizado_por_usuario_id && r.realizado_por_nombre) {
+        realizado_por = {
+          id: Number(r.realizado_por_usuario_id),
+          nombre: r.realizado_por_nombre,
+          apellido: r.realizado_por_apellido,
+        };
+      }
+
+      return {
+        id: Number(r.id),
+        accion: r.accion,
+        creado_en: r.creado_en instanceof Date ? r.creado_en.toISOString() : r.creado_en,
+        realizado_por,
+        detalle: detalleParsed,
+      };
+    });
+
+    const referencias: {
+      perfiles: Record<string, string>;
+      sectores: Record<string, string>;
+    } = {
+      perfiles: {},
+      sectores: {},
+    };
+
+    const perfilIds = Array.from(perfilIdsSet).filter((n) => Number.isInteger(n) && n > 0);
+    if (perfilIds.length > 0) {
+      const resPerfiles = await pool.query(`
+        SELECT id, nombre FROM perfiles WHERE id = ANY($1::bigint[])
+      `, [perfilIds]);
+      for (const p of resPerfiles.rows) {
+        referencias.perfiles[String(p.id)] = p.nombre;
+      }
+    }
+
+    const sectorIds = Array.from(sectorIdsSet).filter((n) => Number.isInteger(n) && n > 0);
+    if (sectorIds.length > 0) {
+      const resSectores = await pool.query(`
+        SELECT id, nombre FROM sectores WHERE id = ANY($1::bigint[])
+      `, [sectorIds]);
+      for (const s of resSectores.rows) {
+        referencias.sectores[String(s.id)] = s.nombre;
+      }
+    }
+
+    return c.json({
+      total,
+      registros,
+      referencias,
+    });
+  } catch (error) {
+    console.error('Error al consultar auditoría de usuario:', error);
     return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
   }
 });
@@ -714,12 +874,25 @@ usuariosApp.patch('/:id', async (c) => {
       }
 
       if (parsedSecs.length > 0) {
-        const resValidSecs = await client.query(`
-          SELECT id FROM sectores WHERE id = ANY($1::bigint[]) AND activo = TRUE
+        // Todos los sectores deben existir
+        const resExistentes = await client.query(`
+          SELECT id FROM sectores WHERE id = ANY($1::bigint[])
         `, [parsedSecs]);
-        if (resValidSecs.rows.length !== parsedSecs.length) {
+        if (resExistentes.rows.length !== parsedSecs.length) {
           await client.query('ROLLBACK');
-          return c.json({ error: 'Uno o más sectores no existen o están inactivos', codigo: 'DATOS_INVALIDOS' }, 422);
+          return c.json({ error: 'Uno o más sectores no existen', codigo: 'DATOS_INVALIDOS' }, 422);
+        }
+
+        // Un sector nuevo tiene que estar activo; los que ya tenía asignados se conservan aunque estén inactivos (sección 5.2)
+        const sectoresNuevos = parsedSecs.filter((sId) => !currentSectorIds.includes(sId));
+        if (sectoresNuevos.length > 0) {
+          const resActivos = await client.query(`
+            SELECT id FROM sectores WHERE id = ANY($1::bigint[]) AND activo = TRUE
+          `, [sectoresNuevos]);
+          if (resActivos.rows.length !== sectoresNuevos.length) {
+            await client.query('ROLLBACK');
+            return c.json({ error: 'Uno o más sectores nuevos están inactivos', codigo: 'DATOS_INVALIDOS' }, 422);
+          }
         }
       }
 
