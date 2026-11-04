@@ -28,10 +28,16 @@ Valores iniciales:
 - CONSULTA
 
 ### permisos
-Catálogo de acciones autorizables.
+Catálogo de acciones autorizables. Incluye `usa_alcance` (`BOOLEAN NOT NULL DEFAULT FALSE`), que indica si el permiso admite alcance sectorial (`PROPIAS`, `SECTORES`, `TODAS`).
 
 ### perfil_permiso
 Relación muchos-a-muchos entre perfiles y permisos.
+
+### usuario_permiso
+Excepciones individuales de permisos por usuario (`CONCEDER` o `DENEGAR`, `alcance`, `motivo`, `otorgado_por_usuario_id`). Prevalece sobre el perfil; `DENEGAR` tiene estricta prevalencia.
+
+### auditoria_permisos
+Registro inmutable de cambios sobre perfiles, roles y permisos de usuarios. Acciones admitidas: `USUARIO_CREADO`, `USUARIO_MODIFICADO`, `USUARIO_DESACTIVADO`, `USUARIO_REACTIVADO`, `PASSWORD_RESTABLECIDA`, `PASSWORD_CAMBIADA`, `PERFIL_CAMBIADO`, `SECTORES_CAMBIADOS`, `EXCEPCION_CREADA`, `EXCEPCION_MODIFICADA` y `EXCEPCION_ELIMINADA`.
 
 ### usuarios
 Usuarios del sistema. El `legajo` es único.

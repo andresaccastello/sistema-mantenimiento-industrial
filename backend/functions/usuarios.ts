@@ -14,10 +14,12 @@ const SCOPE_HIERARCHY: Record<AlcancePermiso, number> = {
 
 export const usuariosApp = new Hono();
 export const perfilesApp = new Hono();
+export const permisosApp = new Hono();
 
-// Todos los endpoints de usuarios y perfiles requieren USUARIOS_GESTIONAR
+// Todos los endpoints de usuarios, perfiles y permisos requieren USUARIOS_GESTIONAR
 usuariosApp.use('*', jwtVerify, dbVerify, requirePermission('USUARIOS_GESTIONAR'));
 perfilesApp.use('*', jwtVerify, dbVerify, requirePermission('USUARIOS_GESTIONAR'));
+permisosApp.use('*', jwtVerify, dbVerify, requirePermission('USUARIOS_GESTIONAR'));
 
 /**
  * Valida que el actor posea todos los permisos del perfil a asignar
@@ -175,6 +177,32 @@ perfilesApp.get('/', async (c) => {
 });
 
 /* =====================================================================
+ * GET /api/permisos
+ * ===================================================================== */
+permisosApp.get('/', async (c) => {
+  try {
+    const res = await pool.query(`
+      SELECT id, codigo, nombre, descripcion, usa_alcance
+      FROM permisos
+      ORDER BY codigo ASC
+    `);
+
+    return c.json(
+      res.rows.map((r) => ({
+        id: Number(r.id),
+        codigo: r.codigo,
+        nombre: r.nombre,
+        descripcion: r.descripcion,
+        usa_alcance: Boolean(r.usa_alcance),
+      }))
+    );
+  } catch (error) {
+    console.error('Error al listar catálogo de permisos:', error);
+    return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
+  }
+});
+
+/* =====================================================================
  * GET /api/usuarios
  * ===================================================================== */
 usuariosApp.get('/', async (c) => {
@@ -254,6 +282,110 @@ usuariosApp.get('/', async (c) => {
 });
 
 /* =====================================================================
+ * Función compartida: obtenerDetalleUsuario
+ * (Usada por GET /:id, PUT /:id/excepciones/:codigo y DELETE /:id/excepciones/:codigo)
+ * ===================================================================== */
+export async function obtenerDetalleUsuario(
+  db: pg.Pool | pg.PoolClient,
+  userId: number
+) {
+  const resUser = await db.query(`
+    SELECT 
+      u.id, 
+      u.legajo, 
+      u.nombre, 
+      u.apellido, 
+      u.activo,
+      u.ultimo_acceso_en,
+      u.debe_cambiar_password,
+      u.creado_en,
+      u.actualizado_en,
+      json_build_object('id', p.id, 'nombre', p.nombre) AS perfil,
+      (
+        SELECT COALESCE(json_agg(json_build_object('id', s.id, 'nombre', s.nombre) ORDER BY s.nombre ASC), '[]'::json)
+        FROM usuario_sector us
+        JOIN sectores s ON us.sector_id = s.id
+        WHERE us.usuario_id = u.id
+      ) AS sectores
+    FROM usuarios u
+    JOIN perfiles p ON u.perfil_id = p.id
+    WHERE u.id = $1
+  `, [userId]);
+
+  if (resUser.rows.length === 0) {
+    return null;
+  }
+
+  const row = resUser.rows[0];
+
+  // Permisos efectivos
+  const effectiveInfo = await resolverPermisosEfectivos(db, userId);
+
+  // Excepciones individuales registradas en usuario_permiso
+  const resEx = await db.query(`
+    SELECT 
+      up.id, 
+      pe.codigo, 
+      pe.nombre, 
+      pe.usa_alcance,
+      up.efecto, 
+      up.alcance, 
+      up.motivo, 
+      up.creado_en,
+      u_otorg.id AS otorgado_por_id,
+      u_otorg.nombre AS otorgado_por_nombre,
+      u_otorg.apellido AS otorgado_por_apellido
+    FROM usuario_permiso up
+    JOIN permisos pe ON up.permiso_id = pe.id
+    LEFT JOIN usuarios u_otorg ON up.otorgado_por_usuario_id = u_otorg.id
+    WHERE up.usuario_id = $1
+    ORDER BY pe.codigo ASC
+  `, [userId]);
+
+  // Cantidad de intervenciones abiertas de las que es responsable
+  const resAbiertas = await db.query(`
+    SELECT COUNT(*)::integer AS abiertas
+    FROM intervenciones
+    WHERE responsable_usuario_id = $1
+      AND estado NOT IN ('FINALIZADA', 'CANCELADA')
+      AND eliminado_en IS NULL
+  `, [userId]);
+
+  return {
+    id: Number(row.id),
+    legajo: row.legajo,
+    nombre: row.nombre,
+    apellido: row.apellido,
+    perfil: row.perfil,
+    sectores: row.sectores,
+    activo: Boolean(row.activo),
+    ultimo_acceso_en: row.ultimo_acceso_en,
+    debe_cambiar_password: Boolean(row.debe_cambiar_password),
+    creado_en: row.creado_en,
+    actualizado_en: row.actualizado_en,
+    permisos: effectiveInfo.permisos,
+    excepciones: resEx.rows.map((r) => ({
+      id: Number(r.id),
+      codigo: r.codigo,
+      nombre: r.nombre,
+      efecto: r.efecto,
+      alcance: r.alcance,
+      motivo: r.motivo,
+      creado_en: r.creado_en,
+      usa_alcance: Boolean(r.usa_alcance),
+      otorgado_por: r.otorgado_por_id
+        ? {
+            id: Number(r.otorgado_por_id),
+            nombre: r.otorgado_por_nombre,
+            apellido: r.otorgado_por_apellido,
+          }
+        : null,
+    })),
+    intervenciones_abiertas_como_responsable: Number(resAbiertas.rows[0].abiertas),
+  };
+}
+
+/* =====================================================================
  * GET /api/usuarios/:id
  * ===================================================================== */
 usuariosApp.get('/:id', async (c) => {
@@ -265,80 +397,12 @@ usuariosApp.get('/:id', async (c) => {
   }
 
   try {
-    const resUser = await pool.query(`
-      SELECT 
-        u.id, 
-        u.legajo, 
-        u.nombre, 
-        u.apellido, 
-        u.activo,
-        u.ultimo_acceso_en,
-        u.debe_cambiar_password,
-        u.creado_en,
-        u.actualizado_en,
-        json_build_object('id', p.id, 'nombre', p.nombre) AS perfil,
-        (
-          SELECT COALESCE(json_agg(json_build_object('id', s.id, 'nombre', s.nombre) ORDER BY s.nombre ASC), '[]'::json)
-          FROM usuario_sector us
-          JOIN sectores s ON us.sector_id = s.id
-          WHERE us.usuario_id = u.id
-        ) AS sectores
-      FROM usuarios u
-      JOIN perfiles p ON u.perfil_id = p.id
-      WHERE u.id = $1
-    `, [userId]);
-
-    if (resUser.rows.length === 0) {
+    const detalle = await obtenerDetalleUsuario(pool, userId);
+    if (!detalle) {
       return c.json({ error: 'Usuario no encontrado', codigo: 'USUARIO_NO_ENCONTRADO' }, 404);
     }
 
-    const row = resUser.rows[0];
-
-    // Permisos efectivos
-    const effectiveInfo = await resolverPermisosEfectivos(pool, userId);
-
-    // Excepciones individuales registradas en usuario_permiso
-    const resEx = await pool.query(`
-      SELECT up.id, pe.codigo, pe.nombre, up.efecto, up.alcance, up.motivo, up.creado_en
-      FROM usuario_permiso up
-      JOIN permisos pe ON up.permiso_id = pe.id
-      WHERE up.usuario_id = $1
-      ORDER BY pe.codigo ASC
-    `, [userId]);
-
-    // Cantidad de intervenciones abiertas de las que es responsable
-    const resAbiertas = await pool.query(`
-      SELECT COUNT(*)::integer AS abiertas
-      FROM intervenciones
-      WHERE responsable_usuario_id = $1
-        AND estado NOT IN ('FINALIZADA', 'CANCELADA')
-        AND eliminado_en IS NULL
-    `, [userId]);
-
-    return c.json({
-      id: Number(row.id),
-      legajo: row.legajo,
-      nombre: row.nombre,
-      apellido: row.apellido,
-      perfil: row.perfil,
-      sectores: row.sectores,
-      activo: Boolean(row.activo),
-      ultimo_acceso_en: row.ultimo_acceso_en,
-      debe_cambiar_password: Boolean(row.debe_cambiar_password),
-      creado_en: row.creado_en,
-      actualizado_en: row.actualizado_en,
-      permisos: effectiveInfo.permisos,
-      excepciones: resEx.rows.map((r) => ({
-        id: Number(r.id),
-        codigo: r.codigo,
-        nombre: r.nombre,
-        efecto: r.efecto,
-        alcance: r.alcance,
-        motivo: r.motivo,
-        creado_en: r.creado_en,
-      })),
-      intervenciones_abiertas_como_responsable: Number(resAbiertas.rows[0].abiertas),
-    });
+    return c.json(detalle);
   } catch (error) {
     console.error('Error al obtener usuario por id:', error);
     return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
@@ -1021,6 +1085,280 @@ usuariosApp.post('/:id/restablecer-password', async (c) => {
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('Error al restablecer contraseña:', error);
+    return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
+  } finally {
+    client.release();
+  }
+});
+
+/* =====================================================================
+ * PUT /api/usuarios/:id/excepciones/:codigo
+ * ===================================================================== */
+usuariosApp.put('/:id/excepciones/:codigo', async (c) => {
+  // 1. Quien hace el cambio necesita PERMISOS_GESTIONAR, además de USUARIOS_GESTIONAR
+  const actorPermissions = (c.get as any)('userPermissionsMap') as Record<string, AlcancePermiso> | undefined;
+  if (!actorPermissions || !('PERMISOS_GESTIONAR' in actorPermissions)) {
+    return c.json({ error: 'Permisos insuficientes o revocados', codigo: 'PERMISO_INSUFICIENTE' }, 403);
+  }
+
+  // 2. :id inválido
+  const idStr = c.req.param('id');
+  const targetUserId = parseId(idStr);
+  if (!targetUserId) {
+    return c.json({ error: 'Identificador de usuario inválido', codigo: 'DATOS_INVALIDOS' }, 400);
+  }
+
+  // 3. El usuario no existe
+  const resTargetUser = await pool.query('SELECT id FROM usuarios WHERE id = $1', [targetUserId]);
+  if (resTargetUser.rows.length === 0) {
+    return c.json({ error: 'Usuario no encontrado', codigo: 'USUARIO_NO_ENCONTRADO' }, 404);
+  }
+
+  // 4. Es el propio usuario: nadie cambia sus propias excepciones (8.5)
+  const actorUserId = (c.get as any)('userId') as number;
+  if (actorUserId === targetUserId) {
+    return c.json({ error: 'No está permitido modificar las propias excepciones de permisos', codigo: 'AUTOGESTION_NO_PERMITIDA' }, 403);
+  }
+
+  // 5. El permiso no existe
+  const codigoPermiso = c.req.param('codigo');
+  const resPermiso = await pool.query('SELECT id, codigo, usa_alcance FROM permisos WHERE codigo = $1', [codigoPermiso]);
+  if (resPermiso.rows.length === 0) {
+    return c.json({ error: 'Permiso no encontrado', codigo: 'PERMISO_NO_ENCONTRADO' }, 404);
+  }
+  const permisoRow = resPermiso.rows[0];
+  const permisoId = Number(permisoRow.id);
+  const usaAlcance = Boolean(permisoRow.usa_alcance);
+
+  // 6. motivo falta o tiene menos de 5 caracteres, sin contar los espacios de los extremos
+  let body: any = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    // cuerpo no parseable o inexistente
+  }
+  const motivo = typeof body?.motivo === 'string' ? body.motivo.trim() : '';
+  if (motivo.length < 5) {
+    return c.json({ error: 'El motivo es requerido y debe tener al menos 5 caracteres', codigo: 'MOTIVO_REQUERIDO' }, 422);
+  }
+
+  // 7. Solo en el PUT: efecto no es CONCEDER ni DENEGAR
+  if (body?.efecto !== 'CONCEDER' && body?.efecto !== 'DENEGAR') {
+    return c.json({ error: 'El efecto debe ser CONCEDER o DENEGAR', codigo: 'DATOS_INVALIDOS' }, 400);
+  }
+
+  // 8. Solo en el PUT, el alcance:
+  // • CONCEDER de un permiso con usa_alcance: alcance es obligatorio y tiene que ser PROPIAS, SECTORES o TODAS;
+  // • CONCEDER de un permiso sin alcance: alcance puede no venir, o venir TODAS; se guarda TODAS;
+  // • DENEGAR: alcance no puede venir.
+  let alcanceParaGuardar: AlcancePermiso;
+  if (body.efecto === 'CONCEDER') {
+    if (usaAlcance) {
+      if (!body.alcance || !['PROPIAS', 'SECTORES', 'TODAS'].includes(body.alcance)) {
+        return c.json({ error: 'El alcance es obligatorio para este permiso y debe ser PROPIAS, SECTORES o TODAS', codigo: 'DATOS_INVALIDOS' }, 400);
+      }
+      alcanceParaGuardar = body.alcance as AlcancePermiso;
+    } else {
+      if (body.alcance !== undefined && body.alcance !== null && body.alcance !== 'TODAS') {
+        return c.json({ error: 'Este permiso no admite alcance sectorial', codigo: 'DATOS_INVALIDOS' }, 400);
+      }
+      alcanceParaGuardar = 'TODAS';
+    }
+  } else {
+    // DENEGAR: alcance no puede venir
+    if (body.alcance !== undefined && body.alcance !== null) {
+      return c.json({ error: 'No se puede especificar un alcance al denegar un permiso', codigo: 'DATOS_INVALIDOS' }, 400);
+    }
+    alcanceParaGuardar = 'TODAS';
+  }
+
+  // 9. Nadie toca un permiso que no tiene (8.5):
+  // • quien hace el cambio tiene que tener ese permiso entre sus permisos efectivos;
+  // • para CONCEDER, con un alcance igual o mayor que el que concede (PROPIAS < SECTORES < TODAS).
+  if (!(codigoPermiso in actorPermissions)) {
+    return c.json({ error: 'No puede gestionar un permiso que no posee entre sus permisos efectivos', codigo: 'PERMISO_NO_OTORGABLE' }, 403);
+  }
+
+  if (body.efecto === 'CONCEDER') {
+    const actorScope = actorPermissions[codigoPermiso];
+    const actorLevel = SCOPE_HIERARCHY[actorScope] || 0;
+    const targetLevel = SCOPE_HIERARCHY[alcanceParaGuardar] || 0;
+    if (actorLevel < targetLevel) {
+      return c.json({ error: 'No puede otorgar un alcance superior al que posee', codigo: 'PERMISO_NO_OTORGABLE' }, 403);
+    }
+  }
+
+  // 10. PUT con el mismo efecto y alcance que la excepción que ya tiene
+  const resEx = await pool.query(`
+    SELECT id, efecto, alcance, motivo
+    FROM usuario_permiso
+    WHERE usuario_id = $1 AND permiso_id = $2
+  `, [targetUserId, permisoId]);
+
+  if (resEx.rows.length > 0) {
+    const existing = resEx.rows[0];
+    if (existing.efecto === body.efecto && existing.alcance === alcanceParaGuardar) {
+      return c.json({ error: 'La excepción ya posee el mismo efecto y alcance', codigo: 'SIN_CAMBIOS' }, 422);
+    }
+  }
+
+  // Último administrador: No hace falta controlarlo aquí porque quien hace el cambio tiene USUARIOS_GESTIONAR y PERMISOS_GESTIONAR,
+  // y no puede cambiarse a sí mismo (regla 4: AUTOGESTION_NO_PERMITIDA), por lo que siempre queda al menos un usuario activo con ambos permisos.
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const yaExistia = resEx.rows.length > 0;
+    const existing = yaExistia ? resEx.rows[0] : null;
+    const accion = yaExistia ? 'EXCEPCION_MODIFICADA' : 'EXCEPCION_CREADA';
+
+    await client.query(`
+      INSERT INTO usuario_permiso (usuario_id, permiso_id, efecto, alcance, motivo, otorgado_por_usuario_id, creado_en)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      ON CONFLICT (usuario_id, permiso_id) DO UPDATE
+      SET efecto = EXCLUDED.efecto,
+          alcance = EXCLUDED.alcance,
+          motivo = EXCLUDED.motivo,
+          otorgado_por_usuario_id = EXCLUDED.otorgado_por_usuario_id,
+          creado_en = NOW()
+    `, [targetUserId, permisoId, body.efecto, alcanceParaGuardar, motivo, actorUserId]);
+
+    const detalle: any = {
+      codigo: codigoPermiso,
+      efecto: body.efecto,
+      alcance: alcanceParaGuardar,
+      motivo,
+    };
+    if (yaExistia && existing) {
+      detalle.anterior = {
+        efecto: existing.efecto,
+        alcance: existing.alcance,
+        motivo: existing.motivo,
+      };
+    }
+
+    await client.query(`
+      INSERT INTO auditoria_permisos (realizado_por_usuario_id, sobre_usuario_id, accion, detalle)
+      VALUES ($1, $2, $3, $4)
+    `, [actorUserId, targetUserId, accion, JSON.stringify(detalle)]);
+
+    const updatedDetail = await obtenerDetalleUsuario(client, targetUserId);
+
+    await client.query('COMMIT');
+    return c.json(updatedDetail);
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Error al guardar excepción de permiso:', err);
+    return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
+  } finally {
+    client.release();
+  }
+});
+
+/* =====================================================================
+ * DELETE /api/usuarios/:id/excepciones/:codigo
+ * ===================================================================== */
+usuariosApp.delete('/:id/excepciones/:codigo', async (c) => {
+  // 1. Quien hace el cambio necesita PERMISOS_GESTIONAR, además de USUARIOS_GESTIONAR
+  const actorPermissions = (c.get as any)('userPermissionsMap') as Record<string, AlcancePermiso> | undefined;
+  if (!actorPermissions || !('PERMISOS_GESTIONAR' in actorPermissions)) {
+    return c.json({ error: 'Permisos insuficientes o revocados', codigo: 'PERMISO_INSUFICIENTE' }, 403);
+  }
+
+  // 2. :id inválido
+  const idStr = c.req.param('id');
+  const targetUserId = parseId(idStr);
+  if (!targetUserId) {
+    return c.json({ error: 'Identificador de usuario inválido', codigo: 'DATOS_INVALIDOS' }, 400);
+  }
+
+  // 3. El usuario no existe
+  const resTargetUser = await pool.query('SELECT id FROM usuarios WHERE id = $1', [targetUserId]);
+  if (resTargetUser.rows.length === 0) {
+    return c.json({ error: 'Usuario no encontrado', codigo: 'USUARIO_NO_ENCONTRADO' }, 404);
+  }
+
+  // 4. Es el propio usuario: nadie cambia sus propias excepciones (8.5)
+  const actorUserId = (c.get as any)('userId') as number;
+  if (actorUserId === targetUserId) {
+    return c.json({ error: 'No está permitido modificar las propias excepciones de permisos', codigo: 'AUTOGESTION_NO_PERMITIDA' }, 403);
+  }
+
+  // 5. El permiso no existe
+  const codigoPermiso = c.req.param('codigo');
+  const resPermiso = await pool.query('SELECT id, codigo, usa_alcance FROM permisos WHERE codigo = $1', [codigoPermiso]);
+  if (resPermiso.rows.length === 0) {
+    return c.json({ error: 'Permiso no encontrado', codigo: 'PERMISO_NO_ENCONTRADO' }, 404);
+  }
+  const permisoRow = resPermiso.rows[0];
+  const permisoId = Number(permisoRow.id);
+
+  // 6. motivo falta o tiene menos de 5 caracteres, sin contar los espacios de los extremos
+  let body: any = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    // cuerpo no parseable o inexistente
+  }
+  const motivo = typeof body?.motivo === 'string' ? body.motivo.trim() : '';
+  if (motivo.length < 5) {
+    return c.json({ error: 'El motivo es requerido y debe tener al menos 5 caracteres', codigo: 'MOTIVO_REQUERIDO' }, 422);
+  }
+
+  // 9. Nadie toca un permiso que no tiene (8.5): quien hace el cambio tiene que tener ese permiso entre sus permisos efectivos
+  if (!(codigoPermiso in actorPermissions)) {
+    return c.json({ error: 'No puede gestionar un permiso que no posee entre sus permisos efectivos', codigo: 'PERMISO_NO_OTORGABLE' }, 403);
+  }
+
+  // 11. DELETE de una excepción que no existe
+  const resEx = await pool.query(`
+    SELECT id, efecto, alcance, motivo
+    FROM usuario_permiso
+    WHERE usuario_id = $1 AND permiso_id = $2
+  `, [targetUserId, permisoId]);
+
+  if (resEx.rows.length === 0) {
+    return c.json({ error: 'Excepción no encontrada para este usuario y permiso', codigo: 'EXCEPCION_NO_ENCONTRADA' }, 404);
+  }
+  const existing = resEx.rows[0];
+
+  // Último administrador: No hace falta controlarlo aquí porque quien hace el cambio tiene USUARIOS_GESTIONAR y PERMISOS_GESTIONAR,
+  // y no puede cambiarse a sí mismo (regla 4: AUTOGESTION_NO_PERMITIDA), por lo que siempre queda al menos un usuario activo con ambos permisos.
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    await client.query(`
+      DELETE FROM usuario_permiso
+      WHERE usuario_id = $1 AND permiso_id = $2
+    `, [targetUserId, permisoId]);
+
+    const detalle = {
+      codigo: codigoPermiso,
+      efecto: existing.efecto,
+      alcance: existing.alcance,
+      motivo,
+      anterior: {
+        efecto: existing.efecto,
+        alcance: existing.alcance,
+        motivo: existing.motivo,
+      },
+    };
+
+    await client.query(`
+      INSERT INTO auditoria_permisos (realizado_por_usuario_id, sobre_usuario_id, accion, detalle)
+      VALUES ($1, $2, 'EXCEPCION_ELIMINADA', $3)
+    `, [actorUserId, targetUserId, JSON.stringify(detalle)]);
+
+    const updatedDetail = await obtenerDetalleUsuario(client, targetUserId);
+
+    await client.query('COMMIT');
+    return c.json(updatedDetail);
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Error al eliminar excepción de permiso:', err);
     return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
   } finally {
     client.release();

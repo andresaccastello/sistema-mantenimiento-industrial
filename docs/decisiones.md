@@ -139,3 +139,21 @@ Datos iniciales:
 Una falla en una máquina cuya criticidad tiene `prioridad_alta` avisa con prioridad alta aunque no la detenga. El texto libre `tipo` pasa a llamarse `modelo` (marca y modelo).
 
 **Motivo:** relevamiento, requisitos 9 y 10. El tablero muestra primero las máquinas más críticas, y una empresa con varias plantas puede filtrar por planta.
+
+---
+
+## D-014 — Excepciones de permisos por usuario
+
+**Estado:** Aceptada
+
+Un usuario con `PERMISOS_GESTIONAR` puede conceder o denegar un permiso a otro usuario, por encima de su perfil, con un motivo obligatorio.
+
+Reglas (sección 8.5 del análisis):
+
+- nadie cambia sus propias excepciones;
+- nadie concede, deniega ni quita un permiso que no tiene, ni concede un alcance mayor que el suyo;
+- cada cambio queda en `auditoria_permisos`, con el valor anterior.
+
+El cambio vale desde el siguiente pedido del usuario, sin volver a entrar.
+
+**Motivo:** relevamiento, "una persona cumple varios roles". Las excepciones cubren esos casos sin crear un perfil por persona.
