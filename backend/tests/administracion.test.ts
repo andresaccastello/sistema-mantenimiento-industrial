@@ -708,6 +708,19 @@ test('Etapa F4a — API para las pantallas de administración', async (t) => {
 
       const resInexistente = await putJson('/api/criticidades/orden', { ids: [99999999, ...reorderedIds.slice(1)] }, adminToken);
       assert.strictEqual(resInexistente.status, 400);
+
+      // (c) [x, String(x), …resto] da 400, y el orden en la base no cambia
+      const x = reorderedIds[0];
+      const resRepiteString = await putJson(
+        '/api/criticidades/orden',
+        { ids: [x, String(x), ...reorderedIds.slice(2)] },
+        adminToken
+      );
+      assert.strictEqual(resRepiteString.status, 400);
+
+      const resDbAfter = await client.query('SELECT id FROM criticidades ORDER BY orden ASC');
+      const orderDbAfter = resDbAfter.rows.map((r) => Number(r.id));
+      assert.deepStrictEqual(orderDbAfter, reorderedIds);
     });
 
     // =========================================================================
@@ -1068,6 +1081,81 @@ test('Etapa F4a — API para las pantallas de administración', async (t) => {
         const init = initTiposEquipo.find((t) => t.id === Number(row.id))!;
         assert.strictEqual(Number(row.orden), init.orden, `Tipo equipo ${init.codigo} orden debe ser ${init.orden}`);
         assert.strictEqual(Boolean(row.por_omision), init.por_omision, `Tipo equipo ${init.codigo} por_omision debe ser ${init.por_omision}`);
+      }
+    });
+
+    // =========================================================================
+    // AD-17: Cuerpos que no son un objeto
+    // =========================================================================
+    await t.test('AD-17: Cuerpos que no son un objeto', async () => {
+      const insSec = await client.query('INSERT INTO sectores (nombre, activo) VALUES ($1, TRUE) RETURNING id', [`Sec_AD17_${suf}`]);
+      const sId = Number(insSec.rows[0].id);
+      createdSectorIds.push(sId);
+
+      const insPla = await client.query('INSERT INTO plantas (nombre, activo) VALUES ($1, TRUE) RETURNING id', [`Pla_AD17_${suf}`]);
+      const pId = Number(insPla.rows[0].id);
+      createdPlantaIds.push(pId);
+
+      const insCrit = await client.query('INSERT INTO criticidades (codigo, nombre, orden, activo) VALUES ($1, $2, 950, TRUE) RETURNING id', [
+        `T_AD17_C_${suf}`,
+        `Crit AD17 ${suf}`,
+      ]);
+      const cId = Number(insCrit.rows[0].id);
+      createdCriticidadIds.push(cId);
+
+      const insTipo = await client.query('INSERT INTO tipos_equipo (codigo, nombre, orden, activo) VALUES ($1, $2, 950, TRUE) RETURNING id', [
+        `T_AD17_T_${suf}`,
+        `Tipo AD17 ${suf}`,
+      ]);
+      const tId = Number(insTipo.rows[0].id);
+      createdTipoEquipoIds.push(tId);
+
+      const insMaq = await client.query(
+        'INSERT INTO maquinas (nombre, sector_id, criticidad_id, tipo_equipo_id, activo, estado) VALUES ($1, $2, $3, $4, TRUE, $5) RETURNING id',
+        [`Maq_AD17_${suf}`, sId, cId, tId, 'OPERATIVA']
+      );
+      const mId = Number(insMaq.rows[0].id);
+      createdMaquinaIds.push(mId);
+
+      const diezRutas: Array<{ method: string; path: string }> = [
+        { method: 'POST', path: '/api/sectores' },
+        { method: 'PUT', path: `/api/sectores/${sId}` },
+        { method: 'POST', path: '/api/plantas' },
+        { method: 'PUT', path: `/api/plantas/${pId}` },
+        { method: 'POST', path: '/api/criticidades' },
+        { method: 'PUT', path: `/api/criticidades/${cId}` },
+        { method: 'POST', path: '/api/tipos-equipo' },
+        { method: 'PUT', path: `/api/tipos-equipo/${tId}` },
+        { method: 'POST', path: '/api/maquinas' },
+        { method: 'PUT', path: `/api/maquinas/${mId}` },
+      ];
+
+      for (const r of diezRutas) {
+        // 1) Cuerpo null
+        const resNull = await app.request(r.path, {
+          method: r.method,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${adminToken}`,
+          },
+          body: 'null',
+        });
+        assert.strictEqual(resNull.status, 400, `null en ${r.method} ${r.path} debe responder 400`);
+        const jsonNull = await resNull.json();
+        assert.strictEqual(jsonNull.codigo, 'DATOS_INVALIDOS', `codigo debe ser DATOS_INVALIDOS para null en ${r.method} ${r.path}`);
+
+        // 2) Cuerpo texto
+        const resTexto = await app.request(r.path, {
+          method: r.method,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${adminToken}`,
+          },
+          body: 'esto es texto plano no objeto',
+        });
+        assert.strictEqual(resTexto.status, 400, `texto en ${r.method} ${r.path} debe responder 400`);
+        const jsonTexto = await resTexto.json();
+        assert.strictEqual(jsonTexto.codigo, 'DATOS_INVALIDOS', `codigo debe ser DATOS_INVALIDOS para texto en ${r.method} ${r.path}`);
       }
     });
 

@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import pg from 'pg';
 import { pool } from './db.ts';
 import { jwtVerify, dbVerify, requirePermission } from './middleware.ts';
-import { parseId, parseString, badRequest } from './validations.ts';
+import { parseId, parseString, badRequest, leerCuerpoObjeto } from './validations.ts';
 import { responderError } from './intervenciones/errores.ts';
 
 interface CatalogoConfig {
@@ -141,12 +141,9 @@ function crearRouterCatalogo(config: CatalogoConfig) {
 
   // POST /
   router.post('/', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
-    let body: any;
-    try {
-      body = await c.req.json();
-    } catch {
-      return badRequest(c, 'Cuerpo de solicitud inválido');
-    }
+    const parsedBody = await leerCuerpoObjeto(c);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.body;
 
     if ('orden' in body || 'por_omision' in body) {
       return badRequest(c, 'No se permite enviar orden ni por_omision en el alta');
@@ -223,12 +220,9 @@ function crearRouterCatalogo(config: CatalogoConfig) {
 
   // PUT /orden (se registra antes que /:id)
   router.put('/orden', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
-    let body: any;
-    try {
-      body = await c.req.json();
-    } catch {
-      return badRequest(c, 'Cuerpo de solicitud inválido');
-    }
+    const parsedBody = await leerCuerpoObjeto(c);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.body;
 
     const ids: any[] = body?.ids;
     if (!Array.isArray(ids)) {
@@ -243,14 +237,25 @@ function crearRouterCatalogo(config: CatalogoConfig) {
       const resAll = await client.query(`SELECT id FROM ${tableName}`);
       const allIds = new Set(resAll.rows.map((r) => Number(r.id)));
 
-      if (ids.length !== allIds.size || new Set(ids).size !== ids.length) {
+      const parsedIds: number[] = [];
+      for (const rawId of ids) {
+        const idNum = typeof rawId === 'number'
+          ? (Number.isInteger(rawId) && rawId > 0 ? rawId : null)
+          : (typeof rawId === 'string' && /^\d+$/.test(rawId.trim()) ? parseId(rawId) : null);
+        if (!idNum) {
+          await client.query('ROLLBACK');
+          return badRequest(c, 'Cada ID debe ser un entero positivo');
+        }
+        parsedIds.push(idNum);
+      }
+
+      if (parsedIds.length !== allIds.size || new Set(parsedIds).size !== parsedIds.length) {
         await client.query('ROLLBACK');
         return badRequest(c, 'La lista de IDs debe contener todas las filas sin repetir');
       }
 
-      for (const rawId of ids) {
-        const idNum = parseId(String(rawId));
-        if (!idNum || !allIds.has(idNum)) {
+      for (const idNum of parsedIds) {
+        if (!allIds.has(idNum)) {
           await client.query('ROLLBACK');
           return badRequest(c, 'La lista contiene IDs inválidos o inexistentes');
         }
@@ -260,8 +265,8 @@ function crearRouterCatalogo(config: CatalogoConfig) {
       await client.query(`UPDATE ${tableName} SET orden = orden + (SELECT COALESCE(MAX(orden), 0) FROM ${tableName})`);
 
       // Paso 2: asignar orden definitivo 1, 2, 3...
-      for (let i = 0; i < ids.length; i++) {
-        await client.query(`UPDATE ${tableName} SET orden = $1 WHERE id = $2`, [i + 1, ids[i]]);
+      for (let i = 0; i < parsedIds.length; i++) {
+        await client.query(`UPDATE ${tableName} SET orden = $1 WHERE id = $2`, [i + 1, parsedIds[i]]);
       }
 
       const queryAll = `
@@ -312,12 +317,9 @@ function crearRouterCatalogo(config: CatalogoConfig) {
     const id = parseId(c.req.param('id'));
     if (!id) return badRequest(c, 'ID inválido');
 
-    let body: any;
-    try {
-      body = await c.req.json();
-    } catch {
-      return badRequest(c, 'Cuerpo de solicitud inválido');
-    }
+    const parsedBody = await leerCuerpoObjeto(c);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.body;
 
     if ('codigo' in body || 'orden' in body) {
       return badRequest(c, 'No se permite modificar el código ni el orden por esta ruta');
@@ -601,7 +603,10 @@ plantasApp.get('/', async (c) => {
 
 plantasApp.post('/', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
   try {
-    const body = await c.req.json();
+    const parsedBody = await leerCuerpoObjeto(c);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.body;
+
     const nombre = parseString(body.nombre);
     if (!nombre || nombre.length > 100) {
       return badRequest(c, 'El nombre de la planta es requerido y debe tener hasta 100 caracteres');
@@ -639,12 +644,15 @@ plantasApp.put('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
     const id = parseId(c.req.param('id'));
     if (!id) return badRequest(c, 'ID inválido');
 
+    const parsedBody = await leerCuerpoObjeto(c);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.body;
+
     const resActual = await pool.query('SELECT id, activo FROM plantas WHERE id = $1', [id]);
     if (resActual.rows.length === 0) {
       return c.json({ error: 'Planta no encontrada', codigo: 'PLANTA_NO_ENCONTRADA' }, 404);
     }
 
-    const body = await c.req.json();
     const sets: string[] = [];
     const params: any[] = [];
 

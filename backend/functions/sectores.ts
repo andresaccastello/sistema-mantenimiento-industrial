@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { pool } from './db.ts';
 import { jwtVerify, dbVerify, requirePermission } from './middleware.ts';
-import { parseId, parseString, badRequest } from './validations.ts';
+import { parseId, parseString, badRequest, leerCuerpoObjeto } from './validations.ts';
 
 const sectoresApp = new Hono();
 
@@ -157,7 +157,10 @@ sectoresApp.get('/:id', async (c) => {
 
 sectoresApp.post('/', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
   try {
-    const body = await c.req.json();
+    const parsedBody = await leerCuerpoObjeto(c);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.body;
+
     const nombre = parseString(body.nombre);
 
     if (!nombre) return badRequest(c, 'El nombre del sector es requerido y no puede estar vacío');
@@ -193,7 +196,9 @@ sectoresApp.put('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
     const id = parseId(c.req.param('id'));
     if (!id) return badRequest(c, 'ID inválido');
 
-    const body = await c.req.json();
+    const parsedBody = await leerCuerpoObjeto(c);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.body;
 
     const resActual = await pool.query('SELECT id, activo, planta_id FROM sectores WHERE id = $1', [id]);
     if (resActual.rows.length === 0) {

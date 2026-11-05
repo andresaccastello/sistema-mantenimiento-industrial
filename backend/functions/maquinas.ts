@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { pool } from './db.ts';
 import { jwtVerify, dbVerify, requirePermission, getUserScope } from './middleware.ts';
-import { parseId, parseString, badRequest } from './validations.ts';
+import { parseId, parseString, badRequest, leerCuerpoObjeto } from './validations.ts';
 import { responderError, ErrorNegocio } from './intervenciones/errores.ts';
 import { validarIntervaloReporte } from './intervalos.ts';
 import { conTransaccion } from './intervenciones/transaccion.ts';
@@ -221,7 +221,9 @@ async function verificarPuedeDesactivarMaquina(maquinaId: number) {
 
 maquinasApp.post('/', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
   try {
-    const body = await c.req.json();
+    const parsedBody = await leerCuerpoObjeto(c);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.body;
 
     if ('tipo' in body) {
       return badRequest(c, 'El campo tipo se reemplazó por modelo (texto) y tipo_equipo_id (catálogo)');
@@ -308,7 +310,9 @@ maquinasApp.put('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
     const id = parseId(c.req.param('id'));
     if (!id) return badRequest(c, 'ID inválido');
 
-    const body = await c.req.json();
+    const parsedBody = await leerCuerpoObjeto(c);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.body;
 
     if ('tipo' in body) {
       return badRequest(c, 'El campo tipo se reemplazó por modelo (texto) y tipo_equipo_id (catálogo)');
