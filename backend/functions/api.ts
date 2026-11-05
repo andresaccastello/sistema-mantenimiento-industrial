@@ -12,6 +12,7 @@ import configuracionApp from './configuracion.ts';
 import tableroApp from './tablero.ts';
 import tiposIntervencionApp from './tipos_intervencion.ts';
 import { criticidadesApp, tiposEquipoApp, plantasApp } from './catalogos.ts';
+import { avisosTriggerApp, configuracionAvisosApp } from './avisos/api.ts';
 
 import { JWT_SECRET } from './config.ts';
 
@@ -34,7 +35,9 @@ app.route('/api/usuarios', usuariosApp);
 app.route('/api/perfiles', perfilesApp);
 app.route('/api/permisos', permisosApp);
 app.route('/api/reportes', reportesApp);
+app.route('/api/configuracion/avisos', configuracionAvisosApp);
 app.route('/api/configuracion', configuracionApp);
+app.route('/api/avisos', avisosTriggerApp);
 app.route('/api/tablero', tableroApp);
 app.route('/api/tipos-intervencion', tiposIntervencionApp);
 app.route('/api/criticidades', criticidadesApp);

@@ -1310,67 +1310,83 @@ test('Etapa 7 — Notificaciones internas, reglas de destinatarios, bandeja y ca
     // N-16: Canales y bandeja de salida
     // =========================================================================
     await t.test('N-16: Activar EMAIL por SQL -> Un envío PENDIENTE por notificación; inactivos -> cero envíos', async () => {
-      // 1. Activar EMAIL
-      await client.query("UPDATE notificacion_canales SET activo = TRUE WHERE canal = 'EMAIL'");
-
-      const res1 = await app.request('/api/intervenciones', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${operarioToken}` },
-        body: JSON.stringify({
-          maquina_id: maquina1Id,
-          descripcion: 'Falla para probar outbox con EMAIL activo',
-          detiene_maquina: false,
-        }),
-      });
-      assert.strictEqual(res1.status, 201);
-      const intId1 = Number((await res1.json()).id);
-      createdIntervencionIds.push(intId1);
-
-      const notifs1 = await client.query('SELECT id FROM notificaciones WHERE intervencion_id = $1', [intId1]);
-      assert.ok(notifs1.rows.length > 0);
-
-      const envios1 = await client.query(
-        `SELECT notificacion_id, canal, estado, intentos
-         FROM notificacion_envios
-         WHERE notificacion_id = ANY($1)`,
-        [notifs1.rows.map((r: any) => Number(r.id))]
+      // Guardar modo actual de ('FALLA_REGISTRADA', 'EMAIL') y poner en SIEMPRE
+      const resReglaPre = await client.query(
+        "SELECT modo FROM notificacion_reglas WHERE tipo_evento = 'FALLA_REGISTRADA' AND canal = 'EMAIL'"
+      );
+      const modoPre = resReglaPre.rows[0]?.modo ?? 'SOLO_ALTA';
+      await client.query(
+        "UPDATE notificacion_reglas SET modo = 'SIEMPRE' WHERE tipo_evento = 'FALLA_REGISTRADA' AND canal = 'EMAIL'"
       );
 
-      assert.strictEqual(
-        envios1.rows.length,
-        notifs1.rows.length,
-        'Debe haber exactamente un envío por cada notificación'
-      );
-      for (const e of envios1.rows) {
-        assert.strictEqual(e.canal, 'EMAIL');
-        assert.strictEqual(e.estado, 'PENDIENTE');
-        assert.strictEqual(e.intentos, 0);
+      try {
+        // 1. Activar EMAIL
+        await client.query("UPDATE notificacion_canales SET activo = TRUE WHERE canal = 'EMAIL'");
+
+        const res1 = await app.request('/api/intervenciones', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${operarioToken}` },
+          body: JSON.stringify({
+            maquina_id: maquina1Id,
+            descripcion: 'Falla para probar outbox con EMAIL activo',
+            detiene_maquina: false,
+          }),
+        });
+        assert.strictEqual(res1.status, 201);
+        const intId1 = Number((await res1.json()).id);
+        createdIntervencionIds.push(intId1);
+
+        const notifs1 = await client.query('SELECT id FROM notificaciones WHERE intervencion_id = $1', [intId1]);
+        assert.ok(notifs1.rows.length > 0);
+
+        const envios1 = await client.query(
+          `SELECT notificacion_id, canal, estado, intentos
+           FROM notificacion_envios
+           WHERE notificacion_id = ANY($1)`,
+          [notifs1.rows.map((r: any) => Number(r.id))]
+        );
+
+        assert.strictEqual(
+          envios1.rows.length,
+          notifs1.rows.length,
+          'Debe haber exactamente un envío por cada notificación'
+        );
+        for (const e of envios1.rows) {
+          assert.strictEqual(e.canal, 'EMAIL');
+          assert.strictEqual(e.estado, 'PENDIENTE');
+          assert.strictEqual(e.intentos, 0);
+        }
+
+        // 2. Desactivar todos los canales
+        await client.query('UPDATE notificacion_canales SET activo = FALSE');
+
+        const res2 = await app.request('/api/intervenciones', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${operarioToken}` },
+          body: JSON.stringify({
+            maquina_id: maquina1Id,
+            descripcion: 'Falla con todos los canales inactivos',
+            detiene_maquina: false,
+          }),
+        });
+        assert.strictEqual(res2.status, 201);
+        const intId2 = Number((await res2.json()).id);
+        createdIntervencionIds.push(intId2);
+
+        const notifs2 = await client.query('SELECT id FROM notificaciones WHERE intervencion_id = $1', [intId2]);
+        assert.ok(notifs2.rows.length > 0);
+
+        const envios2 = await client.query(
+          `SELECT id FROM notificacion_envios WHERE notificacion_id = ANY($1)`,
+          [notifs2.rows.map((r: any) => Number(r.id))]
+        );
+        assert.strictEqual(envios2.rows.length, 0, 'No debe haber envíos con canales inactivos');
+      } finally {
+        await client.query(
+          "UPDATE notificacion_reglas SET modo = $1 WHERE tipo_evento = 'FALLA_REGISTRADA' AND canal = 'EMAIL'",
+          [modoPre]
+        );
       }
-
-      // 2. Desactivar todos los canales
-      await client.query('UPDATE notificacion_canales SET activo = FALSE');
-
-      const res2 = await app.request('/api/intervenciones', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${operarioToken}` },
-        body: JSON.stringify({
-          maquina_id: maquina1Id,
-          descripcion: 'Falla con todos los canales inactivos',
-          detiene_maquina: false,
-        }),
-      });
-      assert.strictEqual(res2.status, 201);
-      const intId2 = Number((await res2.json()).id);
-      createdIntervencionIds.push(intId2);
-
-      const notifs2 = await client.query('SELECT id FROM notificaciones WHERE intervencion_id = $1', [intId2]);
-      assert.ok(notifs2.rows.length > 0);
-
-      const envios2 = await client.query(
-        `SELECT id FROM notificacion_envios WHERE notificacion_id = ANY($1)`,
-        [notifs2.rows.map((r: any) => Number(r.id))]
-      );
-      assert.strictEqual(envios2.rows.length, 0, 'No debe haber envíos con canales inactivos');
     });
 
     // =========================================================================

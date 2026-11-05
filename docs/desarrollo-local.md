@@ -80,3 +80,35 @@ Antes de aplicar cualquier migración a producción, revisar el modelo y recibir
 3. Desplegar una función de prueba en una rama no productiva de Neon.
 4. Verificar `GET /health` y `GET /health/db`.
 5. Recién entonces integrar módulos reales.
+
+
+---
+
+## Configuración de Avisos por Email
+
+El sistema soporta envío de avisos por correo electrónico mediante transporte SMTP o simulado (en memoria para pruebas).
+
+### Variables de entorno
+
+| Variable | Descripción |
+| :--- | :--- |
+| `EMAIL_TRANSPORTE` | `smtp` o `simulado`. Si no está definida, el correo cuenta como no configurado. |
+| `SMTP_HOST` | Host del servidor SMTP (para Gmail: `smtp.gmail.com`). |
+| `SMTP_PORT` | Puerto SMTP (para Gmail: `465`). |
+| `SMTP_SEGURO` | `true` para conexiones SSL/TLS seguras (puerto 465). |
+| `SMTP_USUARIO` | Cuenta de correo que envía (ej. `tu-cuenta@gmail.com`). |
+| `SMTP_PASSWORD` | Contraseña de aplicación (ver instrucciones abajo). Nunca la contraseña habitual. |
+| `EMAIL_REMITENTE` | Nombre y dirección de origen visible (ej. `Mantenimiento <avisos@empresa.com>`). |
+| `APP_URL_PUBLICA` | URL pública del sistema para armar los enlaces en los correos (opcional). |
+
+> [!WARNING]
+> **Seguridad de credenciales:** Ninguna de estas variables con valores reales debe subirse al repositorio Git. Mantenerlas únicamente en `.env` local.
+
+### Cómo crear una Contraseña de Aplicación en Gmail
+
+1. Ingresar a la **Cuenta de Google** (`myaccount.google.com`).
+2. Ir a la pestaña **Seguridad**.
+3. Asegurarse de tener activada la **Verificación en dos pasos**.
+4. En el buscador de la cuenta, escribir **"Contraseñas de aplicaciones"** (o ingresar en la sección de verificación en dos pasos).
+5. Crear un nombre identificatorio (ej. "Sistema Mantenimiento").
+6. Google generará una contraseña de 16 caracteres. Copiarla y pegarla en la variable `SMTP_PASSWORD` de tu archivo `.env` local (sin espacios).

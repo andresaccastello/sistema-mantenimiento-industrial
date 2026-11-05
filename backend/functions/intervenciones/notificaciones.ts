@@ -127,12 +127,6 @@ export async function registrarNotificaciones(
     return;
   }
 
-  // Canales activos (para la bandeja de salida D-36)
-  const resCanales = await client.query(
-    'SELECT canal FROM notificacion_canales WHERE activo = TRUE'
-  );
-  const canalesActivos: string[] = resCanales.rows.map((r: any) => r.canal);
-
   // Mapa de usuarios activos con INTERVENCIONES_VER para regla de visibilidad (D-38 c)
   const usuariosVer = await usuariosConPermiso(client, 'INTERVENCIONES_VER');
   const mapaVer = new Map<number, UsuarioConPermiso>(
@@ -448,16 +442,18 @@ export async function registrarNotificaciones(
 
   const insertedIds = resIns.rows.map((r: any) => Number(r.id));
 
-  // Inserción en lote de envíos de canales activos con UN solo INSERT ... SELECT (Etapa 7.1)
-  if (canalesActivos.length > 0 && insertedIds.length > 0) {
+  // Inserción en lote de envíos de avisos por email según canal activo y reglas (Etapa N1a)
+  if (insertedIds.length > 0) {
     await client.query(
       `INSERT INTO notificacion_envios (
          notificacion_id, canal, estado, intentos, creado_en
        )
        SELECT n.id, c.canal, 'PENDIENTE', 0, NOW()
-       FROM UNNEST($1::bigint[]) AS n(id)
-       CROSS JOIN notificacion_canales c
-       WHERE c.activo = TRUE`,
+       FROM notificaciones n
+       JOIN notificacion_canales c ON c.canal = 'EMAIL' AND c.activo = TRUE
+       JOIN notificacion_reglas r ON r.canal = c.canal AND r.tipo_evento = n.tipo_evento
+       WHERE n.id = ANY($1::bigint[])
+         AND (r.modo = 'SIEMPRE' OR (r.modo = 'SOLO_ALTA' AND n.prioridad = 'ALTA'))`,
       [insertedIds]
     );
   }

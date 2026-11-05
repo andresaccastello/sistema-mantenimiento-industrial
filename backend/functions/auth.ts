@@ -96,6 +96,8 @@ authApp.get('/me', jwtVerify, dbVerify, async (c) => {
          u.legajo, 
          u.nombre, 
          u.apellido, 
+         u.email,
+         u.telefono_whatsapp,
          u.debe_cambiar_password,
          json_build_object('id', p.id, 'nombre', p.nombre) AS perfil,
          (
@@ -122,6 +124,8 @@ authApp.get('/me', jwtVerify, dbVerify, async (c) => {
       legajo: row.legajo,
       nombre: row.nombre,
       apellido: row.apellido,
+      email: row.email,
+      telefono_whatsapp: row.telefono_whatsapp,
       perfil: row.perfil,
       sectores: row.sectores,
       permisos: info.permisos,

@@ -7,4 +7,12 @@ export default defineConfig({
       source: './backend/functions/api.ts',
     },
   },
+  triggers: {
+    'avisos-envios': {
+      type: 'schedule',
+      function: 'api',
+      cron: '* * * * *',
+      functionPath: '/api/avisos/procesar',
+    },
+  },
 });

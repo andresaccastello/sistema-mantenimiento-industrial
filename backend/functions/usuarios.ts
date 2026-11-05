@@ -79,6 +79,8 @@ interface TargetYAdminsBloqueados {
     legajo: string;
     nombre: string;
     apellido: string | null;
+    email: string | null;
+    telefono_whatsapp: string | null;
     perfil_id: number;
     activo: boolean;
     perfil_nombre: string;
@@ -97,6 +99,8 @@ async function bloquearUsuarioYAdministradores(
       u.legajo, 
       u.nombre, 
       u.apellido, 
+      u.email,
+      u.telefono_whatsapp,
       u.perfil_id, 
       u.activo,
       p.nombre AS perfil_nombre
@@ -126,6 +130,8 @@ async function bloquearUsuarioYAdministradores(
           legajo: targetRow.legajo,
           nombre: targetRow.nombre,
           apellido: targetRow.apellido,
+          email: targetRow.email,
+          telefono_whatsapp: targetRow.telefono_whatsapp,
           perfil_id: Number(targetRow.perfil_id),
           activo: Boolean(targetRow.activo),
           perfil_nombre: targetRow.perfil_nombre,
@@ -250,6 +256,8 @@ usuariosApp.get('/', async (c) => {
         u.legajo, 
         u.nombre, 
         u.apellido, 
+        u.email,
+        u.telefono_whatsapp,
         u.activo,
         u.ultimo_acceso_en,
         u.debe_cambiar_password,
@@ -274,6 +282,8 @@ usuariosApp.get('/', async (c) => {
         legajo: r.legajo,
         nombre: r.nombre,
         apellido: r.apellido,
+        email: r.email,
+        telefono_whatsapp: r.telefono_whatsapp,
         perfil: r.perfil,
         sectores: r.sectores,
         activo: Boolean(r.activo),
@@ -301,6 +311,8 @@ export async function obtenerDetalleUsuario(
       u.legajo, 
       u.nombre, 
       u.apellido, 
+      u.email,
+      u.telefono_whatsapp,
       u.activo,
       u.ultimo_acceso_en,
       u.debe_cambiar_password,
@@ -362,6 +374,8 @@ export async function obtenerDetalleUsuario(
     legajo: row.legajo,
     nombre: row.nombre,
     apellido: row.apellido,
+    email: row.email,
+    telefono_whatsapp: row.telefono_whatsapp,
     perfil: row.perfil,
     sectores: row.sectores,
     activo: Boolean(row.activo),
@@ -582,7 +596,7 @@ usuariosApp.post('/', async (c) => {
     return c.json({ error: 'Cuerpo de solicitud inválido', codigo: 'DATOS_INVALIDOS' }, 400);
   }
 
-  const { legajo, nombre, apellido, perfil_id, sectores, password_temporal } = body || {};
+  const { legajo, nombre, apellido, email, telefono_whatsapp, perfil_id, sectores, password_temporal } = body || {};
 
   // Validar legajo
   if (typeof legajo !== 'string' || legajo.length === 0 || legajo.length > 40 || legajo.trim() !== legajo) {
@@ -597,6 +611,36 @@ usuariosApp.post('/', async (c) => {
   if (apellido !== undefined && apellido !== null) {
     if (typeof apellido !== 'string' || apellido.trim().length > 100) {
       return c.json({ error: 'El apellido no puede superar los 100 caracteres', codigo: 'DATOS_INVALIDOS' }, 422);
+    }
+  }
+
+  // Validar email
+  let emailNormalizado: string | null = null;
+  if (email !== undefined && email !== null) {
+    if (typeof email !== 'string') {
+      return c.json({ error: 'El email no tiene un formato válido.', codigo: 'EMAIL_INVALIDO' }, 422);
+    }
+    const trimmed = email.trim();
+    if (trimmed.length > 0) {
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmed)) {
+        return c.json({ error: 'El email no tiene un formato válido.', codigo: 'EMAIL_INVALIDO' }, 422);
+      }
+      emailNormalizado = trimmed.toLowerCase();
+    }
+  }
+
+  // Validar telefono_whatsapp
+  let telefonoNormalizado: string | null = null;
+  if (telefono_whatsapp !== undefined && telefono_whatsapp !== null) {
+    if (typeof telefono_whatsapp !== 'string') {
+      return c.json({ error: 'El número tiene que estar en formato internacional, por ejemplo +5491112345678.', codigo: 'TELEFONO_INVALIDO' }, 422);
+    }
+    const trimmed = telefono_whatsapp.trim();
+    if (trimmed.length > 0) {
+      if (!/^\+[1-9][0-9]{7,14}$/.test(trimmed)) {
+        return c.json({ error: 'El número tiene que estar en formato internacional, por ejemplo +5491112345678.', codigo: 'TELEFONO_INVALIDO' }, 422);
+      }
+      telefonoNormalizado = trimmed;
     }
   }
 
@@ -675,11 +719,11 @@ usuariosApp.post('/', async (c) => {
     // Insertar usuario
     const resUser = await client.query(`
       INSERT INTO usuarios (
-        legajo, nombre, apellido, password_hash, perfil_id, activo, debe_cambiar_password, password_actualizado_en
+        legajo, nombre, apellido, password_hash, perfil_id, activo, debe_cambiar_password, password_actualizado_en, email, telefono_whatsapp
       )
-      VALUES ($1, $2, $3, $4, $5, TRUE, TRUE, NULL)
-      RETURNING id, legajo, nombre, apellido, activo, debe_cambiar_password, creado_en
-    `, [legajo, nombre.trim(), apellido ? apellido.trim() : null, hash, perfilIdNum]);
+      VALUES ($1, $2, $3, $4, $5, TRUE, TRUE, NULL, $6, $7)
+      RETURNING id, legajo, nombre, apellido, email, telefono_whatsapp, activo, debe_cambiar_password, creado_en
+    `, [legajo, nombre.trim(), apellido ? apellido.trim() : null, hash, perfilIdNum, emailNormalizado, telefonoNormalizado]);
 
     const newUserId = Number(resUser.rows[0].id);
 
@@ -704,6 +748,8 @@ usuariosApp.post('/', async (c) => {
         legajo,
         nombre: nombre.trim(),
         apellido: apellido ? apellido.trim() : null,
+        email: emailNormalizado,
+        telefono_whatsapp: telefonoNormalizado,
         perfil_id: perfilIdNum,
         sectores: sectoresIds,
       }),
@@ -716,6 +762,8 @@ usuariosApp.post('/', async (c) => {
       legajo: resUser.rows[0].legajo,
       nombre: resUser.rows[0].nombre,
       apellido: resUser.rows[0].apellido,
+      email: resUser.rows[0].email,
+      telefono_whatsapp: resUser.rows[0].telefono_whatsapp,
       perfil: { id: perfilIdNum, nombre: resPerfil.rows[0].nombre },
       sectores: sectoresIds,
       activo: true,
@@ -760,7 +808,7 @@ usuariosApp.patch('/:id', async (c) => {
     return c.json({ error: 'No se permite modificar el legajo', codigo: 'DATOS_INVALIDOS' }, 422);
   }
 
-  const { nombre, apellido, perfil_id, sectores } = body;
+  const { nombre, apellido, perfil_id, sectores, email, telefono_whatsapp } = body;
 
   const client = await pool.connect();
   try {
@@ -783,10 +831,12 @@ usuariosApp.patch('/:id', async (c) => {
     let hayCambiosReales = false;
     let nuevoNombre = current.nombre;
     let nuevoApellido = current.apellido;
+    let nuevoEmail = current.email;
+    let nuevoTelefono = current.telefono_whatsapp;
     let nuevoPerfilId = Number(current.perfil_id);
     let nuevosSectoresIds = currentSectorIds;
 
-    let cambioNombreOApellido = false;
+    let cambioDatosUsuario = false;
     let cambioPerfil = false;
     let cambioSectores = false;
 
@@ -798,7 +848,7 @@ usuariosApp.patch('/:id', async (c) => {
       }
       if (nombre.trim() !== current.nombre) {
         nuevoNombre = nombre.trim();
-        cambioNombreOApellido = true;
+        cambioDatosUsuario = true;
         hayCambiosReales = true;
       }
     }
@@ -811,7 +861,55 @@ usuariosApp.patch('/:id', async (c) => {
       const apellNorm = apellido ? apellido.trim() : null;
       if (apellNorm !== current.apellido) {
         nuevoApellido = apellNorm;
-        cambioNombreOApellido = true;
+        cambioDatosUsuario = true;
+        hayCambiosReales = true;
+      }
+    }
+
+    // 1b. Validar y procesar email
+    if (email !== undefined) {
+      let emailNorm: string | null = null;
+      if (email !== null) {
+        if (typeof email !== 'string') {
+          await client.query('ROLLBACK');
+          return c.json({ error: 'El email no tiene un formato válido.', codigo: 'EMAIL_INVALIDO' }, 422);
+        }
+        const trimmed = email.trim();
+        if (trimmed.length > 0) {
+          if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmed)) {
+            await client.query('ROLLBACK');
+            return c.json({ error: 'El email no tiene un formato válido.', codigo: 'EMAIL_INVALIDO' }, 422);
+          }
+          emailNorm = trimmed.toLowerCase();
+        }
+      }
+      if (emailNorm !== current.email) {
+        nuevoEmail = emailNorm;
+        cambioDatosUsuario = true;
+        hayCambiosReales = true;
+      }
+    }
+
+    // 1c. Validar y procesar telefono_whatsapp
+    if (telefono_whatsapp !== undefined) {
+      let telNorm: string | null = null;
+      if (telefono_whatsapp !== null) {
+        if (typeof telefono_whatsapp !== 'string') {
+          await client.query('ROLLBACK');
+          return c.json({ error: 'El número tiene que estar en formato internacional, por ejemplo +5491112345678.', codigo: 'TELEFONO_INVALIDO' }, 422);
+        }
+        const trimmed = telefono_whatsapp.trim();
+        if (trimmed.length > 0) {
+          if (!/^\+[1-9][0-9]{7,14}$/.test(trimmed)) {
+            await client.query('ROLLBACK');
+            return c.json({ error: 'El número tiene que estar en formato internacional, por ejemplo +5491112345678.', codigo: 'TELEFONO_INVALIDO' }, 422);
+          }
+          telNorm = trimmed;
+        }
+      }
+      if (telNorm !== current.telefono_whatsapp) {
+        nuevoTelefono = telNorm;
+        cambioDatosUsuario = true;
         hayCambiosReales = true;
       }
     }
@@ -911,12 +1009,12 @@ usuariosApp.patch('/:id', async (c) => {
     }
 
     // Aplicar cambios en usuarios
-    if (cambioNombreOApellido || cambioPerfil) {
+    if (cambioDatosUsuario || cambioPerfil) {
       await client.query(`
         UPDATE usuarios
-        SET nombre = $1, apellido = $2, perfil_id = $3, actualizado_en = NOW()
-        WHERE id = $4
-      `, [nuevoNombre, nuevoApellido, nuevoPerfilId, targetUserId]);
+        SET nombre = $1, apellido = $2, email = $3, telefono_whatsapp = $4, perfil_id = $5, actualizado_en = NOW()
+        WHERE id = $6
+      `, [nuevoNombre, nuevoApellido, nuevoEmail, nuevoTelefono, nuevoPerfilId, targetUserId]);
     }
 
     // Aplicar cambios en sectores (reemplazo completo)
@@ -931,7 +1029,7 @@ usuariosApp.patch('/:id', async (c) => {
     }
 
     // Auditoría: fila por cada acción modificada
-    if (cambioNombreOApellido) {
+    if (cambioDatosUsuario) {
       await client.query(`
         INSERT INTO auditoria_permisos (realizado_por_usuario_id, sobre_usuario_id, accion, detalle)
         VALUES ($1, $2, 'USUARIO_MODIFICADO', $3)
@@ -939,8 +1037,18 @@ usuariosApp.patch('/:id', async (c) => {
         actorUserId,
         targetUserId,
         JSON.stringify({
-          anterior: { nombre: current.nombre, apellido: current.apellido },
-          nuevo: { nombre: nuevoNombre, apellido: nuevoApellido },
+          anterior: {
+            nombre: current.nombre,
+            apellido: current.apellido,
+            email: current.email,
+            telefono_whatsapp: current.telefono_whatsapp,
+          },
+          nuevo: {
+            nombre: nuevoNombre,
+            apellido: nuevoApellido,
+            email: nuevoEmail,
+            telefono_whatsapp: nuevoTelefono,
+          },
         }),
       ]);
     }
@@ -980,6 +1088,8 @@ usuariosApp.patch('/:id', async (c) => {
       legajo: current.legajo,
       nombre: nuevoNombre,
       apellido: nuevoApellido,
+      email: nuevoEmail,
+      telefono_whatsapp: nuevoTelefono,
       perfil_id: nuevoPerfilId,
       sectores: nuevosSectoresIds,
       mensaje: 'Usuario actualizado exitosamente',

@@ -176,3 +176,19 @@ Lo que ya estaba asignado se conserva: una máquina o un usuario inactivos puede
 
 **Motivo:** que ningún dato activo dependa de uno inactivo, y que el alta de una máquina siempre encuentre sus valores por omisión.
 
+
+---
+
+## D-016 — Avisos por email configurables
+
+**Estado:** Aceptada
+
+La campana sigue siendo el aviso principal. El email es una copia para quien no está mirando el sistema.
+
+- El administrador prende o apaga cada canal y decide, por tipo de aviso, si sale nunca, solo con prioridad alta o siempre.
+- Los envíos pasan por la bandeja de salida y se procesan cada minuto. No se mandan dentro del pedido que generó el aviso, para que un servidor de correo lento no demore a nadie.
+- Cada envío se reintenta hasta 5 veces. Se descarta si el usuario no tiene email, está inactivo, el aviso tiene más de 24 horas o el canal se apagó.
+- Las contraseñas del correo van solo en variables de entorno.
+- WhatsApp queda preparado (datos de contacto y reglas) hasta tener su transporte.
+
+**Motivo:** decisión del usuario. Que cada instalación elija cuánto avisar, sin tocar el código.

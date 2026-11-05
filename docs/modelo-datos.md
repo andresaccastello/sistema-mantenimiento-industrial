@@ -40,7 +40,16 @@ Excepciones individuales de permisos por usuario (`CONCEDER` o `DENEGAR`, `alcan
 Registro inmutable de cambios sobre perfiles, roles y permisos de usuarios. Acciones admitidas: `USUARIO_CREADO`, `USUARIO_MODIFICADO`, `USUARIO_DESACTIVADO`, `USUARIO_REACTIVADO`, `PASSWORD_RESTABLECIDA`, `PASSWORD_CAMBIADA`, `PERFIL_CAMBIADO`, `SECTORES_CAMBIADOS`, `EXCEPCION_CREADA`, `EXCEPCION_MODIFICADA` y `EXCEPCION_ELIMINADA`.
 
 ### usuarios
-Usuarios del sistema. El `legajo` es único.
+Usuarios del sistema. El `legajo` es único. Incluye datos opcionales de contacto: `email` (validado por formato) y `telefono_whatsapp` (formato internacional E.164).
+
+### notificacion_canales
+Canales de salida configurables (`EMAIL`, `WHATSAPP`, `PUSH`). Registra si está activo y quién lo actualizó (`actualizado_por_usuario_id`).
+
+### notificacion_envios
+Bandeja de salida de avisos. Registra el canal, estado (`PENDIENTE`, `ENVIADO`, `DESCARTADO`, `ERROR`), `destino`, intentos, error, `proximo_intento_en` e índices parciales para procesamiento por lotes.
+
+### notificacion_reglas
+Matriz de reglas de aviso por canal y tipo de evento (`FALLA_REGISTRADA`, `INTERVENCION_ASIGNADA`, etc.). Define el modo de envío: `NUNCA`, `SOLO_ALTA` o `SIEMPRE`, junto con quién lo actualizó.
 
 ### plantas
 Plantas o naves físicas de la empresa. Sin datos iniciales por omisión (una instalación con una sola planta no necesita cargar ninguna).
