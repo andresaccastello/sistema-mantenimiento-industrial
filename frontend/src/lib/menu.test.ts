@@ -51,6 +51,7 @@ describe('FE-04: itemsMenu con los permisos de cada perfil', () => {
     PERMISOS_GESTIONAR: 'TODAS',
     USUARIOS_GESTIONAR: 'TODAS',
     MAQUINAS_GESTIONAR: 'TODAS',
+    CONFIGURACION_GESTIONAR: 'TODAS',
   };
 
   it('OPERARIO: Inicio, Reportar falla, Intervenciones, Máquinas', () => {
@@ -90,7 +91,7 @@ describe('FE-04: itemsMenu con los permisos de cada perfil', () => {
     assert.deepEqual(items, ['Inicio', 'Intervenciones', 'Máquinas', 'Reportes']);
   });
 
-  it('ADMINISTRADOR: los 7 ítems', () => {
+  it('ADMINISTRADOR: los 8 ítems, incluyendo Configuración al final', () => {
     const items = itemsMenu(permisosAdmin).map((i) => i.etiqueta);
     assert.deepEqual(items, [
       'Inicio',
@@ -100,6 +101,15 @@ describe('FE-04: itemsMenu con los permisos de cada perfil', () => {
       'Reportes',
       'Usuarios',
       'Sectores y catálogos',
+      'Configuración',
     ]);
+  });
+
+  it('Configuración aparece con CONFIGURACION_GESTIONAR y no aparece sin ese permiso', () => {
+    const conPermiso = itemsMenu({ CONFIGURACION_GESTIONAR: 'TODAS' });
+    assert.ok(conPermiso.some((i) => i.etiqueta === 'Configuración' && i.ruta === '/configuracion'));
+
+    const sinPermiso = itemsMenu({ USUARIOS_GESTIONAR: 'TODAS' });
+    assert.ok(!sinPermiso.some((i) => i.etiqueta === 'Configuración'));
   });
 });

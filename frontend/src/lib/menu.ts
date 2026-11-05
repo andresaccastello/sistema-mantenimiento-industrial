@@ -98,5 +98,13 @@ export function itemsMenu(permisos: PermisosEntrada): ItemMenu[] {
     });
   }
 
+  if (verificarPermiso(permisos, 'CONFIGURACION_GESTIONAR')) {
+    items.push({
+      etiqueta: 'Configuración',
+      ruta: '/configuracion',
+      icono: 'IconSettings',
+    });
+  }
+
   return items;
 }

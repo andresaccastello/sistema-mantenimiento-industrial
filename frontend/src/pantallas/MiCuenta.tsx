@@ -88,6 +88,27 @@ export function MiCuenta() {
             </Group>
           </Stack>
 
+          <Stack gap="xs">
+            <Text size="sm" fw={500} c="#475569">
+              Email
+            </Text>
+            <Text size="sm" c="#0f172a">
+              {usuario?.email || '—'}
+            </Text>
+          </Stack>
+
+          <Stack gap="xs">
+            <Text size="sm" fw={500} c="#475569">
+              WhatsApp
+            </Text>
+            <Text size="sm" c="#0f172a">
+              {usuario?.telefono_whatsapp || '—'}
+            </Text>
+            <Text size="xs" c="dimmed">
+              Para cambiarlos, pedíselo a un administrador.
+            </Text>
+          </Stack>
+
           <Divider />
 
           <Group justify="space-between" mt="sm" wrap="wrap" gap="sm">

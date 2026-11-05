@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatDuracion, formatHace, formatFechaHora, parsearId } from './formato';
+import { formatDuracion, formatHace, formatDentroDe, formatFechaHora, parsearId } from './formato';
 
 describe('FE-01: formatDuracion', () => {
   it('formatea null como raya em', () => {
@@ -79,5 +79,23 @@ describe('FE-18: parsearId', () => {
     assert.equal(parsearId(''), null);
     assert.equal(parsearId(null), null);
     assert.equal(parsearId(undefined), null);
+  });
+});
+
+describe('FE-formato: formatDentroDe', () => {
+  it('formatea fechas en el futuro: 30 segundos, 4 minutos y 2 horas', () => {
+    const ahora = new Date('2026-11-05T12:00:00Z');
+
+    // 30 segundos en el futuro
+    const en30s = new Date('2026-11-05T12:00:30Z');
+    assert.equal(formatDentroDe(en30s, ahora), 'en menos de 1 min');
+
+    // 4 minutos en el futuro
+    const en4m = new Date('2026-11-05T12:04:00Z');
+    assert.equal(formatDentroDe(en4m, ahora), 'en 4 min');
+
+    // 2 horas en el futuro
+    const en2h = new Date('2026-11-05T14:00:00Z');
+    assert.equal(formatDentroDe(en2h, ahora), 'en 2 h');
   });
 });

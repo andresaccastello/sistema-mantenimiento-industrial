@@ -25,6 +25,12 @@ import { nombrePerfil } from '../../lib/perfiles';
 import { perfilAsignable } from '../../lib/permisos';
 import { validarPasswordTemporal } from '../../lib/usuarios';
 import { ApiError, mensajeError } from '../../lib/errores';
+import {
+  normalizarEmail,
+  validarEmail,
+  normalizarTelefono,
+  validarTelefono,
+} from '../../lib/contacto';
 
 export interface ModalUsuarioProps {
   abierto: boolean;
@@ -43,6 +49,8 @@ export function ModalUsuario({ abierto, onCerrar, usuario }: ModalUsuarioProps) 
   const [legajo, setLegajo] = useState('');
   const [nombre, setNombre] = useState('');
   const [apellido, setApellido] = useState('');
+  const [email, setEmail] = useState('');
+  const [telefono, setTelefono] = useState('');
   const [perfilId, setPerfilId] = useState<string | null>(null);
   const [sectoresIds, setSectoresIds] = useState<string[]>([]);
   const [passwordTemporal, setPasswordTemporal] = useState('');
@@ -50,6 +58,8 @@ export function ModalUsuario({ abierto, onCerrar, usuario }: ModalUsuarioProps) 
   // Error states
   const [errorLegajo, setErrorLegajo] = useState<string | null>(null);
   const [errorNombre, setErrorNombre] = useState<string | null>(null);
+  const [errorEmail, setErrorEmail] = useState<string | null>(null);
+  const [errorTelefono, setErrorTelefono] = useState<string | null>(null);
   const [errorPerfil, setErrorPerfil] = useState<string | null>(null);
   const [errorPassword, setErrorPassword] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
@@ -73,6 +83,8 @@ export function ModalUsuario({ abierto, onCerrar, usuario }: ModalUsuarioProps) 
         setLegajo(usuario.legajo);
         setNombre(usuario.nombre);
         setApellido(usuario.apellido || '');
+        setEmail(usuario.email || '');
+        setTelefono(usuario.telefono_whatsapp || '');
         setPerfilId(usuario.perfil ? String(usuario.perfil.id) : null);
         setSectoresIds(Array.isArray(usuario.sectores) ? usuario.sectores.map((s) => String(s.id)) : []);
         setPasswordTemporal('');
@@ -80,12 +92,16 @@ export function ModalUsuario({ abierto, onCerrar, usuario }: ModalUsuarioProps) 
         setLegajo('');
         setNombre('');
         setApellido('');
+        setEmail('');
+        setTelefono('');
         setPerfilId(null);
         setSectoresIds([]);
         setPasswordTemporal('');
       }
       setErrorLegajo(null);
       setErrorNombre(null);
+      setErrorEmail(null);
+      setErrorTelefono(null);
       setErrorPerfil(null);
       setErrorPassword(null);
     }
@@ -133,12 +149,16 @@ export function ModalUsuario({ abierto, onCerrar, usuario }: ModalUsuarioProps) 
     e.preventDefault();
     setErrorLegajo(null);
     setErrorNombre(null);
+    setErrorEmail(null);
+    setErrorTelefono(null);
     setErrorPerfil(null);
     setErrorPassword(null);
 
     const legajoTrim = legajo.trim();
     const nombreTrim = nombre.trim();
     const apellidoTrim = apellido.trim();
+    const emailNorm = normalizarEmail(email);
+    const telNorm = normalizarTelefono(telefono);
 
     if (!esEdicion && !legajoTrim) {
       setErrorLegajo('El legajo es obligatorio.');
@@ -152,6 +172,18 @@ export function ModalUsuario({ abierto, onCerrar, usuario }: ModalUsuarioProps) 
 
     if (!perfilId) {
       setErrorPerfil('El perfil es obligatorio.');
+      return;
+    }
+
+    const errEmail = validarEmail(emailNorm);
+    if (errEmail) {
+      setErrorEmail(errEmail);
+      return;
+    }
+
+    const errTel = validarTelefono(telNorm);
+    if (errTel) {
+      setErrorTelefono(errTel);
       return;
     }
 
@@ -177,6 +209,16 @@ export function ModalUsuario({ abierto, onCerrar, usuario }: ModalUsuarioProps) 
         const antApellido = (usuario.apellido || '').trim();
         if (apellidoTrim !== antApellido) {
           patchBody.apellido = apellidoTrim || null;
+        }
+
+        const antEmail = normalizarEmail(usuario.email);
+        if (emailNorm !== antEmail) {
+          patchBody.email = emailNorm ?? '';
+        }
+
+        const antTel = normalizarTelefono(usuario.telefono_whatsapp);
+        if (telNorm !== antTel) {
+          patchBody.telefono_whatsapp = telNorm ?? '';
         }
 
         const nuevoPerfilNum = Number(perfilId);
@@ -213,6 +255,8 @@ export function ModalUsuario({ abierto, onCerrar, usuario }: ModalUsuarioProps) 
           legajo: legajoTrim,
           nombre: nombreTrim,
           apellido: apellidoTrim || null,
+          email: emailNorm,
+          telefono_whatsapp: telNorm,
           perfil_id: Number(perfilId),
           sectores: sectoresIds.map(Number),
           password_temporal: passwordTemporal,
@@ -236,6 +280,14 @@ export function ModalUsuario({ abierto, onCerrar, usuario }: ModalUsuarioProps) 
         }
         if (err.codigo === 'PASSWORD_INVALIDA') {
           setErrorPassword(mensajeError(err));
+          return;
+        }
+        if (err.codigo === 'EMAIL_INVALIDO') {
+          setErrorEmail(mensajeError(err));
+          return;
+        }
+        if (err.codigo === 'TELEFONO_INVALIDO') {
+          setErrorTelefono(mensajeError(err));
           return;
         }
       }
@@ -280,6 +332,27 @@ export function ModalUsuario({ abierto, onCerrar, usuario }: ModalUsuarioProps) 
             value={apellido}
             onChange={(e) => setApellido(e.currentTarget.value)}
           />
+
+          <TextInput
+            label="Email"
+            placeholder="ejemplo@empresa.com"
+            value={email}
+            onChange={(e) => setEmail(e.currentTarget.value)}
+            error={errorEmail}
+          />
+
+          <div>
+            <TextInput
+              label="WhatsApp"
+              placeholder="+54 9 11 1234-5678"
+              value={telefono}
+              onChange={(e) => setTelefono(e.currentTarget.value)}
+              error={errorTelefono}
+            />
+            <Text size="xs" c="dimmed" mt={4}>
+              Con código de país, por ejemplo +54 9 11 1234-5678.
+            </Text>
+          </div>
 
           <Select
             label="Perfil"

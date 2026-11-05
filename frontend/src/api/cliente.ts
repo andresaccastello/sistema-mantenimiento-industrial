@@ -66,7 +66,7 @@ async function executeRequest<T>(path: string, options: RequestOptions = {}): Pr
     const mensaje = errorData?.error || errorData?.mensaje || response.statusText;
     const motivos = errorData?.motivos;
 
-    const apiError = new ApiError(response.status, codigo, mensaje, motivos);
+    const apiError = new ApiError(response.status, codigo, mensaje, motivos, errorData);
 
     const reaccion = reaccionError(apiError);
     if (reaccion === 'cerrar_sesion') {

@@ -59,6 +59,7 @@ describe('FE-32: Filtros de usuarios y validaciones', () => {
         legajo: 'U002',
         nombre: 'Ana',
         apellido: 'López',
+        email: 'ana.lopez@empresa.com',
         activo: false,
         ultimo_acceso_en: null,
         debe_cambiar_password: false,
@@ -117,6 +118,15 @@ describe('FE-32: Filtros de usuarios y validaciones', () => {
     });
     assert.equal(resLegajo.length, 1);
     assert.equal(resLegajo[0].id, 3);
+
+    // El email también se busca (FE-32 ampliado)
+    const resEmail = filtrarUsuarios(usuariosPrueba, {
+      ...FILTROS_USUARIOS_POR_DEFECTO,
+      estado: 'todos',
+      texto: 'ana.lopez@empresa.com',
+    });
+    assert.equal(resEmail.length, 1);
+    assert.equal(resEmail[0].id, 2);
 
     // Filtro por sector
     const resSector = filtrarUsuarios(usuariosPrueba, {

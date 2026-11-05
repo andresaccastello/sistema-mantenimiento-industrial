@@ -98,13 +98,14 @@ export function filtrarUsuarios(
       if (!tieneSector) return false;
     }
 
-    // 4. Filtro por texto (legajo, nombre, apellido)
+    // 4. Filtro por texto (legajo, nombre, apellido, email)
     if (normTexto) {
       const enLegajo = normalizarTexto(u.legajo).includes(normTexto);
       const enNombre = normalizarTexto(u.nombre).includes(normTexto);
       const enApellido = u.apellido ? normalizarTexto(u.apellido).includes(normTexto) : false;
+      const enEmail = u.email ? normalizarTexto(u.email).includes(normTexto) : false;
 
-      if (!enLegajo && !enNombre && !enApellido) {
+      if (!enLegajo && !enNombre && !enApellido && !enEmail) {
         return false;
       }
     }

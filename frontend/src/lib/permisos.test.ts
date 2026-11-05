@@ -27,6 +27,7 @@ describe('FE-34: etiquetaAlcance, grupoPermiso y filasPermisos', () => {
     assert.equal(grupoPermiso('NOTIFICACIONES_FALLAS_RECIBIR'), 'Avisos');
     assert.equal(grupoPermiso('USUARIOS_GESTIONAR'), 'Usuarios y permisos');
     assert.equal(grupoPermiso('PERMISOS_GESTIONAR'), 'Usuarios y permisos');
+    assert.equal(grupoPermiso('CONFIGURACION_GESTIONAR'), 'Configuración');
     assert.equal(grupoPermiso('REPUESTOS_VER'), 'Módulos futuros');
     assert.equal(grupoPermiso('COSTOS_VER'), 'Módulos futuros');
     assert.equal(grupoPermiso('DOCUMENTOS_GESTIONAR'), 'Módulos futuros');

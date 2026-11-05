@@ -84,8 +84,34 @@ export function textoAuditoria(
 
     case 'USUARIO_MODIFICADO': {
       if (!esObjetoValido) return { titulo: 'Datos cambiados', detalle: '' };
-      const ant = nombreCompleto(detalle.anterior);
-      const nue = nombreCompleto(detalle.nuevo);
+      const antObj = detalle.anterior || {};
+      const nueObj = detalle.nuevo || {};
+
+      if ('email' in antObj) {
+        const cambios: string[] = [];
+        const antNom = nombreCompleto(antObj);
+        const nueNom = nombreCompleto(nueObj);
+        if (antNom !== nueNom) {
+          cambios.push(`Nombre: ${antNom} → ${nueNom}`);
+        }
+        if (antObj.email !== nueObj.email) {
+          const antEmail = antObj.email || '—';
+          const nueEmail = nueObj.email || '—';
+          cambios.push(`Email: ${antEmail} → ${nueEmail}`);
+        }
+        if (antObj.telefono_whatsapp !== nueObj.telefono_whatsapp) {
+          const antTel = antObj.telefono_whatsapp || '—';
+          const nueTel = nueObj.telefono_whatsapp || '—';
+          cambios.push(`WhatsApp: ${antTel} → ${nueTel}`);
+        }
+        return {
+          titulo: 'Datos cambiados',
+          detalle: cambios.join('; '),
+        };
+      }
+
+      const ant = nombreCompleto(antObj);
+      const nue = nombreCompleto(nueObj);
       return {
         titulo: 'Datos cambiados',
         detalle: `${ant} → ${nue}`,

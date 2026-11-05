@@ -31,7 +31,8 @@ describe('FE-36: textoAuditoria', () => {
     assert.equal(t1.detalle, 'Perfil Administrador. Sectores: Taller, Montaje.');
 
     // 2. USUARIO_MODIFICADO
-    const t2 = textoAuditoria(
+    // (a) Viejo con dos campos
+    const t2Viejo = textoAuditoria(
       {
         accion: 'USUARIO_MODIFICADO',
         detalle: { anterior: { nombre: 'Juan', apellido: 'Perez' }, nuevo: { nombre: 'Juan Carlos', apellido: 'Perez' } },
@@ -39,8 +40,41 @@ describe('FE-36: textoAuditoria', () => {
       referencias,
       catalogo
     );
-    assert.equal(t2.titulo, 'Datos cambiados');
-    assert.equal(t2.detalle, 'Juan Perez → Juan Carlos Perez');
+    assert.equal(t2Viejo.titulo, 'Datos cambiados');
+    assert.equal(t2Viejo.detalle, 'Juan Perez → Juan Carlos Perez');
+
+    // (b) Nuevo con solo el email cambiado
+    const t2Email = textoAuditoria(
+      {
+        accion: 'USUARIO_MODIFICADO',
+        detalle: {
+          anterior: { nombre: 'Ana', apellido: 'Gomez', email: null, telefono_whatsapp: null },
+          nuevo: { nombre: 'Ana', apellido: 'Gomez', email: 'ana@empresa.com', telefono_whatsapp: null },
+        },
+      },
+      referencias,
+      catalogo
+    );
+    assert.equal(t2Email.titulo, 'Datos cambiados');
+    assert.equal(t2Email.detalle, 'Email: — → ana@empresa.com');
+
+    // (c) Nuevo con nombre y WhatsApp cambiados
+    const t2NombreWhatsApp = textoAuditoria(
+      {
+        accion: 'USUARIO_MODIFICADO',
+        detalle: {
+          anterior: { nombre: 'Juan', apellido: 'Perez', email: 'juan@empresa.com', telefono_whatsapp: null },
+          nuevo: { nombre: 'Juan Carlos', apellido: 'Perez', email: 'juan@empresa.com', telefono_whatsapp: '+5491112345678' },
+        },
+      },
+      referencias,
+      catalogo
+    );
+    assert.equal(t2NombreWhatsApp.titulo, 'Datos cambiados');
+    assert.equal(
+      t2NombreWhatsApp.detalle,
+      'Nombre: Juan Perez → Juan Carlos Perez; WhatsApp: — → +5491112345678'
+    );
 
     // 3. PERFIL_CAMBIADO
     const t3 = textoAuditoria(

@@ -62,6 +62,25 @@ export function formatHace(fechaISO: string | Date, ahora?: Date | string | numb
 }
 
 /**
+ * Formatea el tiempo restante hasta una fecha ISO o Date en el futuro desde `ahora`:
+ * - menos de 1 minuto (o fecha pasada) -> "en menos de 1 min"
+ * - cualquier otra -> "en " + formatDuracion(minutos)
+ */
+export function formatDentroDe(fechaISO: string | Date, ahora?: Date | string | number): string {
+  const f = typeof fechaISO === 'string' ? new Date(fechaISO) : fechaISO;
+  const a = ahora ? (typeof ahora === 'string' || typeof ahora === 'number' ? new Date(ahora) : ahora) : new Date();
+
+  const diffMs = f.getTime() - a.getTime();
+
+  if (diffMs < 60_000) {
+    return 'en menos de 1 min';
+  }
+
+  const minutos = Math.floor(diffMs / 60_000);
+  return `en ${formatDuracion(minutos)}`;
+}
+
+/**
  * Formatea una fecha ISO o Date en "DD/MM/YYYY HH:mm" en hora local con ceros a la izquierda.
  * null, undefined o fecha inválida -> "—"
  */

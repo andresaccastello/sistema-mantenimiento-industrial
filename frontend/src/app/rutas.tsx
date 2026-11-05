@@ -24,6 +24,7 @@ import { Usuarios } from '../pantallas/Usuarios';
 import { DetalleUsuario } from '../pantallas/DetalleUsuario';
 import { SectoresCatalogos } from '../pantallas/SectoresCatalogos';
 import { Perfiles } from '../pantallas/Perfiles';
+import { Configuracion } from '../pantallas/Configuracion';
 import { vistaDetalle } from '../lib/intervenciones';
 
 // Componentes generales
@@ -174,6 +175,14 @@ export function RutasApp() {
           element={
             <RutaProtegida permiso="MAQUINAS_GESTIONAR">
               <SectoresCatalogos />
+            </RutaProtegida>
+          }
+        />
+        <Route
+          path="/configuracion"
+          element={
+            <RutaProtegida permiso="CONFIGURACION_GESTIONAR">
+              <Configuracion />
             </RutaProtegida>
           }
         />

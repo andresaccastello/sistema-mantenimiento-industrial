@@ -12,13 +12,21 @@ export class ApiError extends Error {
   readonly status: number;
   readonly codigo: string;
   readonly motivos?: MotivoError[];
+  readonly datos?: Record<string, unknown>;
 
-  constructor(status: number, codigo: string, mensaje?: string, motivos?: MotivoError[]) {
+  constructor(
+    status: number,
+    codigo: string,
+    mensaje?: string,
+    motivos?: MotivoError[],
+    datos?: Record<string, unknown>
+  ) {
     super(mensaje || codigo);
     this.name = 'ApiError';
     this.status = status;
     this.codigo = codigo;
     this.motivos = motivos;
+    this.datos = datos;
   }
 }
 
@@ -95,6 +103,13 @@ const MENSAJES_POR_CODIGO: Record<string, string> = {
   SECTOR_NO_ENCONTRADO: 'No encontramos ese sector.',
   CRITICIDAD_NO_ENCONTRADA: 'No encontramos esa criticidad.',
   TIPO_EQUIPO_NO_ENCONTRADO: 'No encontramos ese tipo de equipo.',
+  CANAL_NO_DISPONIBLE: 'WhatsApp todavía no está disponible.',
+  CANAL_SIN_CONFIGURAR: 'Falta configurar el servidor de correo.',
+  CANAL_NO_ENCONTRADO: 'Ese canal no existe.',
+  SIN_EMAIL: 'Cargá tu email en tu usuario para recibir la prueba.',
+  ENVIO_FALLIDO: 'No se pudo enviar el email.',
+  EMAIL_INVALIDO: 'El email no tiene un formato válido.',
+  TELEFONO_INVALIDO: 'El número tiene que estar en formato internacional, por ejemplo +5491112345678.',
 };
 
 const CODIGOS_RECARGA = new Set([
@@ -118,6 +133,8 @@ const CODIGOS_RECARGA = new Set([
   'SECTOR_NO_ENCONTRADO',
   'CRITICIDAD_NO_ENCONTRADA',
   'TIPO_EQUIPO_NO_ENCONTRADO',
+  'CANAL_SIN_CONFIGURAR',
+  'CANAL_NO_ENCONTRADO',
 ]);
 
 /**

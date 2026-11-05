@@ -31,6 +31,8 @@ export interface Usuario {
   legajo: string;
   nombre: string;
   apellido: string | null;
+  email?: string | null;
+  telefono_whatsapp?: string | null;
   perfil: PerfilUsuario;
   sectores: SectorUsuario[];
   permisos: Record<string, AlcancePermiso | string>;
@@ -398,6 +400,8 @@ export interface UsuarioListaItem {
   legajo: string;
   nombre: string;
   apellido: string | null;
+  email?: string | null;
+  telefono_whatsapp?: string | null;
   activo: boolean;
   ultimo_acceso_en: string | null;
   debe_cambiar_password: boolean;
@@ -426,6 +430,8 @@ export interface UsuarioDetalleAdmin {
   legajo: string;
   nombre: string;
   apellido: string | null;
+  email?: string | null;
+  telefono_whatsapp?: string | null;
   activo: boolean;
   ultimo_acceso_en: string | null;
   debe_cambiar_password: boolean;
@@ -457,4 +463,66 @@ export interface UsuarioAuditoriaResponse {
     perfiles: Record<string, string>;
     sectores: Record<string, string>;
   };
+}
+
+// =============================================================================
+// Avisos por email y WhatsApp (Etapa N1b)
+// =============================================================================
+
+export type ModoAviso = 'NUNCA' | 'SOLO_ALTA' | 'SIEMPRE';
+
+export interface CanalAviso {
+  canal: 'EMAIL' | 'WHATSAPP';
+  activo: boolean;
+  disponible: boolean;
+  configurado: boolean;
+  transporte: string | null;
+  remitente: string | null;
+  actualizado_en: string | null;
+  actualizado_por: {
+    id: number;
+    nombre: string;
+    apellido: string | null;
+  } | null;
+}
+
+export interface ReglaAviso {
+  tipo_evento: string;
+  EMAIL: ModoAviso;
+  WHATSAPP: ModoAviso;
+}
+
+export interface ConfiguracionAvisos {
+  canales: CanalAviso[];
+  reglas: ReglaAviso[];
+  pendientes: number;
+}
+
+export interface EnvioAviso {
+  id: number;
+  canal: string;
+  estado: 'PENDIENTE' | 'ENVIADO' | 'ERROR' | 'DESCARTADO';
+  intentos: number;
+  ultimo_error: string | null;
+  destino: string | null;
+  creado_en: string;
+  enviado_en: string | null;
+  proximo_intento_en: string | null;
+  notificacion: {
+    id: number;
+    tipo_evento: string;
+    prioridad: 'ALTA' | 'NORMAL';
+    titulo: string;
+    intervencion_id: number | null;
+  };
+  usuario: {
+    id: number;
+    nombre: string;
+    apellido: string | null;
+  };
+}
+
+export interface EnviosAvisos {
+  total: number;
+  envios: EnvioAviso[];
 }

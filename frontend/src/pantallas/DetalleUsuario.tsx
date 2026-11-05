@@ -264,6 +264,14 @@ export function DetalleUsuario() {
               <Table.Td>{usuario.legajo}</Table.Td>
             </Table.Tr>
             <Table.Tr>
+              <Table.Td c="dimmed">Email</Table.Td>
+              <Table.Td>{usuario.email || '—'}</Table.Td>
+            </Table.Tr>
+            <Table.Tr>
+              <Table.Td c="dimmed">WhatsApp</Table.Td>
+              <Table.Td>{usuario.telefono_whatsapp || '—'}</Table.Td>
+            </Table.Tr>
+            <Table.Tr>
               <Table.Td c="dimmed">Perfil</Table.Td>
               <Table.Td>{nombrePerfil(usuario.perfil.nombre)}</Table.Td>
             </Table.Tr>
