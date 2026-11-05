@@ -80,6 +80,21 @@ const MENSAJES_POR_CODIGO: Record<string, string> = {
   MAQUINA_CON_INTERVENCIONES_ABIERTAS: 'No se puede desactivar: la máquina tiene intervenciones abiertas.',
   MAQUINA_CON_DETENCIONES_ABIERTAS: 'La máquina tiene detenciones sin confirmar.',
   PLANTA_NO_ENCONTRADA: 'No encontramos esa planta.',
+  LEGAJO_DUPLICADO: 'Ya hay otro usuario con ese legajo.',
+  PASSWORD_INVALIDA: 'La contraseña temporal tiene que tener al menos 8 caracteres y no puede ser igual al legajo.',
+  PERFIL_NO_ASIGNABLE: 'No podés asignar ese perfil: tiene permisos que vos no tenés.',
+  ULTIMO_ADMINISTRADOR: 'Es el único administrador activo: no se le puede cambiar el perfil ni desactivar.',
+  AUTOGESTION_NO_PERMITIDA: 'Eso no lo podés hacer sobre tu propio usuario.',
+  PERMISO_NO_OTORGABLE: 'No podés dar ni quitar un permiso que no tenés, ni un alcance mayor que el tuyo.',
+  EXCEPCION_NO_ENCONTRADA: 'Esa excepción ya no existe.',
+  USUARIO_NO_ENCONTRADO: 'No encontramos ese usuario.',
+  NOMBRE_DUPLICADO: 'Ya existe otro con ese nombre.',
+  CODIGO_DUPLICADO: 'Ya existe otro con ese código.',
+  EN_USO: 'No se puede desactivar: todavía lo usan datos activos.',
+  ES_POR_OMISION: 'Es el valor por omisión. Marcá otro antes de desactivarlo.',
+  SECTOR_NO_ENCONTRADO: 'No encontramos ese sector.',
+  CRITICIDAD_NO_ENCONTRADA: 'No encontramos esa criticidad.',
+  TIPO_EQUIPO_NO_ENCONTRADO: 'No encontramos ese tipo de equipo.',
 };
 
 const CODIGOS_RECARGA = new Set([
@@ -96,6 +111,13 @@ const CODIGOS_RECARGA = new Set([
   'INTERVENCION_NO_ENCONTRADA',
   'MAQUINA_CON_INTERVENCIONES_ABIERTAS',
   'MAQUINA_CON_DETENCIONES_ABIERTAS',
+  'ULTIMO_ADMINISTRADOR',
+  'EXCEPCION_NO_ENCONTRADA',
+  'EN_USO',
+  'ES_POR_OMISION',
+  'SECTOR_NO_ENCONTRADO',
+  'CRITICIDAD_NO_ENCONTRADA',
+  'TIPO_EQUIPO_NO_ENCONTRADO',
 ]);
 
 /**

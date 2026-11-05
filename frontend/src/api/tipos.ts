@@ -356,7 +356,6 @@ export interface SectorAdmin extends SectorLista {
 
 export interface PlantaAdmin extends Planta {
   activo: boolean;
-  creado_en: string;
   sectores_activos: number;
 }
 

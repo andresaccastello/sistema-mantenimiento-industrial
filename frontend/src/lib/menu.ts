@@ -92,7 +92,7 @@ export function itemsMenu(permisos: PermisosEntrada): ItemMenu[] {
 
   if (verificarPermiso(permisos, 'MAQUINAS_GESTIONAR')) {
     items.push({
-      etiqueta: 'Sectores',
+      etiqueta: 'Sectores y catálogos',
       ruta: '/sectores',
       icono: 'IconBuildingFactory2',
     });

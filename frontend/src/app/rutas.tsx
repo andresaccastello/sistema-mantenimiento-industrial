@@ -20,6 +20,10 @@ import { DetalleIntervencion } from '../pantallas/DetalleIntervencion';
 import { Tablero } from '../pantallas/Tablero';
 import { MaquinasLista } from '../pantallas/MaquinasLista';
 import { DetalleMaquina } from '../pantallas/DetalleMaquina';
+import { Usuarios } from '../pantallas/Usuarios';
+import { DetalleUsuario } from '../pantallas/DetalleUsuario';
+import { SectoresCatalogos } from '../pantallas/SectoresCatalogos';
+import { Perfiles } from '../pantallas/Perfiles';
 import { vistaDetalle } from '../lib/intervenciones';
 
 // Componentes generales
@@ -145,7 +149,23 @@ export function RutasApp() {
           path="/usuarios"
           element={
             <RutaProtegida permiso="USUARIOS_GESTIONAR">
-              <EnConstruccion titulo="Usuarios" etapa="F4" />
+              <Usuarios />
+            </RutaProtegida>
+          }
+        />
+        <Route
+          path="/usuarios/:id"
+          element={
+            <RutaProtegida permiso="USUARIOS_GESTIONAR">
+              <DetalleUsuario />
+            </RutaProtegida>
+          }
+        />
+        <Route
+          path="/perfiles"
+          element={
+            <RutaProtegida permiso="USUARIOS_GESTIONAR">
+              <Perfiles />
             </RutaProtegida>
           }
         />
@@ -153,7 +173,7 @@ export function RutasApp() {
           path="/sectores"
           element={
             <RutaProtegida permiso="MAQUINAS_GESTIONAR">
-              <EnConstruccion titulo="Sectores" etapa="F4" />
+              <SectoresCatalogos />
             </RutaProtegida>
           }
         />

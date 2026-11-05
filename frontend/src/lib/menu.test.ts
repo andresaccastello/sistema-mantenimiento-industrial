@@ -99,7 +99,7 @@ describe('FE-04: itemsMenu con los permisos de cada perfil', () => {
       'Máquinas',
       'Reportes',
       'Usuarios',
-      'Sectores',
+      'Sectores y catálogos',
     ]);
   });
 });

@@ -77,8 +77,8 @@ Los tonos exactos se definen en la etapa F0.
 | :-: | :--- | :--- | :--- | :--- |
 | A1 | Usuarios | Lista con filtros por activo, perfil y sector. | Abrir; nuevo usuario | `GET /usuarios` |
 | A2 | Alta y edición de usuario | Datos, perfil, sectores, contraseña temporal (en el alta), excepciones de permisos. | Guardar; desactivar o reactivar; restablecer contraseña | `POST`, `PATCH /usuarios/:id`, `/desactivar`, `/reactivar`, `/restablecer-password`; **falta** gestionar excepciones (API-05) |
-| A3 | Sectores | Lista simple. | Alta, edición, baja | `/sectores` |
-| A4 | Perfiles | Consulta de cada perfil y sus permisos. Solo lectura por ahora. | — | `GET /perfiles` |
+| A3 | Sectores y catálogos: sectores, plantas, criticidades y tipos de equipo | Pestañas: Sectores · Plantas · Criticidades · Tipos de equipo. | Alta, edición, desactivar o reactivar, ordenar, marcar por omisión | `/sectores` |
+| A4 | Perfiles | Consulta de cada perfil y sus permisos en una matriz. Solo lectura. Se entra desde A1. | — | `/perfiles` (`GET /perfiles`, `GET /permisos`) |
 
 El alta, edición y baja de máquinas se hace desde R4 y R5, con los botones que da el permiso. No hay una pantalla aparte.
 
@@ -102,7 +102,7 @@ Además ven R1, R2, R3, R4 y R5 en modo consulta, según sus permisos.
 | Máquinas | siempre | R4 |
 | Reportes | `REPORTES_CONSULTAR` | D1 |
 | Usuarios | `USUARIOS_GESTIONAR` | A1 |
-| Sectores | `MAQUINAS_GESTIONAR` | A3 |
+| Sectores y catálogos | `MAQUINAS_GESTIONAR` | A3 |
 | Avisos (campana) | siempre | C3 |
 
 **En computadora:** menú lateral, como en SolGest. **En celular, por ahora:** el mismo menú se pliega detrás del botón de tres rayitas. La barra inferior queda para la etapa M.
