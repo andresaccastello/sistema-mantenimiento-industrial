@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { Container, Stack, Title, Tabs } from '@mantine/core';
+import { Stack, Title, Tabs } from '@mantine/core';
 import { clienteApi } from '../api/cliente';
 import {
   CriticidadAdmin,
@@ -20,14 +20,26 @@ import { TabSectores } from '../componentes/admin/TabSectores';
 import { TabPlantas } from '../componentes/admin/TabPlantas';
 import { TabCatalogo } from '../componentes/admin/TabCatalogo';
 
+const PESTANAS_VALIDAS = new Set([
+  'sectores',
+  'plantas',
+  'criticidades',
+  'tipos_equipo',
+  'tipos-equipo',
+]);
+
 export function SectoresCatalogos() {
   const { tienePermiso } = useAuth();
   const puedeGestionarUsuarios = tienePermiso('USUARIOS_GESTIONAR');
 
   const [searchParams, setSearchParams] = useSearchParams();
   const pestanaParam = searchParams.get('pestana');
+  const pestanaValida =
+    pestanaParam && PESTANAS_VALIDAS.has(pestanaParam)
+      ? pestanaParam
+      : 'sectores';
   const pestana =
-    pestanaParam === 'tipos-equipo' ? 'tipos_equipo' : pestanaParam || 'sectores';
+    pestanaValida === 'tipos-equipo' ? 'tipos_equipo' : pestanaValida;
 
   const setPestana = (val: string | null) => {
     if (val && val !== 'sectores') {
@@ -126,9 +138,8 @@ export function SectoresCatalogos() {
   });
 
   return (
-    <Container size="xl" py="lg">
-      <Stack gap="lg">
-        <Title order={2}>Sectores y catálogos</Title>
+    <Stack gap="lg">
+      <Title order={2}>Sectores y catálogos</Title>
 
         <Tabs value={pestana} onChange={setPestana}>
           <Tabs.List mb="md">
@@ -283,9 +294,8 @@ export function SectoresCatalogos() {
             />
           </Tabs.Panel>
         </Tabs>
-      </Stack>
 
-      <ModalSector
+        <ModalSector
         abierto={modalSector.abierto}
         onCerrar={() => setModalSector({ abierto: false, sector: null })}
         sector={modalSector.sector}
@@ -352,6 +362,6 @@ export function SectoresCatalogos() {
         id={modalOmision.id}
         nombre={modalOmision.nombre}
       />
-    </Container>
+    </Stack>
   );
 }

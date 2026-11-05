@@ -17,6 +17,7 @@ import {
 import {
   IconArrowLeft,
   IconDotsVertical,
+  IconChevronDown,
   IconEdit,
   IconKey,
   IconUserOff,
@@ -208,8 +209,11 @@ export function DetalleUsuario() {
 
             <Menu shadow="md" width={200} position="bottom-end">
               <Menu.Target>
-                <Button variant="default" px={8}>
-                  <IconDotsVertical size={16} />
+                <Button
+                  variant="default"
+                  rightSection={<IconChevronDown size={16} />}
+                >
+                  Más acciones
                 </Button>
               </Menu.Target>
 

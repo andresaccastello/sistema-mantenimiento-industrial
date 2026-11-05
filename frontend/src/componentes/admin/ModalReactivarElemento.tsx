@@ -50,6 +50,7 @@ export function ModalReactivarElemento({
       if (tipo === 'sector') {
         await clienteApi.put(`/api/sectores/${id}`, { activo: true });
         await queryClient.invalidateQueries({ queryKey: ['sectores'] });
+        await queryClient.invalidateQueries({ queryKey: ['plantas'] });
       } else if (tipo === 'planta') {
         await clienteApi.put(`/api/plantas/${id}`, { activo: true });
         await queryClient.invalidateQueries({ queryKey: ['plantas'] });

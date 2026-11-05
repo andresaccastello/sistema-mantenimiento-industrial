@@ -61,6 +61,16 @@ export function textoAuditoria(
     return efecto || '';
   };
 
+  // Helper para motivo: no agrega punto si ya termina en '.', '!' o '?'
+  const formatearMotivo = (motivo: any): string => {
+    const m = (typeof motivo === 'string' ? motivo : '').trim();
+    if (!m) return '';
+    if (/[.!?]$/.test(m)) {
+      return m;
+    }
+    return `${m}.`;
+  };
+
   switch (accion) {
     case 'USUARIO_CREADO': {
       if (!esObjetoValido) return { titulo: 'Alta del usuario', detalle: '' };
@@ -104,8 +114,8 @@ export function textoAuditoria(
 
     case 'USUARIO_DESACTIVADO': {
       if (!esObjetoValido) return { titulo: 'Usuario desactivado', detalle: '' };
-      const motivo = (detalle.motivo || '').trim();
-      let d = `Motivo: ${motivo}.`;
+      const motivo = formatearMotivo(detalle.motivo);
+      let d = `Motivo: ${motivo}`;
       const abiertas = Number(detalle.intervenciones_abiertas_como_responsable ?? detalle.intervenciones_abiertas ?? 0);
       if (abiertas === 1) {
         d += ' Era responsable de 1 intervención abierta.';
@@ -120,10 +130,10 @@ export function textoAuditoria(
 
     case 'USUARIO_REACTIVADO': {
       if (!esObjetoValido) return { titulo: 'Usuario reactivado', detalle: '' };
-      const motivo = (detalle.motivo || '').trim();
+      const motivo = formatearMotivo(detalle.motivo);
       return {
         titulo: 'Usuario reactivado',
-        detalle: `Motivo: ${motivo}.`,
+        detalle: `Motivo: ${motivo}`,
       };
     }
 
@@ -143,10 +153,10 @@ export function textoAuditoria(
       if (!esObjetoValido) return { titulo: 'Excepción agregada', detalle: '' };
       const permTexto = formatearPermiso(detalle.codigo);
       const efectoTexto = formatearEfecto(detalle, detalle.codigo);
-      const motivo = (detalle.motivo || '').trim();
+      const motivo = formatearMotivo(detalle.motivo);
       return {
         titulo: 'Excepción agregada',
-        detalle: `${permTexto}: ${efectoTexto}. Motivo: ${motivo}.`,
+        detalle: `${permTexto}: ${efectoTexto}. Motivo: ${motivo}`,
       };
     }
 
@@ -155,10 +165,10 @@ export function textoAuditoria(
       const permTexto = formatearPermiso(detalle.codigo);
       const antTexto = formatearEfecto(detalle.anterior, detalle.codigo);
       const nueTexto = formatearEfecto(detalle, detalle.codigo);
-      const motivo = (detalle.motivo || '').trim();
+      const motivo = formatearMotivo(detalle.motivo);
       return {
         titulo: 'Excepción cambiada',
-        detalle: `${permTexto}: ${antTexto} → ${nueTexto}. Motivo: ${motivo}.`,
+        detalle: `${permTexto}: ${antTexto} → ${nueTexto}. Motivo: ${motivo}`,
       };
     }
 
@@ -166,10 +176,10 @@ export function textoAuditoria(
       if (!esObjetoValido) return { titulo: 'Excepción quitada', detalle: '' };
       const permTexto = formatearPermiso(detalle.codigo);
       const antTexto = formatearEfecto(detalle.anterior, detalle.codigo);
-      const motivo = (detalle.motivo || '').trim();
+      const motivo = formatearMotivo(detalle.motivo);
       return {
         titulo: 'Excepción quitada',
-        detalle: `${permTexto}: era ${antTexto}. Motivo: ${motivo}.`,
+        detalle: `${permTexto}: era ${antTexto}. Motivo: ${motivo}`,
       };
     }
 

@@ -111,28 +111,38 @@ export function TabSectores({
                     </Table.Td>
                     <Table.Td>
                       {s.maquinas_activas > 0 ? (
-                        <Link to={`/maquinas?sector=${s.id}`}>
-                          <Text size="sm" c="blue" fw={500}>
-                            {s.maquinas_activas}
-                          </Text>
-                        </Link>
+                        <Text
+                          component={Link}
+                          to={`/maquinas?sector=${s.id}`}
+                          size="sm"
+                          c="blue"
+                          fw={500}
+                          style={{ textDecoration: 'none' }}
+                        >
+                          {s.maquinas_activas}
+                        </Text>
                       ) : (
                         <Text size="sm">{s.maquinas_activas}</Text>
                       )}
                     </Table.Td>
                     <Table.Td>
                       {s.usuarios_activos > 0 && puedeGestionarUsuarios ? (
-                        <Link to={`/usuarios?sector=${s.id}`}>
-                          <Text size="sm" c="blue" fw={500}>
-                            {s.usuarios_activos}
-                          </Text>
-                        </Link>
+                        <Text
+                          component={Link}
+                          to={`/usuarios?sector=${s.id}`}
+                          size="sm"
+                          c="blue"
+                          fw={500}
+                          style={{ textDecoration: 'none' }}
+                        >
+                          {s.usuarios_activos}
+                        </Text>
                       ) : (
                         <Text size="sm">{s.usuarios_activos}</Text>
                       )}
                     </Table.Td>
                     <Table.Td>
-                      <Group gap={6} justify="flex-end">
+                      <Group gap={6} justify="flex-end" wrap="nowrap">
                         <Button
                           variant="subtle"
                           size="xs"
@@ -142,7 +152,12 @@ export function TabSectores({
                         </Button>
                         <Menu shadow="md" position="bottom-end">
                           <Menu.Target>
-                            <ActionIcon variant="subtle" color="gray" size="sm">
+                            <ActionIcon
+                              variant="subtle"
+                              color="gray"
+                              size="sm"
+                              aria-label="Más acciones"
+                            >
                               <IconDotsVertical size={16} />
                             </ActionIcon>
                           </Menu.Target>

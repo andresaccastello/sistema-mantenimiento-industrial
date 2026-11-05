@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import {
   Paper,
   Title,
@@ -93,7 +94,7 @@ export function BloquePermisosUsuario({
               }
 
               return (
-                <>
+                <Fragment key={fila.permiso.codigo}>
                   {esNuevoGrupo && (
                     <Table.Tr key={`grupo-${fila.grupo}`} bg="var(--mantine-color-gray-1)">
                       <Table.Td colSpan={5}>
@@ -157,7 +158,7 @@ export function BloquePermisosUsuario({
                       )}
                     </Table.Td>
                   </Table.Tr>
-                </>
+                </Fragment>
               );
             })}
           </Table.Tbody>

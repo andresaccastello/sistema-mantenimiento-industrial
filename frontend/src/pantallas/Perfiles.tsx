@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -105,7 +106,7 @@ export function Perfiles() {
                       : fila.permiso.nombre;
 
                     return (
-                      <>
+                      <Fragment key={fila.permiso.codigo}>
                         {esNuevoGrupo && (
                           <Table.Tr key={`grupo-${fila.grupo}`} bg="var(--mantine-color-gray-1)">
                             <Table.Td colSpan={1 + perfiles.length}>
@@ -138,7 +139,7 @@ export function Perfiles() {
                             );
                           })}
                         </Table.Tr>
-                      </>
+                      </Fragment>
                     );
                   });
                 })()}

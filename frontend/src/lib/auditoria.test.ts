@@ -170,5 +170,34 @@ describe('FE-36: textoAuditoria', () => {
     );
     assert.equal(t2.detalle, 'Motivo: Licencia. Era responsable de 2 intervenciones abiertas.');
   });
+
+  it('no agrega punto si el motivo ya termina en punto, signo de exclamación o interrogación', () => {
+    // Termina en punto
+    const tPunto = textoAuditoria(
+      { accion: 'USUARIO_DESACTIVADO', detalle: { motivo: 'Volvió el responsable.' } },
+      referencias,
+      catalogo
+    );
+    assert.equal(tPunto.detalle, 'Motivo: Volvió el responsable.');
+
+    // Termina en signo de exclamación
+    const tExclamacion = textoAuditoria(
+      { accion: 'USUARIO_REACTIVADO', detalle: { motivo: '¡Reincorporado!' } },
+      referencias,
+      catalogo
+    );
+    assert.equal(tExclamacion.detalle, 'Motivo: ¡Reincorporado!');
+
+    // Termina en signo de interrogación
+    const tPregunta = textoAuditoria(
+      {
+        accion: 'EXCEPCION_ELIMINADA',
+        detalle: { codigo: 'MAQUINAS_GESTIONAR', anterior: { efecto: 'CONCEDER' }, motivo: '¿Fin de período?' },
+      },
+      referencias,
+      catalogo
+    );
+    assert.equal(tPregunta.detalle, 'Gestionar máquinas: era Concede. Motivo: ¿Fin de período?');
+  });
 });
 

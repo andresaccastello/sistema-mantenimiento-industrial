@@ -56,7 +56,7 @@ export function ModalExcepcion({
       if (excepcionExistente) {
         setEfecto(excepcionExistente.efecto);
         setAlcance(excepcionExistente.alcance || (opciones.alcances[0] ?? null));
-        setMotivo(excepcionExistente.motivo || '');
+        setMotivo('');
       } else {
         setEfecto('CONCEDER');
         setAlcance(opciones.alcances[0] ?? null);

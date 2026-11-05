@@ -66,7 +66,7 @@ export function TabCatalogo({
     const nuevoOrden = moverEnOrden(ids, id, direccion === 'arriba' ? -1 : 1);
     setReordenando(true);
     try {
-      await clienteApi.put(`${basePath}/orden`, { orden: nuevoOrden });
+      await clienteApi.put(`${basePath}/orden`, { ids: nuevoOrden });
       await queryClient.invalidateQueries({ queryKey: [cacheKey] });
       await queryClient.invalidateQueries({ queryKey: ['tablero'] });
       await queryClient.invalidateQueries({ queryKey: ['maquinas'] });
@@ -171,7 +171,7 @@ export function TabCatalogo({
                         <Text size="sm">{item.maquinas_activas}</Text>
                       </Table.Td>
                       <Table.Td>
-                        <Group gap={6} justify="flex-end">
+                        <Group gap={6} justify="flex-end" wrap="nowrap">
                           <Button
                             variant="subtle"
                             size="xs"
@@ -181,7 +181,12 @@ export function TabCatalogo({
                           </Button>
                           <Menu shadow="md" position="bottom-end">
                             <Menu.Target>
-                              <ActionIcon variant="subtle" color="gray" size="sm">
+                              <ActionIcon
+                                variant="subtle"
+                                color="gray"
+                                size="sm"
+                                aria-label="Más acciones"
+                              >
                                 <IconDotsVertical size={16} />
                               </ActionIcon>
                             </Menu.Target>
