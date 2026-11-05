@@ -357,6 +357,7 @@ test('Etapa P — Pendientes técnicos del backend', async (t) => {
       if (createdIntervencionIds.length > 0) {
         await client.query('DELETE FROM historial_estados_intervencion WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);
         await client.query('DELETE FROM intervencion_auditoria WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);
+        await client.query('DELETE FROM notificacion_envios WHERE notificacion_id IN (SELECT id FROM notificaciones WHERE intervencion_id = ANY($1))', [createdIntervencionIds]);
         await client.query('DELETE FROM notificaciones WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);
         await client.query('DELETE FROM intervenciones WHERE id = ANY($1)', [createdIntervencionIds]);
       }
@@ -368,6 +369,7 @@ test('Etapa P — Pendientes técnicos del backend', async (t) => {
         await client.query('DELETE FROM usuario_sector WHERE usuario_id = ANY($1)', [createdUsuarioIds]);
         await client.query('DELETE FROM usuario_permiso WHERE usuario_id = ANY($1)', [createdUsuarioIds]);
         await client.query('DELETE FROM auditoria_permisos WHERE realizado_por_usuario_id = ANY($1) OR sobre_usuario_id = ANY($1)', [createdUsuarioIds]);
+        await client.query('DELETE FROM notificacion_envios WHERE notificacion_id IN (SELECT id FROM notificaciones WHERE usuario_id = ANY($1) OR generada_por_usuario_id = ANY($1))', [createdUsuarioIds]);
         await client.query('DELETE FROM notificaciones WHERE usuario_id = ANY($1) OR generada_por_usuario_id = ANY($1)', [createdUsuarioIds]);
         await client.query('DELETE FROM usuarios WHERE id = ANY($1)', [createdUsuarioIds]);
       }

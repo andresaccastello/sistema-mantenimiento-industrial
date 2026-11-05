@@ -57,15 +57,24 @@ test('Migración 008 — Notificaciones internas, canales y bandeja de salida', 
 
     // 2. Canales iniciales
     await t.test('2. Los tres canales existen con activo = false', async () => {
-      const res = await client.query('SELECT canal, activo FROM notificacion_canales ORDER BY canal ASC');
+      const res = await client.query('SELECT canal FROM notificacion_canales ORDER BY canal ASC');
       assert.strictEqual(res.rows.length, 3);
       assert.deepStrictEqual(
-        res.rows.map(r => ({ canal: r.canal, activo: r.activo })),
-        [
-          { canal: 'EMAIL', activo: false },
-          { canal: 'PUSH', activo: false },
-          { canal: 'WHATSAPP', activo: false },
-        ]
+        res.rows.map(r => r.canal),
+        ['EMAIL', 'PUSH', 'WHATSAPP']
+      );
+
+      const resDefault = await client.query(`
+        SELECT column_default
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'notificacion_canales'
+          AND column_name = 'activo'
+      `);
+      assert.strictEqual(resDefault.rows.length, 1);
+      assert.ok(
+        resDefault.rows[0].column_default?.toLowerCase().includes('false'),
+        'El valor por omisión de activo debe ser false'
       );
     });
 

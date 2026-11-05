@@ -33,6 +33,7 @@ test('Etapa 8 — Tiempos de gestión e inactividad real de las máquinas', asyn
     await client.query('DELETE FROM intervencion_periodos_detencion WHERE intervencion_id = $1', [id]);
     await client.query('DELETE FROM historial_estados_intervencion WHERE intervencion_id = $1', [id]);
     await client.query('DELETE FROM intervencion_auditoria WHERE intervencion_id = $1', [id]);
+    await client.query('DELETE FROM notificacion_envios WHERE notificacion_id IN (SELECT id FROM notificaciones WHERE intervencion_id = $1)', [id]);
     await client.query('DELETE FROM notificaciones WHERE intervencion_id = $1', [id]);
     await client.query('DELETE FROM intervenciones WHERE id = $1', [id]);
   };
@@ -1435,6 +1436,7 @@ test('Etapa 8 — Tiempos de gestión e inactividad real de las máquinas', asyn
         await client.query('DELETE FROM intervencion_periodos_detencion WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);
         await client.query('DELETE FROM historial_estados_intervencion WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);
         await client.query('DELETE FROM intervencion_auditoria WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);
+        await client.query('DELETE FROM notificacion_envios WHERE notificacion_id IN (SELECT id FROM notificaciones WHERE intervencion_id = ANY($1))', [createdIntervencionIds]);
         await client.query('DELETE FROM notificaciones WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);
         await client.query('DELETE FROM historial_estados_maquina WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);
         await client.query('DELETE FROM intervenciones WHERE id = ANY($1)', [createdIntervencionIds]);

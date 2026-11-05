@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -138,51 +138,141 @@ const headerMessage = `[test:todo] Suites descubiertas (${testFiles.length}) en 
 process.stdout.write(headerMessage);
 logStream.write(headerMessage);
 
+function construirMapaTitulos(archivos) {
+  const mapa = new Map();
+  for (const archivo of archivos) {
+    try {
+      const contenido = fs.readFileSync(path.join(rootDir, archivo), 'utf-8');
+      const match = contenido.match(/(?:test|describe)\s*\(\s*['"]([^'"]+)['"]/);
+      if (match) {
+        mapa.set(match[1].trim(), archivo);
+      }
+    } catch (_e) {}
+  }
+  return mapa;
+}
+
 function runGroup(groupFiles, groupName) {
   return new Promise((resolve, reject) => {
     if (groupFiles.length === 0) {
       return resolve({ code: 0, tests: 0, pass: 0, fail: 0 });
     }
-    const cmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-    const args = ['tsx', '--env-file=.env', '--test', '--test-concurrency=1', '--test-reporter=spec', ...groupFiles];
+    const isWin = process.platform === 'win32';
+    const cmd = isWin ? 'npx.cmd' : 'npx';
+    const args = [
+      'tsx',
+      '--env-file=.env',
+      '--test',
+      '--test-concurrency=1',
+      '--test-reporter=spec',
+      '--test-timeout=1800000',
+      '--test-force-exit',
+      ...groupFiles,
+    ];
 
     const child = spawn(cmd, args, {
       cwd: rootDir,
-      shell: process.platform === 'win32',
+      shell: isWin,
+      detached: !isWin,
+      env: {
+        ...process.env,
+        EMAIL_TRANSPORTE: 'simulado',
+      },
     });
 
     let groupOutput = '';
+    let ultimoArchivo = groupFiles[0] || '';
+    const mapaTitulos = construirMapaTitulos(groupFiles);
+
+    const TIMEOUT_INACTIVIDAD_MS = Number(process.env.TEST_TODO_WATCHDOG_MS) || (20 * 60 * 1000);
+    let timer = null;
+    let cortado = false;
+
+    function matarProceso() {
+      if (!child || !child.pid) return;
+      if (isWin) {
+        try {
+          execSync(`taskkill /pid ${child.pid} /T /F`, { stdio: 'ignore' });
+        } catch (_e) {}
+      } else {
+        try {
+          process.kill(-child.pid, 'SIGKILL');
+        } catch (_e) {
+          try {
+            child.kill('SIGKILL');
+          } catch (_e2) {}
+        }
+      }
+    }
+
+    function reiniciarTimer() {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        cortado = true;
+        const msg = `\n[test:todo] CORTADO: 20 minutos sin salida. Último archivo: ${ultimoArchivo}\n`;
+        process.stdout.write(msg);
+        logStream.write(msg);
+        matarProceso();
+      }, TIMEOUT_INACTIVIDAD_MS);
+    }
+
+    reiniciarTimer();
 
     child.stdout.on('data', (chunk) => {
+      reiniciarTimer();
+      const str = chunk.toString();
       process.stdout.write(chunk);
       logStream.write(chunk);
-      groupOutput += chunk.toString();
+      groupOutput += str;
+
+      for (const [titulo, archivo] of mapaTitulos) {
+        if (str.includes(titulo)) {
+          ultimoArchivo = archivo;
+          break;
+        }
+      }
+      for (const f of groupFiles) {
+        if (str.includes(f) || str.includes(f.replace(/\//g, '\\'))) {
+          ultimoArchivo = f;
+          break;
+        }
+      }
     });
 
     child.stderr.on('data', (chunk) => {
+      reiniciarTimer();
+      const str = chunk.toString();
       process.stderr.write(chunk);
       logStream.write(chunk);
-      groupOutput += chunk.toString();
+      groupOutput += str;
     });
 
     child.on('close', (code) => {
+      if (timer) clearTimeout(timer);
+
       const testsMatches = [...groupOutput.matchAll(/ℹ\s+tests\s+(\d+)/g)];
       const passMatches = [...groupOutput.matchAll(/ℹ\s+pass\s+(\d+)/g)];
       const failMatches = [...groupOutput.matchAll(/ℹ\s+fail\s+(\d+)/g)];
 
       const tests = testsMatches.length > 0 ? parseInt(testsMatches[testsMatches.length - 1][1], 10) : 0;
       const pass = passMatches.length > 0 ? parseInt(passMatches[passMatches.length - 1][1], 10) : 0;
-      const fail = failMatches.length > 0 ? parseInt(failMatches[failMatches.length - 1][1], 10) : 0;
+      let fail = failMatches.length > 0 ? parseInt(failMatches[failMatches.length - 1][1], 10) : 0;
+
+      if (cortado) {
+        fail = fail > 0 ? fail : 1;
+      }
 
       resolve({
-        code: code ?? 0,
-        tests,
+        code: cortado ? 1 : (code ?? 0),
+        tests: cortado && tests === 0 ? 1 : tests,
         pass,
         fail,
+        cortado,
       });
     });
 
     child.on('error', (err) => {
+      if (timer) clearTimeout(timer);
       reject(err);
     });
   });

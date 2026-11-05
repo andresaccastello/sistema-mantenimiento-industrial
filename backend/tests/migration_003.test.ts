@@ -270,6 +270,15 @@ test('Migración 003 — Intervenciones y Máquinas', async (t) => {
         )
       `);
       await client.query(`
+        DELETE FROM notificacion_envios WHERE notificacion_id IN (
+          SELECT id FROM notificaciones WHERE intervencion_id IN (
+            SELECT id FROM intervenciones WHERE maquina_id IN (
+              SELECT id FROM maquinas WHERE sector_id = ${sectorId}
+            )
+          )
+        )
+      `);
+      await client.query(`
         DELETE FROM notificaciones WHERE intervencion_id IN (
           SELECT id FROM intervenciones WHERE maquina_id IN (
             SELECT id FROM maquinas WHERE sector_id = ${sectorId}
