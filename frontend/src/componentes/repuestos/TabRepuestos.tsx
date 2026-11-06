@@ -21,6 +21,7 @@ import { clienteApi } from '../../api/cliente';
 import { RepuestoListaItem, ProveedorOpcion } from '../../api/tipos';
 import { formatCantidad, formatMoneda } from '../../lib/formato';
 import {
+  EstadoStockFiltro,
   FiltrosRepuestos,
   filtrarRepuestos,
   resumenStock,
@@ -72,7 +73,7 @@ export function TabRepuestos({ filtros, onCambiarFiltros }: TabRepuestosProps) {
     return filtrarRepuestos(repuestos, filtros);
   }, [repuestos, filtros]);
 
-  const opcionesEstado = [
+  const opcionesEstado: Array<{ value: EstadoStockFiltro; label: string }> = [
     { value: 'todos', label: 'Todos los estados' },
     { value: 'OK', label: 'En stock' },
     { value: 'BAJO', label: 'Bajo mínimo' },
@@ -136,10 +137,10 @@ export function TabRepuestos({ filtros, onCambiarFiltros }: TabRepuestosProps) {
             style={{ flex: 1, minWidth: 220 }}
           />
 
-          <Select
+          <Select<EstadoStockFiltro>
             data={opcionesEstado}
             value={filtros.estado}
-            onChange={(val) => onCambiarFiltros({ estado: (val as any) || 'todos' })}
+            onChange={(val) => onCambiarFiltros({ estado: val || 'todos' })}
             style={{ width: 180 }}
           />
 

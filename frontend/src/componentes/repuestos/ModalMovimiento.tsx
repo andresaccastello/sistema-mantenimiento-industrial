@@ -5,7 +5,6 @@ import {
   Stack,
   TextInput,
   Textarea,
-  NumberInput,
   Select,
   Text,
   Group,
@@ -13,11 +12,17 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { clienteApi } from '../../api/cliente';
-import { RepuestoDetalle, RespuestaMovimientoManual, ProveedorOpcion } from '../../api/tipos';
+import {
+  CuerpoMovimiento,
+  RepuestoDetalle,
+  RespuestaMovimientoManual,
+  ProveedorOpcion,
+} from '../../api/tipos';
 import { useAuth } from '../../auth/AuthContext';
 import { ApiError, mensajeError } from '../../lib/errores';
 import { formatCantidad, formatMoneda } from '../../lib/formato';
 import { validarCantidad, validarCosto, cuerpoMovimiento } from '../../lib/repuestos';
+import { CampoNumero } from './CampoNumero';
 
 export type TipoMovimientoModal = 'ingreso' | 'egreso' | 'ajuste';
 
@@ -105,7 +110,7 @@ export function ModalMovimiento({
     setGuardando(true);
 
     try {
-      let payload: Record<string, any>;
+      let payload: CuerpoMovimiento;
 
       if (tipo === 'ingreso') {
         const errCant = validarCantidad(cantidad);
@@ -152,6 +157,12 @@ export function ModalMovimiento({
           observacion: motTrim,
         });
       } else {
+        if (String(cantidadContada).trim() === '') {
+          setErrorCantidad('Ingresá una cantidad.');
+          setGuardando(false);
+          return;
+        }
+
         if (isNaN(contadaNum) || contadaNum < 0) {
           setErrorCantidad('La cantidad contada no puede ser negativa.');
           setGuardando(false);
@@ -189,13 +200,12 @@ export function ModalMovimiento({
       onCerrar();
       if (onExito) onExito();
     } catch (err: unknown) {
-      if (err instanceof ApiError || (err as any)?.codigo) {
-        if ((err as any).codigo === 'STOCK_INSUFICIENTE') {
-          const disp = (err as any).datos?.disponible ?? stockActual;
-          setErrorCantidad(`Ya no alcanza: hay ${formatCantidad(disp)} en stock.`);
-          queryClient.invalidateQueries({ queryKey: ['repuesto', repuesto.id] });
-          return;
-        }
+      if (err instanceof ApiError && err.codigo === 'STOCK_INSUFICIENTE') {
+        const disponible = err.datos?.disponible;
+        const disp = typeof disponible === 'number' ? disponible : stockActual;
+        setErrorCantidad(`Ya no alcanza: hay ${formatCantidad(disp)} en stock.`);
+        queryClient.invalidateQueries({ queryKey: ['repuesto', repuesto.id] });
+        return;
       }
       notifications.show({ message: mensajeError(err), color: 'red' });
     } finally {
@@ -217,25 +227,19 @@ export function ModalMovimiento({
           {tipo === 'ingreso' && (
             <>
               <Group grow align="flex-start">
-                <NumberInput
+                <CampoNumero
                   label={`Cantidad a ingresar (${repuesto.unidad})`}
                   required
-                  decimalSeparator=","
-                  thousandSeparator="."
                   decimalScale={3}
-                  min={0.001}
                   value={cantidad}
                   onChange={setCantidad}
                   error={errorCantidad}
                 />
                 {puedeCargarCostos && (
-                  <NumberInput
+                  <CampoNumero
                     label="Costo unitario"
                     prefix="$ "
-                    decimalSeparator=","
-                    thousandSeparator="."
                     decimalScale={2}
-                    min={0}
                     value={costoUnitario}
                     onChange={setCostoUnitario}
                     error={errorCosto}
@@ -277,14 +281,10 @@ export function ModalMovimiento({
                 Stock actual en depósito: <strong>{formatCantidad(stockActual)} {repuesto.unidad}</strong>
               </Text>
 
-              <NumberInput
+              <CampoNumero
                 label={`Cantidad a egresar (${repuesto.unidad})`}
                 required
-                decimalSeparator=","
-                thousandSeparator="."
                 decimalScale={3}
-                min={0.001}
-                max={stockActual}
                 value={cantidad}
                 onChange={setCantidad}
                 error={errorCantidad}
@@ -311,13 +311,10 @@ export function ModalMovimiento({
                 Stock actual según sistema: <strong>{formatCantidad(stockActual)} {repuesto.unidad}</strong>
               </Text>
 
-              <NumberInput
+              <CampoNumero
                 label={`Cantidad contada en depósito (${repuesto.unidad})`}
                 required
-                decimalSeparator=","
-                thousandSeparator="."
                 decimalScale={3}
-                min={0}
                 value={cantidadContada}
                 onChange={setCantidadContada}
                 error={errorCantidad}

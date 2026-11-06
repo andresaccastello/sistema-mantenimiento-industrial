@@ -7,15 +7,28 @@ import {
   Textarea,
   Autocomplete,
   Switch,
-  NumberInput,
   Select,
   Group,
   Button,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { clienteApi } from '../../api/cliente';
-import { RepuestoDetalle, RepuestoListaItem, ProveedorOpcion } from '../../api/tipos';
+import {
+  CuerpoRepuesto,
+  RepuestoDetalle,
+  RepuestoListaItem,
+  ProveedorOpcion,
+} from '../../api/tipos';
 import { ApiError, mensajeError } from '../../lib/errores';
+import { validarCosto } from '../../lib/repuestos';
+import { CampoNumero } from './CampoNumero';
+
+/** Stock inicial y mínimo: vacíos o desde 0. */
+function errorDesdeCero(valor: number | string): string | null {
+  if (String(valor).trim() === '') return null;
+  const n = Number(valor);
+  return isNaN(n) || n < 0 ? 'No puede ser negativo.' : null;
+}
 
 export interface ModalRepuestoProps {
   abierto: boolean;
@@ -44,6 +57,9 @@ export function ModalRepuesto({ abierto, onCerrar, repuesto, onExito }: ModalRep
   const [errorCodigo, setErrorCodigo] = useState<string | null>(null);
   const [errorNombre, setErrorNombre] = useState<string | null>(null);
   const [errorStock, setErrorStock] = useState<string | null>(null);
+  const [errorStockInicial, setErrorStockInicial] = useState<string | null>(null);
+  const [errorStockMinimo, setErrorStockMinimo] = useState<string | null>(null);
+  const [errorCosto, setErrorCosto] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
   // Opciones de proveedores (solo activos)
@@ -63,6 +79,9 @@ export function ModalRepuesto({ abierto, onCerrar, repuesto, onExito }: ModalRep
       setErrorCodigo(null);
       setErrorNombre(null);
       setErrorStock(null);
+      setErrorStockInicial(null);
+      setErrorStockMinimo(null);
+      setErrorCosto(null);
       if (repuesto) {
         setCodigo(repuesto.codigo || '');
         setNombre(repuesto.nombre);
@@ -94,6 +113,9 @@ export function ModalRepuesto({ abierto, onCerrar, repuesto, onExito }: ModalRep
     setErrorCodigo(null);
     setErrorNombre(null);
     setErrorStock(null);
+    setErrorStockInicial(null);
+    setErrorStockMinimo(null);
+    setErrorCosto(null);
 
     const nomTrim = nombre.trim();
     if (!nomTrim) {
@@ -101,10 +123,26 @@ export function ModalRepuesto({ abierto, onCerrar, repuesto, onExito }: ModalRep
       return;
     }
 
+    if (llevaStock) {
+      const errInicial = esEdicion ? null : errorDesdeCero(stockInicial);
+      const errMinimo = errorDesdeCero(stockMinimo);
+      if (errInicial || errMinimo) {
+        setErrorStockInicial(errInicial);
+        setErrorStockMinimo(errMinimo);
+        return;
+      }
+    }
+
+    const errC = validarCosto(costoUnitario);
+    if (errC) {
+      setErrorCosto(errC);
+      return;
+    }
+
     setGuardando(true);
 
     try {
-      const payload: Record<string, any> = {
+      const payload: CuerpoRepuesto = {
         nombre: nomTrim,
         codigo: codigo.trim() ? codigo.trim() : null,
         unidad: unidad.trim() || 'unidad',
@@ -134,8 +172,8 @@ export function ModalRepuesto({ abierto, onCerrar, repuesto, onExito }: ModalRep
         onCerrar();
         if (onExito) onExito(creado.id);
       }
-    } catch (err: any) {
-      if (err instanceof ApiError || err?.codigo) {
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
         const cod = err.codigo;
         if (cod === 'CODIGO_DUPLICADO') {
           setErrorCodigo('Ya existe un repuesto con este código.');
@@ -218,40 +256,34 @@ export function ModalRepuesto({ abierto, onCerrar, repuesto, onExito }: ModalRep
           {llevaStock && (
             <Group grow align="flex-start">
               {!esEdicion && (
-                <NumberInput
+                <CampoNumero
                   label="Stock inicial"
-                  decimalSeparator=","
-                  thousandSeparator="."
                   decimalScale={3}
-                  min={0}
                   value={stockInicial}
                   onChange={setStockInicial}
+                  error={errorStockInicial}
                 />
               )}
-              <NumberInput
+              <CampoNumero
                 label="Stock mínimo"
                 placeholder="Opcional"
-                decimalSeparator=","
-                thousandSeparator="."
                 decimalScale={3}
-                min={0}
                 value={stockMinimo}
                 onChange={setStockMinimo}
+                error={errorStockMinimo}
               />
             </Group>
           )}
 
           <Group grow align="flex-start">
-            <NumberInput
+            <CampoNumero
               label="Costo unitario"
               placeholder="0,00"
               prefix="$ "
-              decimalSeparator=","
-              thousandSeparator="."
               decimalScale={2}
-              min={0}
               value={costoUnitario}
               onChange={setCostoUnitario}
+              error={errorCosto}
             />
             <TextInput
               label="Ubicación"

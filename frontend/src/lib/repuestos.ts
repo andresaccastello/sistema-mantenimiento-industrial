@@ -5,6 +5,7 @@
 
 import { formatCantidad, parsearId } from './formato';
 import { normalizarTexto } from './maquinas';
+import type { CuerpoMovimiento } from '../api/tipos';
 
 export type ColorEstadoStock = 'verde' | 'naranja' | 'rojo' | 'gris';
 
@@ -480,11 +481,15 @@ export interface CamposMovimientoManual {
 /**
  * Arma el cuerpo del JSON para el registro manual de movimientos de stock
  * según la sección 1.4 de la etapa R1.1.
+ *
+ * Si falta un dato obligatorio del tipo (la cantidad, la cantidad contada o el
+ * motivo), lanza un error en vez de armar un cuerpo incompleto. El diálogo los
+ * valida antes de llamarla.
  */
 export function cuerpoMovimiento(
   tipo: TipoMovimientoManual,
   campos: CamposMovimientoManual
-): Record<string, any> {
+): CuerpoMovimiento {
   const obs =
     campos.observacion !== undefined && campos.observacion !== null
       ? campos.observacion
@@ -493,7 +498,10 @@ export function cuerpoMovimiento(
         : undefined;
 
   if (tipo === 'INGRESO') {
-    const res: Record<string, any> = {
+    if (campos.cantidad === undefined) {
+      throw new Error('Falta la cantidad del ingreso.');
+    }
+    const res: CuerpoMovimiento = {
       tipo: 'INGRESO',
       cantidad: campos.cantidad,
     };
@@ -506,13 +514,20 @@ export function cuerpoMovimiento(
     if (campos.comprobante !== undefined && campos.comprobante !== null && campos.comprobante !== '') {
       res.comprobante = campos.comprobante;
     }
-    if (obs !== undefined && obs !== null && obs !== '') {
+    if (obs !== undefined && obs !== '') {
       res.observacion = obs;
     }
     return res;
   }
 
+  if (obs === undefined) {
+    throw new Error('Falta el motivo del movimiento.');
+  }
+
   if (tipo === 'EGRESO') {
+    if (campos.cantidad === undefined) {
+      throw new Error('Falta la cantidad del egreso.');
+    }
     return {
       tipo: 'EGRESO',
       cantidad: campos.cantidad,
@@ -521,10 +536,31 @@ export function cuerpoMovimiento(
   }
 
   // AJUSTE
+  const contada = campos.cantidad_contada !== undefined ? campos.cantidad_contada : campos.cantidad;
+  if (contada === undefined) {
+    throw new Error('Falta la cantidad contada del ajuste.');
+  }
   return {
     tipo: 'AJUSTE',
-    cantidad_contada: campos.cantidad_contada !== undefined ? campos.cantidad_contada : campos.cantidad,
+    cantidad_contada: contada,
     observacion: obs,
   };
+}
+
+const ETIQUETAS_ORIGEN_COSTO: Record<string, string> = {
+  MIGRACION: 'Carga inicial',
+  ALTA: 'Alta',
+  EDICION: 'Edición',
+  INGRESO: 'Ingreso',
+  CONSUMO: 'Consumo',
+};
+
+/**
+ * Etiqueta del origen de un cambio de costo. Un valor desconocido sale tal cual.
+ */
+export function etiquetaOrigenCosto(origen: string): string {
+  return Object.prototype.hasOwnProperty.call(ETIQUETAS_ORIGEN_COSTO, origen)
+    ? ETIQUETAS_ORIGEN_COSTO[origen]
+    : origen;
 }
 

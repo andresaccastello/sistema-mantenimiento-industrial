@@ -4,7 +4,6 @@ import {
   Modal,
   Stack,
   Select,
-  NumberInput,
   Textarea,
   Text,
   Group,
@@ -12,11 +11,12 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { clienteApi } from '../../api/cliente';
-import { RepuestoOpcion } from '../../api/tipos';
+import { CuerpoConsumo, RepuestoOpcion } from '../../api/tipos';
 import { useAuth } from '../../auth/AuthContext';
 import { ApiError, mensajeError } from '../../lib/errores';
 import { formatCantidad } from '../../lib/formato';
 import { validarCantidad, validarCosto } from '../../lib/repuestos';
+import { CampoNumero } from './CampoNumero';
 
 export interface ModalConsumoProps {
   abierto: boolean;
@@ -144,7 +144,7 @@ export function ModalConsumo({
     setGuardando(true);
 
     try {
-      const payload: Record<string, any> = {
+      const payload: CuerpoConsumo = {
         repuesto_id: Number(repuestoId),
         cantidad: Number(cantidad),
         observacion: observacion.trim() ? observacion.trim() : null,
@@ -167,14 +167,14 @@ export function ModalConsumo({
       queryClient.invalidateQueries({ queryKey: ['repuesto'] });
       onCerrar();
       if (onExito) onExito();
-    } catch (err: any) {
-      if (err instanceof ApiError || err?.codigo) {
-        if (err.codigo === 'STOCK_INSUFICIENTE') {
-          const disp = err.datos?.disponible ?? repuestoElegido.cantidad_disponible;
-          setErrorCantidad(`Ya no alcanza: hay ${formatCantidad(disp)} en stock.`);
-          queryClient.invalidateQueries({ queryKey: ['repuestos', 'opciones'] });
-          return;
-        }
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.codigo === 'STOCK_INSUFICIENTE') {
+        const disponible = err.datos?.disponible;
+        const disp =
+          typeof disponible === 'number' ? disponible : repuestoElegido.cantidad_disponible;
+        setErrorCantidad(`Ya no alcanza: hay ${formatCantidad(disp)} en stock.`);
+        queryClient.invalidateQueries({ queryKey: ['repuestos', 'opciones'] });
+        return;
       }
       notifications.show({ message: mensajeError(err), color: 'red' });
     } finally {
@@ -198,14 +198,10 @@ export function ModalConsumo({
           />
 
           {repuestoElegido && (
-            <NumberInput
+            <CampoNumero
               label={`Cantidad utilizada (${repuestoElegido.unidad})`}
               required
-              decimalSeparator=","
-              thousandSeparator="."
               decimalScale={3}
-              min={0.001}
-              max={repuestoElegido.lleva_stock ? repuestoElegido.cantidad_disponible ?? undefined : undefined}
               value={cantidad}
               onChange={setCantidad}
               error={errorCantidad}
@@ -213,14 +209,11 @@ export function ModalConsumo({
           )}
 
           {repuestoElegido && !repuestoElegido.lleva_stock && puedeCargarCostos && (
-            <NumberInput
+            <CampoNumero
               label="Costo unitario"
               placeholder="0,00"
               prefix="$ "
-              decimalSeparator=","
-              thousandSeparator="."
               decimalScale={2}
-              min={0}
               value={costoUnitario}
               onChange={setCostoUnitario}
               error={errorCosto}

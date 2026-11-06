@@ -45,10 +45,12 @@ import { ModalDesactivarElemento } from '../componentes/admin/ModalDesactivarEle
 import { ModalReactivarElemento } from '../componentes/admin/ModalReactivarElemento';
 import { formatCantidad, formatFechaHora, formatMoneda } from '../lib/formato';
 import { nombreCompleto } from '../lib/personas';
+import { ApiError } from '../lib/errores';
 import {
   infoEstadoStock,
   badgeColorStock,
   textoMovimiento,
+  etiquetaOrigenCosto,
 } from '../lib/repuestos';
 
 export function DetalleRepuesto() {
@@ -108,8 +110,7 @@ export function DetalleRepuesto() {
   }
 
   if (error || !repuesto) {
-    const status = (error as any)?.status;
-    if (status === 404) {
+    if (error instanceof ApiError && error.status === 404) {
       return <NoEncontrada />;
     }
     return (
@@ -428,7 +429,7 @@ export function DetalleRepuesto() {
                         <Table.Td>{formatMoneda(c.costo_unitario)}</Table.Td>
                         <Table.Td>
                           <Badge size="sm" variant="outline">
-                            {c.origen}
+                            {etiquetaOrigenCosto(c.origen)}
                           </Badge>
                         </Table.Td>
                         <Table.Td>{nombreCompleto(c.registrado_por)}</Table.Td>

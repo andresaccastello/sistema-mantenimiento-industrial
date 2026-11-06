@@ -67,7 +67,7 @@ export function ModalCancelarPedido({
       }
       onCerrar();
       if (onExito) onExito();
-    } catch (err: any) {
+    } catch (err: unknown) {
       notifications.show({ message: mensajeError(err), color: 'red' });
     } finally {
       setGuardando(false);

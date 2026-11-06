@@ -5,17 +5,22 @@ import {
   Stack,
   TextInput,
   Textarea,
-  NumberInput,
   Select,
   Group,
   Button,
 } from '@mantine/core';
-import { DatePickerInput } from '@mantine/dates';
+import { DatePickerInput, DateStringValue } from '@mantine/dates';
 import { notifications } from '@mantine/notifications';
 import { clienteApi } from '../../api/cliente';
-import { PedidoIntervencionItem, RepuestoOpcion, ProveedorOpcion } from '../../api/tipos';
-import { ApiError, mensajeError } from '../../lib/errores';
-import { hoyLocal } from '../../lib/repuestos';
+import {
+  CuerpoPedido,
+  PedidoIntervencionItem,
+  RepuestoOpcion,
+  ProveedorOpcion,
+} from '../../api/tipos';
+import { mensajeError } from '../../lib/errores';
+import { hoyLocal, validarCantidad } from '../../lib/repuestos';
+import { CampoNumero } from './CampoNumero';
 
 export interface ModalPedidoProps {
   abierto: boolean;
@@ -25,20 +30,12 @@ export interface ModalPedidoProps {
   onExito?: () => void;
 }
 
-function parseYMD(s: string | null | undefined): Date | null {
-  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
-  const [y, m, d] = s.split('-').map(Number);
-  return new Date(y, m - 1, d);
-}
-
-function aYYYYMMDD(d: Date | string | null | undefined): string | null {
-  if (!d) return null;
-  const val = typeof d === 'string' ? new Date(d) : d;
-  if (isNaN(val.getTime())) return null;
-  const year = val.getFullYear();
-  const month = String(val.getMonth() + 1).padStart(2, '0');
-  const day = String(val.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+/**
+ * Mantine 9 entrega y recibe los días como `YYYY-MM-DD`, igual que la API:
+ * se usan tal cual, sin pasar por `Date`.
+ */
+function diaValido(s: string | null | undefined): DateStringValue | null {
+  return s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
 }
 
 export function ModalPedido({
@@ -55,8 +52,8 @@ export function ModalPedido({
   const [descripcion, setDescripcion] = useState('');
   const [cantidad, setCantidad] = useState<number | string>(1);
   const [proveedorId, setProveedorId] = useState<string | null>(null);
-  const [pedidoEn, setPedidoEn] = useState<Date | null>(null);
-  const [esperadoPara, setEsperadoPara] = useState<Date | null>(null);
+  const [pedidoEn, setPedidoEn] = useState<DateStringValue | null>(null);
+  const [esperadoPara, setEsperadoPara] = useState<DateStringValue | null>(null);
   const [observacion, setObservacion] = useState('');
 
   const [errorDescripcion, setErrorDescripcion] = useState<string | null>(null);
@@ -98,8 +95,8 @@ export function ModalPedido({
         setDescripcion(pedido.descripcion || '');
         setCantidad(pedido.cantidad);
         setProveedorId(pedido.proveedor ? String(pedido.proveedor.id) : null);
-        setPedidoEn(parseYMD(pedido.pedido_en));
-        setEsperadoPara(parseYMD(pedido.esperado_para));
+        setPedidoEn(diaValido(pedido.pedido_en));
+        setEsperadoPara(diaValido(pedido.esperado_para));
         setObservacion(pedido.observacion || '');
       } else {
         setRepuestoId(null);
@@ -128,14 +125,15 @@ export function ModalPedido({
       return;
     }
 
-    const cantNum = Number(cantidad);
-    if (isNaN(cantNum) || cantNum <= 0) {
-      setErrorCantidad('La cantidad debe ser mayor a cero.');
+    const errCant = validarCantidad(cantidad);
+    if (errCant) {
+      setErrorCantidad(errCant);
       return;
     }
+    const cantNum = Number(cantidad);
 
-    const pedidoEnStr = aYYYYMMDD(pedidoEn);
-    const esperadoParaStr = aYYYYMMDD(esperadoPara);
+    const pedidoEnStr = diaValido(pedidoEn);
+    const esperadoParaStr = diaValido(esperadoPara);
 
     const hoy = hoyLocal();
     if (pedidoEnStr && pedidoEnStr > hoy) {
@@ -151,7 +149,7 @@ export function ModalPedido({
     setGuardando(true);
 
     try {
-      const payload: Record<string, any> = {
+      const payload: CuerpoPedido = {
         repuesto_id: repuestoId ? Number(repuestoId) : null,
         descripcion: descripcion.trim() ? descripcion.trim() : null,
         cantidad: cantNum,
@@ -174,7 +172,7 @@ export function ModalPedido({
       queryClient.invalidateQueries({ queryKey: ['repuestos'] });
       onCerrar();
       if (onExito) onExito();
-    } catch (err: any) {
+    } catch (err: unknown) {
       notifications.show({ message: mensajeError(err), color: 'red' });
     } finally {
       setGuardando(false);
@@ -215,13 +213,10 @@ export function ModalPedido({
           )}
 
           <Group grow align="flex-start">
-            <NumberInput
+            <CampoNumero
               label="Cantidad"
               required
-              decimalSeparator=","
-              thousandSeparator="."
               decimalScale={3}
-              min={0.001}
               value={cantidad}
               onChange={setCantidad}
               error={errorCantidad}
@@ -242,8 +237,8 @@ export function ModalPedido({
               label="Fecha del pedido"
               placeholder="Hoy o fecha pasada"
               value={pedidoEn}
-              onChange={(d: any) => {
-                setPedidoEn(d ? (typeof d === 'string' ? new Date(d) : d) : null);
+              onChange={(d: DateStringValue | null) => {
+                setPedidoEn(d);
                 if (errorFechas) setErrorFechas(null);
               }}
               maxDate={new Date()}
@@ -253,8 +248,8 @@ export function ModalPedido({
               label="Se espera para"
               placeholder="Fecha estimada"
               value={esperadoPara}
-              onChange={(d: any) => {
-                setEsperadoPara(d ? (typeof d === 'string' ? new Date(d) : d) : null);
+              onChange={(d: DateStringValue | null) => {
+                setEsperadoPara(d);
                 if (errorFechas) setErrorFechas(null);
               }}
               minDate={pedidoEn || undefined}

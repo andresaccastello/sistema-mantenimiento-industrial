@@ -93,8 +93,8 @@ export function ModalProveedor({
       queryClient.invalidateQueries({ queryKey: ['proveedores', 'opciones'] });
       onCerrar();
       if (onExito) onExito();
-    } catch (err: any) {
-      if (err instanceof ApiError || err?.codigo) {
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
         if (err.codigo === 'NOMBRE_DUPLICADO') {
           setErrorNombre('Ya existe un proveedor con este nombre.');
           return;

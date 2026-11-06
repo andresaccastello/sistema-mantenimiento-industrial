@@ -783,6 +783,69 @@ export interface PedidoRepuestoItem extends PedidoIntervencionItem {
   };
 }
 
+// Cuerpos que manda el frontend (secciones 4 y 5 de la R1)
+
+/** `POST /api/repuestos` y `PUT /api/repuestos/:id` (4.3). */
+export interface CuerpoRepuesto {
+  codigo?: string | null;
+  nombre: string;
+  unidad?: string;
+  lleva_stock?: boolean;
+  /** Solo en el alta. */
+  stock_inicial?: number;
+  stock_minimo?: number | null;
+  costo_unitario?: number | null;
+  proveedor_id?: number | null;
+  ubicacion?: string | null;
+  descripcion?: string | null;
+  activo?: boolean;
+}
+
+/** `POST /api/repuestos/:id/movimientos` (4.4). */
+export type CuerpoMovimiento =
+  | {
+      tipo: 'INGRESO';
+      cantidad: number;
+      costo_unitario?: number;
+      proveedor_id?: number;
+      comprobante?: string;
+      observacion?: string;
+    }
+  | { tipo: 'EGRESO'; cantidad: number; observacion: string }
+  | { tipo: 'AJUSTE'; cantidad_contada: number; observacion: string };
+
+/** `POST /api/intervenciones/:id/repuestos` (5.1). */
+export interface CuerpoConsumo {
+  repuesto_id: number;
+  cantidad: number;
+  observacion?: string | null;
+  /** Solo para un repuesto sin control de stock. */
+  costo_unitario?: number;
+  /** Obligatorio en una intervención finalizada. */
+  motivo?: string;
+}
+
+/** `POST /api/intervenciones/:id/pedidos` y `PATCH …/pedidos/:pedidoId` (5.2). */
+export interface CuerpoPedido {
+  repuesto_id?: number | null;
+  descripcion?: string | null;
+  cantidad: number;
+  proveedor_id?: number | null;
+  /** `YYYY-MM-DD`. */
+  pedido_en?: string | null;
+  /** `YYYY-MM-DD`. */
+  esperado_para?: string | null;
+  observacion?: string | null;
+}
+
+/** `POST /api/intervenciones/:id/pedidos/:pedidoId/recibir` (5.2). */
+export interface CuerpoRecepcion {
+  recibido_en?: string;
+  ingresar_stock?: boolean;
+  costo_unitario?: number;
+  comprobante?: string | null;
+}
+
 export interface ReporteRepuestosRespuesta {
   desde: string;
   hasta: string;

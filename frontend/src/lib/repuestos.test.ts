@@ -13,6 +13,7 @@ import {
   infoPedido,
   textoMovimiento,
   cuerpoMovimiento,
+  etiquetaOrigenCosto,
 } from './repuestos';
 
 describe('FE-47: formatMoneda y formatCantidad', () => {
@@ -289,3 +290,16 @@ describe('FE-56: cuerpoMovimiento', () => {
   });
 });
 
+describe('FE-57: etiquetaOrigenCosto', () => {
+  it('traduce los cinco orígenes del historial de costos', () => {
+    assert.equal(etiquetaOrigenCosto('MIGRACION'), 'Carga inicial');
+    assert.equal(etiquetaOrigenCosto('ALTA'), 'Alta');
+    assert.equal(etiquetaOrigenCosto('EDICION'), 'Edición');
+    assert.equal(etiquetaOrigenCosto('INGRESO'), 'Ingreso');
+    assert.equal(etiquetaOrigenCosto('CONSUMO'), 'Consumo');
+  });
+
+  it('un origen desconocido sale tal cual', () => {
+    assert.equal(etiquetaOrigenCosto('OTRO_ORIGEN'), 'OTRO_ORIGEN');
+  });
+});

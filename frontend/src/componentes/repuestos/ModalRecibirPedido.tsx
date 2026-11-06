@@ -4,18 +4,19 @@ import {
   Modal,
   Stack,
   TextInput,
-  NumberInput,
   Switch,
   Group,
   Button,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { clienteApi } from '../../api/cliente';
-import { PedidoIntervencionItem } from '../../api/tipos';
+import { CuerpoRecepcion, PedidoIntervencionItem } from '../../api/tipos';
 import { useAuth } from '../../auth/AuthContext';
-import { ApiError, mensajeError } from '../../lib/errores';
+import { mensajeError } from '../../lib/errores';
 import { Momento, momentoAIso } from '../../lib/fechas';
+import { validarCosto } from '../../lib/repuestos';
 import { SelectorMomento } from '../SelectorMomento';
+import { CampoNumero } from './CampoNumero';
 
 export interface ModalRecibirPedidoProps {
   abierto: boolean;
@@ -46,6 +47,7 @@ export function ModalRecibirPedido({
   const [ingresarStock, setIngresarStock] = useState(admiteStock);
   const [costoUnitario, setCostoUnitario] = useState<number | string>('');
   const [comprobante, setComprobante] = useState('');
+  const [errorCosto, setErrorCosto] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
@@ -54,6 +56,7 @@ export function ModalRecibirPedido({
       setIngresarStock(Boolean(pedido?.repuesto && pedido.repuesto.lleva_stock));
       setCostoUnitario('');
       setComprobante('');
+      setErrorCosto(null);
     }
   }, [abierto, pedido]);
 
@@ -61,10 +64,21 @@ export function ModalRecibirPedido({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorCosto(null);
+
+    const mandaCosto = admiteStock && ingresarStock && puedeCargarCostos;
+    if (mandaCosto) {
+      const errC = validarCosto(costoUnitario);
+      if (errC) {
+        setErrorCosto(errC);
+        return;
+      }
+    }
+
     setGuardando(true);
 
     try {
-      const payload: Record<string, any> = {
+      const payload: CuerpoRecepcion = {
         ingresar_stock: ingresarStock,
         comprobante: comprobante.trim() ? comprobante.trim() : null,
       };
@@ -74,7 +88,7 @@ export function ModalRecibirPedido({
         payload.recibido_en = iso;
       }
 
-      if (ingresarStock && puedeCargarCostos && costoUnitario !== '' && costoUnitario !== null) {
+      if (mandaCosto && costoUnitario !== '' && costoUnitario !== null) {
         payload.costo_unitario = Number(costoUnitario);
       }
 
@@ -92,7 +106,7 @@ export function ModalRecibirPedido({
       }
       onCerrar();
       if (onExito) onExito();
-    } catch (err: any) {
+    } catch (err: unknown) {
       notifications.show({ message: mensajeError(err), color: 'red' });
     } finally {
       setGuardando(false);
@@ -119,16 +133,14 @@ export function ModalRecibirPedido({
           )}
 
           {admiteStock && ingresarStock && puedeCargarCostos && (
-            <NumberInput
+            <CampoNumero
               label="Costo unitario"
               placeholder="0,00"
               prefix="$ "
-              decimalSeparator=","
-              thousandSeparator="."
               decimalScale={2}
-              min={0}
               value={costoUnitario}
               onChange={setCostoUnitario}
+              error={errorCosto}
             />
           )}
 
