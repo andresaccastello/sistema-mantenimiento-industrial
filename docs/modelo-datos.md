@@ -87,6 +87,16 @@ Historial de costos unitarios de cada repuesto según alta, edición, ingreso o 
 ### intervencion_repuestos
 Detalle de repuestos consumidos en una intervención, con soporte para anulación y devolución.
 
+### intervencion_costos
+Renglones de costo de una intervención que no son repuestos: mano de obra, servicio externo, transporte, otro y ajuste (D-019). No se editan: se anulan con motivo.
+
+- `usuario_id`: la persona interna de un renglón `MANO_OBRA` (FK a `usuarios`, nulo).
+- `proveedor_id`: el externo (FK a `proveedores`, nulo).
+- `horas` (`numeric(8,2)`, nulo): solo en `MANO_OBRA`, mayores que 0.
+- `valor_hora` (`numeric(14,2)`, nulo): solo con horas, desde 0; entonces `importe = round(horas * valor_hora, 2)`.
+
+Un `MANO_OBRA` tiene horas y exactamente uno de `usuario_id` o `proveedor_id`. Un `AJUSTE` tiene importe distinto de 0 y motivo.
+
 ### pedidos_repuesto
 Seguimiento de pedidos de repuestos asociados a una intervención, con estados de compra y recepción.
 
@@ -119,6 +129,7 @@ PLANTAS ──< SECTORES ──< MAQUINAS >── CRITICIDADES
                                         │
                                         ├──< HISTORIAL_ESTADOS_INTERVENCION
                                         ├──< INTERVENCION_REPUESTOS
+                                        ├──< INTERVENCION_COSTOS
                                         ├──< PEDIDOS_REPUESTO
                                         └──< DOCUMENTOS
 

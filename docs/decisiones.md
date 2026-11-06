@@ -239,4 +239,18 @@ Sobre las máquinas activas de la selección y el período elegido:
    - los carga quien tiene `REPUESTOS_GESTIONAR` o `COSTOS_REGISTRAR`.
 9. **Reporte de repuestos:** consumos no anulados, por fecha de registro, de las máquinas visibles de la selección, activas o no: lo gastado en una máquina dada de baja sigue siendo gasto.
 
+## D-019 — Costos de la intervención
 
+**Estado:** Aceptada
+
+1. **El total sale solo:** repuestos usados (D-018) más los renglones no anulados. `costo_mano_obra` es la suma de los renglones `MANO_OBRA`. Ningún importe se escribe a mano en la intervención.
+2. **Renglones** de mano de obra, servicio externo, transporte, otro y ajuste. No se editan: se anulan con motivo y se carga otro.
+3. **Mano de obra:** un renglón por persona, con horas, interna (un usuario) o externa (un proveedor). Con valor hora, el importe es horas × valor hora, redondeado a centavos. Sin valor hora, se carga el importe total.
+4. **Solo el ajuste puede ser negativo, y el total nunca:** una operación que lo dejaría negativo se rechaza, aunque sea anular un repuesto.
+5. **Quién puede:**
+   - carga y anula quien tiene `COSTOS_REGISTRAR`, en `EN_PROCESO` y `EN_ESPERA_REPUESTOS`;
+   - con la intervención `FINALIZADA`, además `INTERVENCIONES_CORREGIR` y motivo;
+   - con la intervención `CANCELADA`, solo se anula, con `INTERVENCIONES_CORREGIR`.
+6. **Importes visibles:** con `COSTOS_VER`. Las horas de mano de obra las ve cualquiera que ve la intervención.
+7. **Valor hora:** no se guarda por persona. Se carga en cada renglón y queda como histórico. Una tarifa por persona es una mejora futura.
+8. **Reporte de costos:** gasto registrado en el período, por la fecha de cada consumo y de cada renglón, no anulado, de las máquinas visibles de la selección, activas o no. Es el mismo criterio que D-018, punto 9.

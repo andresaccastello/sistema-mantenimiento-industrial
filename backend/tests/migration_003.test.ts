@@ -225,8 +225,8 @@ test('Migración 003 — Intervenciones y Máquinas', async (t) => {
 
       // Importe negativo en AJUSTE sí está permitido
       const ajusteRes = await client.query(
-        `INSERT INTO intervencion_costos (intervencion_id, tipo, descripcion, importe, registrado_por_usuario_id)
-         VALUES ($1, 'AJUSTE', 'Descuento por garantía', -50, $2) RETURNING id`,
+        `INSERT INTO intervencion_costos (intervencion_id, tipo, descripcion, importe, motivo, registrado_por_usuario_id)
+         VALUES ($1, 'AJUSTE', 'Descuento por garantía', -50, 'Garantía del proveedor', $2) RETURNING id`,
         [intervencionId, userId]
       );
       assert.ok(ajusteRes.rows[0].id);

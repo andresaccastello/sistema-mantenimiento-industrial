@@ -1196,7 +1196,7 @@ test('Etapa 6 — Reapertura de intervenciones, eliminación lógica y edición 
       const idCost = (await resCost.json()).id;
       createdIntervencionIds.push(idCost);
       await client.query(
-        "INSERT INTO intervencion_costos (intervencion_id, tipo, descripcion, importe, registrado_por_usuario_id, anulado_en, anulado_por_usuario_id, motivo_anulacion) VALUES ($1, 'MANO_OBRA', 'Costo prueba', 100, $2, NOW(), $2, 'Anulado')",
+        "INSERT INTO intervencion_costos (intervencion_id, tipo, descripcion, importe, horas, usuario_id, registrado_por_usuario_id, anulado_en, anulado_por_usuario_id, motivo_anulacion) VALUES ($1, 'MANO_OBRA', 'Costo prueba', 100, 1, $2, $2, NOW(), $2, 'Anulado')",
         [idCost, resp1Id]
       );
       const resElimCost = await app.request(`/api/intervenciones/${idCost}/eliminar`, {
