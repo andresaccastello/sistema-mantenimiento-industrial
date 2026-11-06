@@ -15,6 +15,7 @@ import { criticidadesApp, tiposEquipoApp, plantasApp } from './catalogos.ts';
 import { avisosTriggerApp, configuracionAvisosApp } from './avisos/api.ts';
 import proveedoresApp from './proveedores.ts';
 import repuestosApp from './repuestos.ts';
+import pedidosRepuestoApp from './pedidosRepuesto.ts';
 
 import { JWT_SECRET } from './config.ts';
 
@@ -47,6 +48,7 @@ app.route('/api/tipos-equipo', tiposEquipoApp);
 app.route('/api/plantas', plantasApp);
 app.route('/api/proveedores', proveedoresApp);
 app.route('/api/repuestos', repuestosApp);
+app.route('/api/pedidos-repuesto', pedidosRepuestoApp);
 
 app.get('/health', (c) => {
   return c.json({

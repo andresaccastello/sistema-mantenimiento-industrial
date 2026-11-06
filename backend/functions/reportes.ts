@@ -5,6 +5,7 @@ import { parseId, badRequest } from './validations.ts';
 import { responderError, ErrorNegocio } from './intervenciones/errores.ts';
 import { UsuarioVisibilidad } from './intervenciones/visibilidad.ts';
 import { validarIntervaloReporte } from './intervalos.ts';
+import { veCostos } from './repuestos/permisos.ts';
 
 const reportesApp = new Hono();
 reportesApp.use('*', jwtVerify, dbVerify);
@@ -502,6 +503,201 @@ reportesApp.get('/tiempos', requirePermission('REPORTES_CONSULTAR'), async (c) =
     });
 
     return c.json(resultado);
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+/**
+ * 5.4 GET /api/reportes/repuestos?desde=&hasta=&planta_id=&sector_id=
+ * Reporte de consumos de repuestos.
+ */
+reportesApp.get('/repuestos', requirePermission('REPORTES_CONSULTAR'), async (c) => {
+  try {
+    const usuario = getUsuarioContext(c);
+    const scope = getUserScope(c, 'REPORTES_CONSULTAR');
+    const hasVeCostos = veCostos(c);
+
+    const { desde, hasta } = await validarIntervaloReporte(
+      pool,
+      c.req.query('desde'),
+      c.req.query('hasta')
+    );
+
+    let sectorId: number | null = null;
+    const sectorIdQuery = c.req.query('sector_id');
+    if (sectorIdQuery !== undefined && sectorIdQuery !== null && sectorIdQuery.trim() !== '') {
+      sectorId = parseId(sectorIdQuery);
+      if (!sectorId) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El sector_id debe ser un entero válido');
+      }
+    }
+
+    let plantaId: number | null = null;
+    const plantaIdQuery = c.req.query('planta_id');
+    if (plantaIdQuery !== undefined && plantaIdQuery !== null && plantaIdQuery.trim() !== '') {
+      plantaId = parseId(plantaIdQuery);
+      if (!plantaId) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El planta_id debe ser un entero válido');
+      }
+    }
+
+    const respuestaVacia = () =>
+      c.json({
+        desde,
+        hasta,
+        ve_costos: hasVeCostos,
+        consumos: 0,
+        intervenciones: 0,
+        importe_total: hasVeCostos ? 0 : null,
+        por_repuesto: [],
+        por_maquina: [],
+      });
+
+    if (scope !== 'TODAS') {
+      if (usuario.sectores.length === 0) {
+        return respuestaVacia();
+      }
+      if (sectorId !== null && !usuario.sectores.includes(sectorId)) {
+        return respuestaVacia();
+      }
+    }
+
+    const conditions: string[] = [
+      'i.eliminado_en IS NULL',
+      'ir.anulado_en IS NULL',
+      'ir.creado_en >= $1::timestamptz',
+      'ir.creado_en <= $2::timestamptz',
+    ];
+    const params: any[] = [desde, hasta];
+    let pIdx = 3;
+
+    if (scope !== 'TODAS') {
+      conditions.push(`m.sector_id = ANY($${pIdx})`);
+      params.push(usuario.sectores);
+      pIdx++;
+    }
+
+    if (sectorId !== null) {
+      conditions.push(`m.sector_id = $${pIdx}`);
+      params.push(sectorId);
+      pIdx++;
+    }
+
+    if (plantaId !== null) {
+      conditions.push(`s.planta_id = $${pIdx}`);
+      params.push(plantaId);
+      pIdx++;
+    }
+
+    const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+    // 1. Totales generales
+    const qTotales = `
+      SELECT
+        COUNT(ir.id)::INTEGER AS total_consumos,
+        COUNT(DISTINCT i.id)::INTEGER AS total_intervenciones,
+        COALESCE(SUM(ROUND(ir.cantidad * ir.costo_unitario_aplicado, 2)), 0)::NUMERIC AS total_importe
+      FROM intervencion_repuestos ir
+      JOIN intervenciones i ON i.id = ir.intervencion_id
+      JOIN maquinas m ON m.id = i.maquina_id
+      JOIN sectores s ON s.id = m.sector_id
+      ${whereClause}
+    `;
+
+    const resTotales = await pool.query(qTotales, params);
+    const rowTotales = resTotales.rows[0];
+    const totalConsumos = Number(rowTotales.total_consumos);
+    const totalIntervenciones = Number(rowTotales.total_intervenciones);
+    const totalImporte = Number(rowTotales.total_importe);
+
+    // 2. Por repuesto
+    const orderRepuesto = hasVeCostos
+      ? 'ORDER BY importe DESC, r.nombre ASC'
+      : 'ORDER BY cantidad DESC, r.nombre ASC';
+
+    const qPorRepuesto = `
+      SELECT
+        r.id AS repuesto_id,
+        r.codigo AS repuesto_codigo,
+        r.nombre AS repuesto_nombre,
+        r.unidad AS repuesto_unidad,
+        COALESCE(SUM(ir.cantidad), 0)::NUMERIC AS cantidad,
+        COUNT(ir.id)::INTEGER AS consumos,
+        COUNT(DISTINCT ir.intervencion_id)::INTEGER AS intervenciones,
+        COALESCE(SUM(ROUND(ir.cantidad * ir.costo_unitario_aplicado, 2)), 0)::NUMERIC AS importe
+      FROM intervencion_repuestos ir
+      JOIN intervenciones i ON i.id = ir.intervencion_id
+      JOIN maquinas m ON m.id = i.maquina_id
+      JOIN sectores s ON s.id = m.sector_id
+      JOIN repuestos r ON r.id = ir.repuesto_id
+      ${whereClause}
+      GROUP BY r.id, r.codigo, r.nombre, r.unidad
+      ${orderRepuesto}
+    `;
+
+    const resPorRepuesto = await pool.query(qPorRepuesto, params);
+    const porRepuesto = resPorRepuesto.rows.map((r) => ({
+      repuesto: {
+        id: Number(r.repuesto_id),
+        codigo: r.repuesto_codigo,
+        nombre: r.repuesto_nombre,
+        unidad: r.repuesto_unidad,
+      },
+      cantidad: Number(r.cantidad),
+      consumos: Number(r.consumos),
+      intervenciones: Number(r.intervenciones),
+      importe: hasVeCostos ? Number(r.importe) : null,
+    }));
+
+    // 3. Por máquina
+    const orderMaquina = hasVeCostos
+      ? 'ORDER BY importe DESC, m.nombre ASC'
+      : 'ORDER BY consumos DESC, m.nombre ASC';
+
+    const qPorMaquina = `
+      SELECT
+        m.id AS maquina_id,
+        m.codigo AS maquina_codigo,
+        m.nombre AS maquina_nombre,
+        s.id AS sector_id,
+        s.nombre AS sector_nombre,
+        COUNT(ir.id)::INTEGER AS consumos,
+        COALESCE(SUM(ROUND(ir.cantidad * ir.costo_unitario_aplicado, 2)), 0)::NUMERIC AS importe
+      FROM intervencion_repuestos ir
+      JOIN intervenciones i ON i.id = ir.intervencion_id
+      JOIN maquinas m ON m.id = i.maquina_id
+      JOIN sectores s ON s.id = m.sector_id
+      ${whereClause}
+      GROUP BY m.id, m.codigo, m.nombre, s.id, s.nombre
+      ${orderMaquina}
+    `;
+
+    const resPorMaquina = await pool.query(qPorMaquina, params);
+    const porMaquina = resPorMaquina.rows.map((m) => ({
+      maquina: {
+        id: Number(m.maquina_id),
+        codigo: m.maquina_codigo,
+        nombre: m.maquina_nombre,
+      },
+      sector: {
+        id: Number(m.sector_id),
+        nombre: m.sector_nombre,
+      },
+      consumos: Number(m.consumos),
+      importe: hasVeCostos ? Number(m.importe) : null,
+    }));
+
+    return c.json({
+      desde,
+      hasta,
+      ve_costos: hasVeCostos,
+      consumos: totalConsumos,
+      intervenciones: totalIntervenciones,
+      importe_total: hasVeCostos ? totalImporte : null,
+      por_repuesto: porRepuesto,
+      por_maquina: porMaquina,
+    });
   } catch (error) {
     return responderError(c, error);
   }

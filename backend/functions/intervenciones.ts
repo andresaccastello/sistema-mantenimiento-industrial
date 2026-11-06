@@ -1317,4 +1317,7 @@ intervencionesApp.patch('/:id', async (c) => {
   }
 });
 
+import intervencionRepuestosApp from './intervencionRepuestos.ts';
+intervencionesApp.route('/', intervencionRepuestosApp);
+
 export default intervencionesApp;

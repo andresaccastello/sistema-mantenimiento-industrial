@@ -41,6 +41,7 @@
     "test:maquinas": "tsx --env-file=.env --test backend/tests/maquinas.test.ts",
     "test:excepciones": "tsx --env-file=.env --test backend/tests/excepciones.test.ts",
     "test:repuestos": "tsx --env-file=.env --test backend/tests/repuestos.test.ts",
+    "test:repuestos-intervenciones": "tsx --env-file=.env --test backend/tests/repuestos_intervenciones.test.ts",
     "test:administracion": "tsx --env-file=.env --test backend/tests/administracion.test.ts",
     "test:avisos": "tsx --env-file=.env --test backend/tests/avisos.test.ts",
     "test:front": "tsx --test frontend/src/lib/*.test.ts",
