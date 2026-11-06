@@ -209,3 +209,34 @@ Sobre las máquinas activas de la selección y el período elegido:
 
 **Motivo:** son los indicadores usuales del área. Se definen acá para que el número del sistema y el de la tesis sean el mismo.
 
+---
+
+## D-018 — Repuestos, stock y pedidos
+
+**Estado:** Aceptada
+
+1. **Proveedores:** un solo catálogo, para comprar repuestos y, más adelante, para los trabajos externos.
+2. **Control de stock opcional por repuesto.** Si un repuesto no lleva stock, su uso y su costo se registran igual en la intervención, sin movimientos.
+3. **El stock cambia solo con movimientos:**
+   - ingreso;
+   - egreso: manual con motivo, o por consumo en una intervención;
+   - ajuste a una cantidad contada, con motivo;
+   - devolución, al anular un consumo.
+
+   Cada movimiento guarda cuánto cambió y el stock que quedó. El stock nunca queda negativo.
+4. **Costo:**
+   - el costo unitario de un repuesto es el último conocido: el del alta, una edición, un ingreso con costo o un consumo de un repuesto sin stock;
+   - cada cambio queda en un historial;
+   - el consumo guarda el costo del momento (RN-41). Un cambio posterior no lo modifica.
+5. **Consumos en la intervención:**
+   - se registran en `EN_PROCESO` y `EN_ESPERA_REPUESTOS`;
+   - con la intervención `FINALIZADA`, solo con `INTERVENCIONES_CORREGIR` y motivo;
+   - no se editan: se anulan con motivo (si habían movido stock, vuelve con una devolución) y se cargan de nuevo.
+6. **D-20, resuelta:** cancelar, reabrir o corregir una intervención no mueve stock. Lo que no se usó se anula a mano; con la intervención cancelada, con `INTERVENCIONES_CORREGIR`.
+7. **Pedidos:** qué falta, cuánto, a quién se pidió, cuándo, para cuándo se espera y si llegó. Al recibir, se puede ingresar al stock en el mismo paso.
+8. **Costos visibles:**
+   - los ve quien tiene `COSTOS_VER` o `REPUESTOS_GESTIONAR`;
+   - los carga quien tiene `REPUESTOS_GESTIONAR` o `COSTOS_REGISTRAR`.
+9. **Reporte de repuestos:** consumos no anulados, por fecha de registro, de las máquinas visibles de la selección, activas o no: lo gastado en una máquina dada de baja sigue siendo gasto.
+
+

@@ -75,14 +75,23 @@ Núcleo del sistema. Registra falla/necesidad, máquina, sector, responsable, es
 ### historial_estados_intervencion
 Registra los cambios de estado de una intervención.
 
+### proveedores
+Catálogo unificado de proveedores para compra de repuestos y servicios externos.
+
 ### repuestos
-Catálogo y disponibilidad básica de repuestos.
+Catálogo y disponibilidad de repuestos, con control de stock opcional y proveedor habitual.
+
+### repuesto_costos
+Historial de costos unitarios de cada repuesto según alta, edición, ingreso o consumo.
 
 ### intervencion_repuestos
-Detalle de repuestos utilizados en una intervención.
+Detalle de repuestos consumidos en una intervención, con soporte para anulación y devolución.
+
+### pedidos_repuesto
+Seguimiento de pedidos de repuestos asociados a una intervención, con estados de compra y recepción.
 
 ### movimientos_stock
-Trazabilidad de ingresos, egresos y ajustes del stock, historizando el costo unitario.
+Trazabilidad de ingresos, egresos, ajustes y devoluciones de stock, historizando el delta y el stock resultante.
 
 ### planes_mantenimiento
 Planificación preventiva configurable por tiempo, horas de uso, kilómetros u otros criterios.
@@ -97,23 +106,27 @@ PERFILES ──< USUARIOS
    │
    └──< PERFIL_PERMISO >── PERMISOS
 
+PROVEEDORES ──< REPUESTOS ──< REPUESTO_COSTOS
+     │              │
+     │              ├──< MOVIMIENTOS_STOCK
+     │              └──< INTERVENCION_REPUESTOS >── INTERVENCIONES
+     │                                                    │
+     └──< PEDIDOS_REPUESTO >──────────────────────────────┘
+
 PLANTAS ──< SECTORES ──< MAQUINAS >── CRITICIDADES
                             │     └── TIPOS_EQUIPO
                             └──< INTERVENCIONES >── USUARIOS
                                         │
                                         ├──< HISTORIAL_ESTADOS_INTERVENCION
-                                        ├──< INTERVENCION_REPUESTOS >── REPUESTOS
+                                        ├──< INTERVENCION_REPUESTOS
+                                        ├──< PEDIDOS_REPUESTO
                                         └──< DOCUMENTOS
 
 MAQUINAS ──< PLANES_MANTENIMIENTO ──< INTERVENCIONES
-REPUESTOS ──< MOVIMIENTOS_STOCK
 MAQUINAS ──< DOCUMENTOS
 ```
 
 ## Decisiones que quedan abiertas
 
 - Estrategia definitiva de autenticación.
-- Si los proveedores requieren una entidad propia.
 - Almacenamiento físico de archivos.
-- Automatización del descuento de stock mediante servicio de aplicación o transacción SQL.
-- Indicadores específicos que terminarán formando el tablero de reportes.
