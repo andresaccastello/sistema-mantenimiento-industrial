@@ -880,4 +880,127 @@ export interface ReporteRepuestosRespuesta {
   }>;
 }
 
+// =============================================================================
+// Costos de la intervención (Etapa C1)
+// =============================================================================
 
+export type TipoCosto = 'MANO_OBRA' | 'SERVICIO_EXTERNO' | 'TRANSPORTE' | 'OTRO' | 'AJUSTE';
+
+/** Una persona dentro de una respuesta: sin legajo. */
+export interface PersonaResumen {
+  id: number;
+  nombre: string;
+  apellido: string | null;
+}
+
+/** Un renglón de `GET /api/intervenciones/:id/costos`, y la respuesta del `POST` y de la anulación. */
+export interface RenglonCosto {
+  id: number;
+  tipo: TipoCosto;
+  descripcion: string;
+  /** `null` sin `COSTOS_VER`. */
+  importe: number | null;
+  /** `null` sin `COSTOS_VER`, o si no se cargó. */
+  valor_hora: number | null;
+  /** `null` si no es `MANO_OBRA`. */
+  horas: number | null;
+  persona: PersonaResumen | null;
+  proveedor: ProveedorOpcion | null;
+  motivo: string | null;
+  registrado_por: PersonaResumen | null;
+  registrado_en: string;
+  anulado: boolean;
+  anulado_por: PersonaResumen | null;
+  anulado_en: string | null;
+  motivo_anulacion: string | null;
+}
+
+export interface ResumenCostos {
+  repuestos: number;
+  mano_obra: number;
+  servicio_externo: number;
+  transporte: number;
+  otro: number;
+  ajuste: number;
+  total: number;
+}
+
+/** `GET /api/intervenciones/:id/costos`. */
+export interface IntervencionCostosRespuesta {
+  renglones: RenglonCosto[];
+  /** `null` sin `COSTOS_VER`. */
+  resumen: ResumenCostos | null;
+  horas_mano_obra: number;
+  ve_costos: boolean;
+  puede_registrar: boolean;
+  puede_anular: boolean;
+}
+
+/** `GET /api/costos/personas`. */
+export type PersonaCostoOpcion = Persona;
+
+/** `GET /api/reportes/costos`. */
+export interface ReporteCostosRespuesta {
+  desde: string;
+  hasta: string;
+  total: number;
+  intervenciones: number;
+  por_tipo: {
+    repuestos: number;
+    mano_obra: number;
+    servicio_externo: number;
+    transporte: number;
+    otro: number;
+    ajuste: number;
+  };
+  por_maquina: Array<{
+    maquina: {
+      id: number;
+      codigo: string | null;
+      nombre: string;
+    };
+    sector: {
+      id: number;
+      nombre: string;
+    };
+    repuestos: number;
+    mano_obra: number;
+    otros: number;
+    total: number;
+  }>;
+  horas_por_persona: Array<{
+    persona: PersonaResumen | null;
+    proveedor: ProveedorOpcion | null;
+    horas: number;
+    importe: number;
+  }>;
+}
+
+/** `POST /api/intervenciones/:id/costos` (sección 4.3 de la C1). */
+export type CuerpoCosto =
+  | {
+      tipo: 'MANO_OBRA';
+      descripcion?: string;
+      /** Interna: va `usuario_id`. Externa: va `proveedor_id`. Nunca los dos. */
+      usuario_id?: number;
+      proveedor_id?: number;
+      horas: number;
+      /** Con valor hora, la API calcula el importe: no va `importe`. */
+      valor_hora?: number;
+      importe?: number;
+      /** Con la intervención finalizada. */
+      motivo?: string;
+    }
+  | {
+      tipo: 'SERVICIO_EXTERNO' | 'TRANSPORTE' | 'OTRO';
+      descripcion: string;
+      proveedor_id?: number;
+      importe: number;
+      motivo?: string;
+    }
+  | {
+      tipo: 'AJUSTE';
+      descripcion: string;
+      importe: number;
+      motivo: string;
+    };

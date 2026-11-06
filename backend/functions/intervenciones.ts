@@ -1319,5 +1319,7 @@ intervencionesApp.patch('/:id', async (c) => {
 
 import intervencionRepuestosApp from './intervencionRepuestos.ts';
 intervencionesApp.route('/', intervencionRepuestosApp);
+import intervencionCostosApp from './intervencionCostos.ts';
+intervencionesApp.route('/', intervencionCostosApp);
 
 export default intervencionesApp;

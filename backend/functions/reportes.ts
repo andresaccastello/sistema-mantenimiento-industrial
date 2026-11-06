@@ -703,4 +703,196 @@ reportesApp.get('/repuestos', requirePermission('REPORTES_CONSULTAR'), async (c)
   }
 });
 
+/**
+ * Etapa C1, sección 5: GET /api/reportes/costos?desde=&hasta=&planta_id=&sector_id=
+ * Gasto registrado en el período (D-019, punto 8): consumos no anulados por
+ * creado_en y renglones no anulados por registrado_en, de intervenciones no
+ * eliminadas y de las máquinas visibles de la selección, activas o no.
+ */
+reportesApp.get('/costos', requirePermission('REPORTES_CONSULTAR'), async (c) => {
+  try {
+    const usuario = getUsuarioContext(c);
+    if (!('COSTOS_VER' in usuario.permisos)) {
+      throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No tiene permiso para ver costos');
+    }
+    const scope = getUserScope(c, 'REPORTES_CONSULTAR');
+
+    const { desde, hasta } = await validarIntervaloReporte(
+      pool,
+      c.req.query('desde'),
+      c.req.query('hasta')
+    );
+
+    let sectorId: number | null = null;
+    const sectorIdQuery = c.req.query('sector_id');
+    if (sectorIdQuery !== undefined && sectorIdQuery !== null && sectorIdQuery.trim() !== '') {
+      sectorId = parseId(sectorIdQuery);
+      if (!sectorId) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El sector_id debe ser un entero válido');
+      }
+    }
+
+    let plantaId: number | null = null;
+    const plantaIdQuery = c.req.query('planta_id');
+    if (plantaIdQuery !== undefined && plantaIdQuery !== null && plantaIdQuery.trim() !== '') {
+      plantaId = parseId(plantaIdQuery);
+      if (!plantaId) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El planta_id debe ser un entero válido');
+      }
+    }
+
+    const respuestaVacia = () =>
+      c.json({
+        desde,
+        hasta,
+        total: 0,
+        intervenciones: 0,
+        por_tipo: { repuestos: 0, mano_obra: 0, servicio_externo: 0, transporte: 0, otro: 0, ajuste: 0 },
+        por_maquina: [],
+        horas_por_persona: [],
+      });
+
+    if (scope !== 'TODAS') {
+      if (usuario.sectores.length === 0) {
+        return respuestaVacia();
+      }
+      if (sectorId !== null && !usuario.sectores.includes(sectorId)) {
+        return respuestaVacia();
+      }
+    }
+
+    // Filtros comunes a consumos y renglones ($1 desde, $2 hasta)
+    const filtros: string[] = ['i.eliminado_en IS NULL'];
+    const params: any[] = [desde, hasta];
+    let pIdx = 3;
+
+    if (scope !== 'TODAS') {
+      filtros.push(`m.sector_id = ANY($${pIdx})`);
+      params.push(usuario.sectores);
+      pIdx++;
+    }
+    if (sectorId !== null) {
+      filtros.push(`m.sector_id = $${pIdx}`);
+      params.push(sectorId);
+      pIdx++;
+    }
+    if (plantaId !== null) {
+      filtros.push(`s.planta_id = $${pIdx}`);
+      params.push(plantaId);
+      pIdx++;
+    }
+    const filtrosSql = filtros.join(' AND ');
+
+    // Cada gasto del período, en una sola lista
+    const sqlGastos = `
+      WITH gastos AS (
+        SELECT i.id AS intervencion_id, m.id AS maquina_id, 'REPUESTOS'::text AS tipo,
+               ROUND(ir.cantidad * ir.costo_unitario_aplicado, 2) AS importe,
+               NULL::numeric AS horas, NULL::bigint AS usuario_id, NULL::bigint AS proveedor_id
+        FROM intervencion_repuestos ir
+        JOIN intervenciones i ON i.id = ir.intervencion_id
+        JOIN maquinas m ON m.id = i.maquina_id
+        JOIN sectores s ON s.id = m.sector_id
+        WHERE ${filtrosSql}
+          AND ir.anulado_en IS NULL
+          AND ir.creado_en >= $1::timestamptz AND ir.creado_en <= $2::timestamptz
+        UNION ALL
+        SELECT i.id, m.id, ic.tipo::text, ic.importe, ic.horas, ic.usuario_id, ic.proveedor_id
+        FROM intervencion_costos ic
+        JOIN intervenciones i ON i.id = ic.intervencion_id
+        JOIN maquinas m ON m.id = i.maquina_id
+        JOIN sectores s ON s.id = m.sector_id
+        WHERE ${filtrosSql}
+          AND ic.anulado_en IS NULL
+          AND ic.registrado_en >= $1::timestamptz AND ic.registrado_en <= $2::timestamptz
+      )
+    `;
+
+    // 1. Totales y por tipo
+    const resTot = await pool.query(
+      `${sqlGastos}
+       SELECT
+         COALESCE(SUM(importe), 0)::numeric(14,2) AS total,
+         COUNT(DISTINCT intervencion_id)::integer AS intervenciones,
+         COALESCE(SUM(importe) FILTER (WHERE tipo = 'REPUESTOS'), 0)::numeric(14,2) AS repuestos,
+         COALESCE(SUM(importe) FILTER (WHERE tipo = 'MANO_OBRA'), 0)::numeric(14,2) AS mano_obra,
+         COALESCE(SUM(importe) FILTER (WHERE tipo = 'SERVICIO_EXTERNO'), 0)::numeric(14,2) AS servicio_externo,
+         COALESCE(SUM(importe) FILTER (WHERE tipo = 'TRANSPORTE'), 0)::numeric(14,2) AS transporte,
+         COALESCE(SUM(importe) FILTER (WHERE tipo = 'OTRO'), 0)::numeric(14,2) AS otro,
+         COALESCE(SUM(importe) FILTER (WHERE tipo = 'AJUSTE'), 0)::numeric(14,2) AS ajuste
+       FROM gastos`,
+      params
+    );
+    const t = resTot.rows[0];
+
+    // 2. Por máquina
+    const resMaq = await pool.query(
+      `${sqlGastos}
+       SELECT
+         m.id AS maquina_id, m.codigo AS maquina_codigo, m.nombre AS maquina_nombre,
+         s.id AS sector_id, s.nombre AS sector_nombre,
+         COALESCE(SUM(g.importe) FILTER (WHERE g.tipo = 'REPUESTOS'), 0)::numeric(14,2) AS repuestos,
+         COALESCE(SUM(g.importe) FILTER (WHERE g.tipo = 'MANO_OBRA'), 0)::numeric(14,2) AS mano_obra,
+         COALESCE(SUM(g.importe) FILTER (WHERE g.tipo NOT IN ('REPUESTOS', 'MANO_OBRA')), 0)::numeric(14,2) AS otros,
+         COALESCE(SUM(g.importe), 0)::numeric(14,2) AS total
+       FROM gastos g
+       JOIN maquinas m ON m.id = g.maquina_id
+       JOIN sectores s ON s.id = m.sector_id
+       GROUP BY m.id, m.codigo, m.nombre, s.id, s.nombre
+       ORDER BY total DESC, m.nombre ASC, m.id ASC`,
+      params
+    );
+
+    // 3. Horas por persona (interna) o proveedor (externa)
+    const resHoras = await pool.query(
+      `${sqlGastos}
+       SELECT
+         u.id AS usuario_id, u.nombre AS usuario_nombre, u.apellido AS usuario_apellido,
+         p.id AS proveedor_id, p.nombre AS proveedor_nombre,
+         COALESCE(SUM(g.horas), 0)::numeric(10,2) AS horas,
+         COALESCE(SUM(g.importe), 0)::numeric(14,2) AS importe
+       FROM gastos g
+       LEFT JOIN usuarios u ON u.id = g.usuario_id
+       LEFT JOIN proveedores p ON p.id = g.proveedor_id
+       WHERE g.tipo = 'MANO_OBRA'
+       GROUP BY u.id, u.nombre, u.apellido, p.id, p.nombre
+       ORDER BY horas DESC, COALESCE(u.apellido, p.nombre) ASC, u.id ASC NULLS LAST, p.id ASC NULLS LAST`,
+      params
+    );
+
+    return c.json({
+      desde,
+      hasta,
+      total: Number(t.total),
+      intervenciones: Number(t.intervenciones),
+      por_tipo: {
+        repuestos: Number(t.repuestos),
+        mano_obra: Number(t.mano_obra),
+        servicio_externo: Number(t.servicio_externo),
+        transporte: Number(t.transporte),
+        otro: Number(t.otro),
+        ajuste: Number(t.ajuste),
+      },
+      por_maquina: resMaq.rows.map((r) => ({
+        maquina: { id: Number(r.maquina_id), codigo: r.maquina_codigo, nombre: r.maquina_nombre },
+        sector: { id: Number(r.sector_id), nombre: r.sector_nombre },
+        repuestos: Number(r.repuestos),
+        mano_obra: Number(r.mano_obra),
+        otros: Number(r.otros),
+        total: Number(r.total),
+      })),
+      horas_por_persona: resHoras.rows.map((r) => ({
+        persona: r.usuario_id
+          ? { id: Number(r.usuario_id), nombre: r.usuario_nombre, apellido: r.usuario_apellido }
+          : null,
+        proveedor: r.proveedor_id ? { id: Number(r.proveedor_id), nombre: r.proveedor_nombre } : null,
+        horas: Number(r.horas),
+        importe: Number(r.importe),
+      })),
+    });
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
 export default reportesApp;

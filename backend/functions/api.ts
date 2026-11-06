@@ -16,6 +16,7 @@ import { avisosTriggerApp, configuracionAvisosApp } from './avisos/api.ts';
 import proveedoresApp from './proveedores.ts';
 import repuestosApp from './repuestos.ts';
 import pedidosRepuestoApp from './pedidosRepuesto.ts';
+import costosApp from './costos.ts';
 
 import { JWT_SECRET } from './config.ts';
 
@@ -49,6 +50,7 @@ app.route('/api/plantas', plantasApp);
 app.route('/api/proveedores', proveedoresApp);
 app.route('/api/repuestos', repuestosApp);
 app.route('/api/pedidos-repuesto', pedidosRepuestoApp);
+app.route('/api/costos', costosApp);
 
 app.get('/health', (c) => {
   return c.json({
