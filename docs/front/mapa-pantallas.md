@@ -86,7 +86,7 @@ El alta, edición y baja de máquinas se hace desde R4 y R5, con los botones que
 
 | ID | Pantalla | Qué muestra | Acciones | API |
 | :-: | :--- | :--- | :--- | :--- |
-| D1 | Reportes | **Inactividad por máquina:** ranking con barras, filtro de fechas y de sector. **Tiempos:** tabla agrupada por ejecución (interna o externa), tipo o sector. | Cambiar fechas y agrupación | `GET /reportes/inactividad`, `/reportes/tiempos` |
+| D1 | Reportes | Pestañas: Indicadores · Inactividad · Tiempos. Filtros: período (relativo o personalizado con rango de fechas), planta y sector. Botón Descargar CSV en cada pestaña. **Indicadores:** 6 tarjetas de indicadores clave (disponibilidad, fallas, MTTR, MTBF, respuesta promedio, preventivas finalizadas). **Inactividad por máquina:** ranking con barras de progreso correctivo/preventivo y switch de máquinas sin detenciones. **Tiempos:** tabla agrupada por ejecución, tipo o sector. | Cambiar período, filtros, agrupación y descargar CSV | `GET /reportes/indicadores`, `GET /reportes/inactividad`, `GET /reportes/tiempos` |
 
 Además ven R1, R2, R3, R4 y R5 en modo consulta, según sus permisos.
 

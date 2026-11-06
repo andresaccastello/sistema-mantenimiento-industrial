@@ -526,3 +526,52 @@ export interface EnviosAvisos {
   total: number;
   envios: EnvioAviso[];
 }
+
+// =============================================================================
+// Reportes e Indicadores (Etapa F5)
+// =============================================================================
+
+export interface IndicadoresReporte {
+  desde: string;
+  hasta: string;
+  maquinas: number;
+  minutos_periodo: number;
+  inactividad_minutos: number;
+  inactividad_correctiva_minutos: number;
+  inactividad_preventiva_minutos: number;
+  disponibilidad: number | null;
+  fallas: number;
+  correctivas_finalizadas: number;
+  preventivas_finalizadas: number;
+  mttr_minutos: number | null;
+  respuesta_promedio_minutos: number | null;
+  mtbf_horas: number | null;
+}
+
+export interface InactividadMaquinaFila {
+  maquina: {
+    id: number;
+    nombre: string;
+    codigo: string;
+    sector: {
+      id: number;
+      nombre: string;
+    };
+  };
+  inactividad_minutos: number;
+  por_tipo: {
+    CORRECTIVO: number;
+    PREVENTIVO: number;
+  };
+  intervenciones_con_detencion: number;
+}
+
+export interface TiemposAgrupadosFila {
+  grupo: string;
+  cantidad: number;
+  respuesta_promedio_minutos: number | null;
+  duracion_neta_promedio_minutos: number | null;
+  duracion_bruta_promedio_minutos: number | null;
+  duracion_neta_total_minutos: number | null;
+}
+

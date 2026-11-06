@@ -25,6 +25,7 @@ import { DetalleUsuario } from '../pantallas/DetalleUsuario';
 import { SectoresCatalogos } from '../pantallas/SectoresCatalogos';
 import { Perfiles } from '../pantallas/Perfiles';
 import { Configuracion } from '../pantallas/Configuracion';
+import { Reportes } from '../pantallas/Reportes';
 import { vistaDetalle } from '../lib/intervenciones';
 
 // Componentes generales
@@ -142,7 +143,7 @@ export function RutasApp() {
           path="/reportes"
           element={
             <RutaProtegida permiso="REPORTES_CONSULTAR">
-              <EnConstruccion titulo="Reportes" etapa="F5" />
+              <Reportes />
             </RutaProtegida>
           }
         />
