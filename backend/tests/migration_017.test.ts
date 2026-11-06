@@ -234,6 +234,79 @@ test('Migración 017 — Renglones de costo con mano de obra por persona', async
         assert.strictEqual(resQueda.rows.length, 0, 'No quedan datos de la prueba');
       }
     });
+
+    // M17-05: Restricciones validadas, y un renglón que no cumple hace fallar la migración
+    await t.test('M17-05: Las cinco restricciones quedan validadas y un renglón viejo frena la migración', async () => {
+      const resVal = await client.query(`
+        SELECT conname, convalidated
+        FROM pg_constraint
+        WHERE conrelid = 'intervencion_costos'::regclass
+          AND contype = 'c'
+          AND conname IN (
+            'ck_intervencion_costos_mo_horas',
+            'ck_intervencion_costos_mo_persona',
+            'ck_intervencion_costos_usuario_mo',
+            'ck_intervencion_costos_valor_hora',
+            'ck_intervencion_costos_ajuste'
+          )
+        ORDER BY conname
+      `);
+      assert.strictEqual(resVal.rows.length, 5, 'Existen las cinco restricciones nuevas');
+      for (const r of resVal.rows) {
+        assert.strictEqual(r.convalidated, true, `${r.conname} está validada`);
+      }
+
+      let base: Base | null = null;
+      let renglonId: number | null = null;
+      await client.query('BEGIN');
+      try {
+        base = await crearBase(client);
+        await client.query('ALTER TABLE intervencion_costos DROP CONSTRAINT ck_intervencion_costos_ajuste');
+        const resIns = await client.query(
+          `INSERT INTO intervencion_costos (intervencion_id, tipo, descripcion, importe, registrado_por_usuario_id)
+           VALUES ($1, 'AJUSTE', 'Ajuste sin motivo M17', -50, $2)
+           RETURNING id`,
+          [base.intervencionId, base.usuarioId]
+        );
+        renglonId = Number(resIns.rows[0].id);
+        const idEsperado = String(renglonId);
+
+        await assert.rejects(client.query(sqlContent), (err: Error) => {
+          assert.match(err.message, /Hay renglones de costo que no cumplen las reglas nuevas: .*Revisarlos antes de migrar\./);
+          assert.ok(
+            err.message.split(/[:.]/)[1].split(',').map((s) => s.trim()).includes(idEsperado),
+            `El mensaje nombra el renglón ${idEsperado}: ${err.message}`
+          );
+          return true;
+        });
+      } finally {
+        await client.query('ROLLBACK');
+      }
+
+      // El ROLLBACK devuelve la restricción y saca los datos. Si la migración no
+      // hubiera fallado, su COMMIT los habría guardado: se borran y la prueba falla.
+      const resCk = await client.query(
+        `SELECT convalidated FROM pg_constraint
+         WHERE conrelid = 'intervencion_costos'::regclass AND conname = 'ck_intervencion_costos_ajuste'`
+      );
+      if (base) {
+        const b: Base = base;
+        const resQueda = await client.query('SELECT 1 FROM intervenciones WHERE id = $1', [b.intervencionId]);
+        if (resQueda.rows.length > 0) {
+          await client.query('DELETE FROM intervencion_costos WHERE id = $1', [renglonId]);
+          await client.query('DELETE FROM intervenciones WHERE id = $1', [b.intervencionId]);
+          await client.query('DELETE FROM maquinas WHERE id = $1', [b.maquinaId]);
+          await client.query('DELETE FROM usuarios WHERE id = $1', [b.usuarioId]);
+          await client.query('DELETE FROM proveedores WHERE id = $1', [b.proveedorId]);
+          await client.query('DELETE FROM sectores WHERE id = $1', [b.sectorId]);
+          await client.query('DELETE FROM plantas WHERE id = $1', [b.plantaId]);
+          await client.query(sqlContent);
+        }
+        assert.strictEqual(resQueda.rows.length, 0, 'No quedan datos de la prueba');
+      }
+      assert.strictEqual(resCk.rows.length, 1, 'ck_intervencion_costos_ajuste sigue en su lugar');
+      assert.strictEqual(resCk.rows[0].convalidated, true, 'ck_intervencion_costos_ajuste sigue validada');
+    });
   } finally {
     client.release();
   }

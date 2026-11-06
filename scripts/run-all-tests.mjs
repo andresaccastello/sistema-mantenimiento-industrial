@@ -54,6 +54,7 @@ const TABLAS_CONTROL = [
   'proveedores',
   'movimientos_stock',
   'intervencion_repuestos',
+  'intervencion_costos',
   'pedidos_repuesto',
   'plantas',
   'criticidades',
