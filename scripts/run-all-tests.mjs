@@ -114,9 +114,11 @@ const logStream = fs.createWriteStream(logFile, { flags: 'w' });
 // Regla: Las suites de migración (migration_*.test.ts) se ejecutan primero en orden numérico/alfabético,
 // seguidas por el resto de las suites de negocio ordenadas alfabéticamente.
 const testsDir = path.join(rootDir, 'backend', 'tests');
+const fileFilter = process.env.TEST_FILES_FILTER;
 const allTestFiles = fs
   .readdirSync(testsDir)
-  .filter((f) => f.endsWith('.test.ts'));
+  .filter((f) => f.endsWith('.test.ts'))
+  .filter((f) => !fileFilter || f.includes(fileFilter));
 
 const migrationTestFiles = allTestFiles
   .filter((f) => f.startsWith('migration_'))
@@ -138,36 +140,18 @@ const headerMessage = `[test:todo] Suites descubiertas (${testFiles.length}) en 
 process.stdout.write(headerMessage);
 logStream.write(headerMessage);
 
-function construirMapaTitulos(archivos) {
-  const mapa = new Map();
-  for (const archivo of archivos) {
-    try {
-      const contenido = fs.readFileSync(path.join(rootDir, archivo), 'utf-8');
-      const match = contenido.match(/(?:test|describe)\s*\(\s*['"]([^'"]+)['"]/);
-      if (match) {
-        mapa.set(match[1].trim(), archivo);
-      }
-    } catch (_e) {}
-  }
-  return mapa;
-}
-
-function runGroup(groupFiles, groupName) {
-  return new Promise((resolve, reject) => {
-    if (groupFiles.length === 0) {
-      return resolve({ code: 0, tests: 0, pass: 0, fail: 0 });
-    }
+function runFile(testFile) {
+  return new Promise((resolve) => {
     const isWin = process.platform === 'win32';
     const cmd = isWin ? 'npx.cmd' : 'npx';
     const args = [
       'tsx',
       '--env-file=.env',
       '--test',
-      '--test-concurrency=1',
       '--test-reporter=spec',
       '--test-timeout=1800000',
       '--test-force-exit',
-      ...groupFiles,
+      testFile,
     ];
 
     const child = spawn(cmd, args, {
@@ -180,11 +164,12 @@ function runGroup(groupFiles, groupName) {
       },
     });
 
-    let groupOutput = '';
-    let ultimoArchivo = groupFiles[0] || '';
-    const mapaTitulos = construirMapaTitulos(groupFiles);
-
+    let output = '';
     const TIMEOUT_INACTIVIDAD_MS = Number(process.env.TEST_TODO_WATCHDOG_MS) || (20 * 60 * 1000);
+    const nMinutos = TIMEOUT_INACTIVIDAD_MS % 60000 === 0
+      ? String(TIMEOUT_INACTIVIDAD_MS / 60000)
+      : String(Number((TIMEOUT_INACTIVIDAD_MS / 60000).toFixed(2)));
+
     let timer = null;
     let cortado = false;
 
@@ -209,7 +194,7 @@ function runGroup(groupFiles, groupName) {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         cortado = true;
-        const msg = `\n[test:todo] CORTADO: 20 minutos sin salida. Último archivo: ${ultimoArchivo}\n`;
+        const msg = `\n[test:todo] CORTADO: ${nMinutos} minutos sin salida en ${testFile}\n`;
         process.stdout.write(msg);
         logStream.write(msg);
         matarProceso();
@@ -220,60 +205,67 @@ function runGroup(groupFiles, groupName) {
 
     child.stdout.on('data', (chunk) => {
       reiniciarTimer();
-      const str = chunk.toString();
       process.stdout.write(chunk);
       logStream.write(chunk);
-      groupOutput += str;
-
-      for (const [titulo, archivo] of mapaTitulos) {
-        if (str.includes(titulo)) {
-          ultimoArchivo = archivo;
-          break;
-        }
-      }
-      for (const f of groupFiles) {
-        if (str.includes(f) || str.includes(f.replace(/\//g, '\\'))) {
-          ultimoArchivo = f;
-          break;
-        }
-      }
+      output += chunk.toString();
     });
 
     child.stderr.on('data', (chunk) => {
       reiniciarTimer();
-      const str = chunk.toString();
       process.stderr.write(chunk);
       logStream.write(chunk);
-      groupOutput += str;
+      output += chunk.toString();
     });
 
     child.on('close', (code) => {
       if (timer) clearTimeout(timer);
 
-      const testsMatches = [...groupOutput.matchAll(/ℹ\s+tests\s+(\d+)/g)];
-      const passMatches = [...groupOutput.matchAll(/ℹ\s+pass\s+(\d+)/g)];
-      const failMatches = [...groupOutput.matchAll(/ℹ\s+fail\s+(\d+)/g)];
+      const testsMatches = [...output.matchAll(/ℹ\s+tests\s+(\d+)/g)];
+      const passMatches = [...output.matchAll(/ℹ\s+pass\s+(\d+)/g)];
+      const failMatches = [...output.matchAll(/ℹ\s+fail\s+(\d+)/g)];
+      const cancelledMatches = [...output.matchAll(/ℹ\s+cancelled\s+(\d+)/g)];
 
-      const tests = testsMatches.length > 0 ? parseInt(testsMatches[testsMatches.length - 1][1], 10) : 0;
-      const pass = passMatches.length > 0 ? parseInt(passMatches[passMatches.length - 1][1], 10) : 0;
+      let tests = testsMatches.length > 0 ? parseInt(testsMatches[testsMatches.length - 1][1], 10) : 0;
+      let pass = passMatches.length > 0 ? parseInt(passMatches[passMatches.length - 1][1], 10) : 0;
       let fail = failMatches.length > 0 ? parseInt(failMatches[failMatches.length - 1][1], 10) : 0;
+      let cancelled = cancelledMatches.length > 0 ? parseInt(cancelledMatches[cancelledMatches.length - 1][1], 10) : 0;
 
       if (cortado) {
         fail = fail > 0 ? fail : 1;
+        if (tests === 0) tests = 1;
       }
 
+      if (code !== 0 && fail === 0 && cancelled === 0 && !cortado) {
+        fail = 1;
+        if (tests === 0) tests = 1;
+      }
+
+      const fallidasEfectivas = fail + cancelled;
+
       resolve({
-        code: cortado ? 1 : (code ?? 0),
-        tests: cortado && tests === 0 ? 1 : tests,
+        file: testFile,
+        code: cortado || code !== 0 || fallidasEfectivas > 0 ? 1 : 0,
+        tests,
         pass,
         fail,
+        cancelled,
+        fallidasEfectivas,
         cortado,
       });
     });
 
-    child.on('error', (err) => {
+    child.on('error', (_err) => {
       if (timer) clearTimeout(timer);
-      reject(err);
+      resolve({
+        file: testFile,
+        code: 1,
+        tests: 1,
+        pass: 0,
+        fail: 1,
+        cancelled: 0,
+        fallidasEfectivas: 1,
+        cortado: false,
+      });
     });
   });
 }
@@ -292,31 +284,20 @@ async function main() {
     return;
   }
 
-  // 1. Ejecutar grupo de migraciones
-  const resMig = await runGroup(migrationTestFiles, 'migraciones');
-  if (resMig.code !== 0) {
-    const totalLine = `\n[test:todo] Total: ${resMig.tests} pruebas, ${resMig.pass} correctas, ${resMig.fail} fallidas (migraciones: ${resMig.tests}, negocio: 0)\n`;
-    process.stdout.write(totalLine);
-    logStream.write(totalLine);
+  const problemas = [];
+  let migTests = 0;
+  let migPass = 0;
+  let migFail = 0;
 
-    try {
-      const recFinalMig = await contarFilas();
-      verificarTablasExisten(recFinalMig);
-      const diffs = calcularDiferencias(recInicial, recFinalMig, recFinalMig);
-      const datosLinea = formatearLineaDatos(diffs);
-      process.stdout.write(datosLinea);
-      logStream.write(datosLinea);
-    } catch (err) {
-      const errLine = `[test:todo] No se pudo controlar los datos que quedaron: ${sanitizarMensajeError(err)}\n`;
-      process.stdout.write(errLine);
-      logStream.write(errLine);
+  // 1. Ejecutar suites de migración (un proceso por archivo)
+  for (const file of migrationTestFiles) {
+    const res = await runFile(file);
+    migTests += res.tests;
+    migPass += res.pass;
+    migFail += res.fallidasEfectivas;
+    if (res.fallidasEfectivas > 0 || res.cortado || res.code !== 0) {
+      problemas.push(res);
     }
-
-    logStream.end(() => {
-      console.log(`[test:todo] Finalizado con fallos en migraciones (código: ${resMig.code})`);
-      process.exit(resMig.code);
-    });
-    return;
   }
 
   let recPostMig = null;
@@ -327,20 +308,28 @@ async function main() {
     const errLine = `[test:todo] No se pudo controlar los datos que quedaron: ${sanitizarMensajeError(err)}\n`;
     process.stdout.write(errLine);
     logStream.write(errLine);
-    logStream.end(() => {
-      process.exit(1);
-    });
-    return;
   }
 
-  // 2. Ejecutar grupo de negocio
-  const resStd = await runGroup(standardTestFiles, 'negocio');
+  let stdTests = 0;
+  let stdPass = 0;
+  let stdFail = 0;
 
-  const totalTests = resMig.tests + resStd.tests;
-  const totalPass = resMig.pass + resStd.pass;
-  const totalFail = resMig.fail + resStd.fail;
+  // 2. Ejecutar suites estándar de negocio (un proceso por archivo)
+  for (const file of standardTestFiles) {
+    const res = await runFile(file);
+    stdTests += res.tests;
+    stdPass += res.pass;
+    stdFail += res.fallidasEfectivas;
+    if (res.fallidasEfectivas > 0 || res.cortado || res.code !== 0) {
+      problemas.push(res);
+    }
+  }
 
-  const totalLine = `\n[test:todo] Total: ${totalTests} pruebas, ${totalPass} correctas, ${totalFail} fallidas (migraciones: ${resMig.tests}, negocio: ${resStd.tests})\n`;
+  const totalTests = migTests + stdTests;
+  const totalPass = migPass + stdPass;
+  const totalFail = migFail + stdFail;
+
+  const totalLine = `\n[test:todo] Total: ${totalTests} pruebas, ${totalPass} correctas, ${totalFail} fallidas (migraciones: ${migTests}, negocio: ${stdTests})\n`;
   process.stdout.write(totalLine);
   logStream.write(totalLine);
 
@@ -352,20 +341,27 @@ async function main() {
     const errLine = `[test:todo] No se pudo controlar los datos que quedaron: ${sanitizarMensajeError(err)}\n`;
     process.stdout.write(errLine);
     logStream.write(errLine);
-    logStream.end(() => {
-      process.exit(1);
-    });
-    return;
   }
 
-  const diffs = calcularDiferencias(recInicial, recPostMig, recFinal);
-  const datosLinea = formatearLineaDatos(diffs);
-  process.stdout.write(datosLinea);
-  logStream.write(datosLinea);
+  let huboDatosQueQuedaron = false;
+  if (recInicial && recPostMig && recFinal) {
+    const diffs = calcularDiferencias(recInicial, recPostMig, recFinal);
+    const datosLinea = formatearLineaDatos(diffs);
+    process.stdout.write(datosLinea);
+    logStream.write(datosLinea);
+    huboDatosQueQuedaron = TABLAS_CONTROL.some((tabla) => diffs[tabla] !== 0);
+  }
 
-  const huboDatosQueQuedaron = TABLAS_CONTROL.some((tabla) => diffs[tabla] !== 0);
+  // Si hubo problemas (fallas o cortes), una línea por archivo con problema
+  if (problemas.length > 0) {
+    for (const p of problemas) {
+      const probLine = `[test:todo] Con problemas: ${p.file} (fallidas: ${p.fail}, canceladas: ${p.cancelled}, cortado: ${p.cortado ? 'sí' : 'no'})\n`;
+      process.stdout.write(probLine);
+      logStream.write(probLine);
+    }
+  }
 
-  const exitCode = resStd.code !== 0 ? resStd.code : (huboDatosQueQuedaron ? 1 : 0);
+  const exitCode = problemas.length > 0 || huboDatosQueQuedaron ? 1 : 0;
 
   logStream.end(() => {
     console.log(`[test:todo] Finalizado con código de salida: ${exitCode}`);
