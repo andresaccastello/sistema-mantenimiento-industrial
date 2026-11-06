@@ -1287,6 +1287,181 @@ test('Etapa R1 — Repuestos y pedidos en la intervención, y reporte (RI-01 a R
       assert.strictEqual(rDelProvOk.status, 200);
     });
 
+    // =========================================================================
+    // RI-20: Redondeo del importe en SQL y total de la intervención
+    // =========================================================================
+    await t.test('RI-20: Redondeo del importe en SQL y coincidencia con total', async () => {
+      // Repuesto 1: costo 2.01
+      const resR1 = await postJson(
+        '/api/repuestos',
+        { codigo: `R20_1_${suf}`, nombre: `R20 Repuesto 1 ${suf}`, costo_unitario: 2.01, lleva_stock: false },
+        tokenR
+      );
+      const r1 = await resR1.json();
+      createdRepuestoIds.push(r1.id);
+
+      // Repuesto 2: costo 0.03
+      const resR2 = await postJson(
+        '/api/repuestos',
+        { codigo: `R20_2_${suf}`, nombre: `R20 Repuesto 2 ${suf}`, costo_unitario: 0.03, lleva_stock: false },
+        tokenR
+      );
+      const r2 = await resR2.json();
+      createdRepuestoIds.push(r2.id);
+
+      // Intervención en M1
+      const intId = await crearIntervencion(m1Id);
+      await postJson(`/api/intervenciones/${intId}/iniciar`, { estado_esperado: 'PENDIENTE' }, tokenR);
+
+      // Consumo 1: 0,5 x 2,01 -> 1,01
+      const resC1 = await postJson(`/api/intervenciones/${intId}/repuestos`, { repuesto_id: r1.id, cantidad: 0.5 }, tokenR);
+      assert.strictEqual(resC1.status, 201);
+      const c1 = await resC1.json();
+      assert.strictEqual(c1.importe, 1.01);
+
+      // Consumo 2: 1,5 x 0,03 -> 0,05
+      const resC2 = await postJson(`/api/intervenciones/${intId}/repuestos`, { repuesto_id: r2.id, cantidad: 1.5 }, tokenR);
+      assert.strictEqual(resC2.status, 201);
+      const c2 = await resC2.json();
+      assert.strictEqual(c2.importe, 0.05);
+
+      // GET /:id/repuestos: importes 1.01 y 0.05, total_repuestos 1.06
+      const resLista = await getJson(`/api/intervenciones/${intId}/repuestos`, tokenR);
+      const dLista = await resLista.json();
+      assert.strictEqual(dLista.total_repuestos, 1.06);
+      const con1 = dLista.consumos.find((c: any) => c.id === c1.id);
+      const con2 = dLista.consumos.find((c: any) => c.id === c2.id);
+      assert.strictEqual(con1.importe, 1.01);
+      assert.strictEqual(con2.importe, 0.05);
+
+      // En la base de datos: costo_repuestos es 1.06
+      const resDb = await client.query('SELECT costo_repuestos FROM intervenciones WHERE id = $1', [intId]);
+      assert.strictEqual(Number(resDb.rows[0].costo_repuestos), 1.06);
+
+      // En el reporte: período aislado
+      const desdeR20 = '2026-04-01T00:00:00.000Z';
+      const hastaR20 = '2026-04-10T00:00:00.000Z';
+      await client.query(
+        "UPDATE intervencion_repuestos SET creado_en = '2026-04-05T12:00:00.000Z' WHERE id IN ($1, $2)",
+        [c1.id, c2.id]
+      );
+
+      const resRep = await getJson(`/api/reportes/repuestos?desde=${encodeURIComponent(desdeR20)}&hasta=${encodeURIComponent(hastaR20)}`, tokenR);
+      const dRep = await resRep.json();
+      assert.strictEqual(dRep.importe_total, 1.06);
+      const item1 = dRep.por_repuesto.find((p: any) => p.repuesto.id === r1.id);
+      const item2 = dRep.por_repuesto.find((p: any) => p.repuesto.id === r2.id);
+      assert.strictEqual(item1.importe, 1.01);
+      assert.strictEqual(item2.importe, 0.05);
+    });
+
+    // =========================================================================
+    // RI-21: Auditoría de cantidad con formatearCantidad y respuesta de POST
+    // =========================================================================
+    await t.test('RI-21: Auditoría con formato castellano y respuesta completa del POST', async () => {
+      // Repuesto en litros
+      const resLitro = await postJson(
+        '/api/repuestos',
+        { codigo: `ACE_${suf}`, nombre: `Aceite Industrial ${suf}`, unidad: 'litro', costo_unitario: 50, lleva_stock: false },
+        tokenR
+      );
+      const repLitro = await resLitro.json();
+      createdRepuestoIds.push(repLitro.id);
+
+      // Intervención finalizada
+      const intId = await crearIntervencion(m1Id);
+      await postJson(`/api/intervenciones/${intId}/iniciar`, { estado_esperado: 'PENDIENTE' }, tokenR);
+
+      // Consumo inicial de 2 litros antes de finalizar
+      const rCIni = await postJson(`/api/intervenciones/${intId}/repuestos`, { repuesto_id: repLitro.id, cantidad: 2 }, tokenR);
+      const cIni = await rCIni.json();
+
+      // Finalizar intervención
+      const rFin = await postJson(
+        `/api/intervenciones/${intId}/finalizar`,
+        { estado_esperado: 'EN_PROCESO', trabajo_realizado: 'Reparación completada', ejecucion: 'INTERNA' },
+        tokenR
+      );
+      assert.strictEqual(rFin.status, 200);
+
+      // Registrar 1,5 litros con tokenA (tiene INTERVENCIONES_CORREGIR)
+      const rAdd = await postJson(
+        `/api/intervenciones/${intId}/repuestos`,
+        { repuesto_id: repLitro.id, cantidad: 1.5, motivo: 'Ajuste de consumo post cierre' },
+        tokenA
+      );
+      assert.strictEqual(rAdd.status, 201);
+      const dAdd = await rAdd.json();
+
+      // Verificar que el POST responde el formato completo igual al GET
+      assert.ok(dAdd.id);
+      assert.strictEqual(dAdd.cantidad, 1.5);
+      assert.ok(dAdd.registrado_por);
+      assert.strictEqual(typeof dAdd.registrado_por.id, 'number');
+      assert.strictEqual(typeof dAdd.registrado_por.nombre, 'string');
+      assert.ok(dAdd.registrado_por.nombre.length > 0);
+
+      // Verificar texto de auditoría
+      const resAud1 = await client.query(
+        "SELECT * FROM intervencion_auditoria WHERE intervencion_id = $1 AND tipo_evento = 'CORRECCION_COSTO' ORDER BY id DESC LIMIT 1",
+        [intId]
+      );
+      assert.strictEqual(resAud1.rowCount, 1);
+      assert.strictEqual(resAud1.rows[0].valor_nuevo, `Se agregó: ${repLitro.nombre} × 1,5 litro`);
+
+      // Anular el consumo de 2 litros
+      const rAnul = await postJson(
+        `/api/intervenciones/${intId}/repuestos/${cIni.id}/anular`,
+        { motivo: 'Anulación de los 2 litros iniciales' },
+        tokenA
+      );
+      assert.strictEqual(rAnul.status, 200);
+
+      const resAud2 = await client.query(
+        "SELECT * FROM intervencion_auditoria WHERE intervencion_id = $1 AND tipo_evento = 'CORRECCION_COSTO' ORDER BY id DESC LIMIT 1",
+        [intId]
+      );
+      assert.strictEqual(resAud2.rowCount, 1);
+      assert.strictEqual(resAud2.rows[0].valor_nuevo, `Se anuló: ${repLitro.nombre} × 2 litro`);
+    });
+
+    // =========================================================================
+    // RI-22: Validación de repuesto_id e ingresar_stock
+    // =========================================================================
+    await t.test('RI-22: repuesto_id inválido da 422; ingresar_stock string da 422', async () => {
+      const intId = await crearIntervencion(m1Id);
+      await postJson(`/api/intervenciones/${intId}/iniciar`, { estado_esperado: 'PENDIENTE' }, tokenR);
+
+      // repuesto_id con true, 1.5 y "7" dan 422
+      const rTrue = await postJson(`/api/intervenciones/${intId}/repuestos`, { repuesto_id: true, cantidad: 1 }, tokenR);
+      assert.strictEqual(rTrue.status, 422);
+
+      const rDec = await postJson(`/api/intervenciones/${intId}/repuestos`, { repuesto_id: 1.5, cantidad: 1 }, tokenR);
+      assert.strictEqual(rDec.status, 422);
+
+      const rStr = await postJson(`/api/intervenciones/${intId}/repuestos`, { repuesto_id: "7", cantidad: 1 }, tokenR);
+      assert.strictEqual(rStr.status, 422);
+
+      // Pedido para probar ingresar_stock
+      const rPed = await postJson(`/api/intervenciones/${intId}/pedidos`, { repuesto_id: p1Id, cantidad: 2 }, tokenR);
+      assert.strictEqual(rPed.status, 201);
+      const pedido = await rPed.json();
+
+      const resStockAntes = await client.query('SELECT cantidad_disponible FROM repuestos WHERE id = $1', [p1Id]);
+      const stockAntes = Number(resStockAntes.rows[0].cantidad_disponible);
+
+      // ingresar_stock: "false" da 422 y el stock no cambia
+      const rRec = await postJson(
+        `/api/intervenciones/${intId}/pedidos/${pedido.id}/recibir`,
+        { ingresar_stock: "false" },
+        tokenR
+      );
+      assert.strictEqual(rRec.status, 422);
+
+      const resStockDesp = await client.query('SELECT cantidad_disponible FROM repuestos WHERE id = $1', [p1Id]);
+      assert.strictEqual(Number(resStockDesp.rows[0].cantidad_disponible), stockAntes);
+    });
+
   } finally {
     // Limpieza estricta en orden:
     // pedidos, consumos, movimientos, repuesto_costos, repuestos, proveedores,

@@ -51,3 +51,43 @@ export function validarEmail(email: unknown): string | null {
   }
   return trimEmail.toLowerCase();
 }
+
+/**
+ * Formatea una cantidad para textos de auditoría igual que formatCantidad del frontend:
+ * 2 -> "2", 1.5 -> "1,5", 1234.25 -> "1.234,25", 0.125 -> "0,125"
+ */
+export function formatearCantidad(valor?: number | string | null): string {
+  if (valor === null || valor === undefined) return '';
+  const num = typeof valor === 'string' ? parseFloat(valor) : valor;
+  if (typeof num !== 'number' || isNaN(num)) return '';
+  const esNegativo = num < 0;
+  const abs = Math.abs(num);
+  const redondeado = Math.round(abs * 1000) / 1000;
+  const partes = redondeado.toString().split('.');
+  const enteroConPuntos = partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const res = partes.length > 1 ? `${enteroConPuntos},${partes[1]}` : enteroConPuntos;
+  return esNegativo ? `-${res}` : res;
+}
+
+export function parseIdRuta(val: unknown): number | null {
+  if (typeof val !== 'string' || !/^\d+$/.test(val)) {
+    return null;
+  }
+  const n = parseInt(val, 10);
+  return n > 0 ? n : null;
+}
+
+export function validarIdCuerpo(val: unknown, codigoError = 'DATOS_INVALIDOS', campo = 'id'): number {
+  if (typeof val !== 'number' || !Number.isInteger(val) || val <= 0) {
+    throw new ErrorNegocio(422, codigoError, `El campo ${campo} debe ser un entero positivo`);
+  }
+  return val;
+}
+
+export function validarBooleano(val: unknown, campo: string): boolean {
+  if (typeof val !== 'boolean') {
+    throw new ErrorNegocio(422, 'DATOS_INVALIDOS', `El campo ${campo} debe ser un booleano`);
+  }
+  return val;
+}
+

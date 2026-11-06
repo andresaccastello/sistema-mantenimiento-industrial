@@ -3,11 +3,18 @@ import { pool } from './db.ts';
 import { requirePermission } from './middleware.ts';
 import { ErrorNegocio, responderError } from './intervenciones/errores.ts';
 import { bloquearIntervencion } from './intervenciones/bloqueos.ts';
-import { UsuarioVisibilidad } from './intervenciones/visibilidad.ts';
+import { UsuarioVisibilidad, puedeVerIntervencion } from './intervenciones/visibilidad.ts';
 import { registrarAuditoria } from './intervenciones/auditoria.ts';
 import { recalcularCostosIntervencion } from './intervenciones/costos.ts';
 import { veCostos, puedeCargarCostos } from './repuestos/permisos.ts';
-import { validarCantidad, validarCosto } from './repuestos/validaciones.ts';
+import {
+  validarCantidad,
+  validarCosto,
+  formatearCantidad,
+  parseIdRuta,
+  validarIdCuerpo,
+  validarBooleano,
+} from './repuestos/validaciones.ts';
 import { moverStock, cambiarCosto } from './repuestos/stock.ts';
 
 const intervencionRepuestosApp = new Hono();
@@ -111,11 +118,30 @@ function validarFechaYYYYMMDD(fechaStr: unknown, campo: string): string {
   return fechaStr;
 }
 
+const SQL_CONSUMO_COMPLETO = `
+  SELECT
+    ir.*,
+    ROUND(ir.cantidad * ir.costo_unitario_aplicado, 2) AS importe,
+    r.codigo AS repuesto_codigo,
+    r.nombre AS repuesto_nombre,
+    r.unidad AS repuesto_unidad,
+    reg.id AS reg_user_id,
+    reg.nombre AS reg_user_nombre,
+    reg.apellido AS reg_user_apellido,
+    anul.id AS anul_user_id,
+    anul.nombre AS anul_user_nombre,
+    anul.apellido AS anul_user_apellido
+  FROM intervencion_repuestos ir
+  JOIN repuestos r ON r.id = ir.repuesto_id
+  LEFT JOIN usuarios reg ON reg.id = ir.registrado_por_usuario_id
+  LEFT JOIN usuarios anul ON anul.id = ir.anulado_por_usuario_id
+`;
+
 function armarConsumoRespuesta(row: any, tienePermisoCostos: boolean) {
   const cantidad = Number(row.cantidad);
   const costoAplicado = tienePermisoCostos ? Number(row.costo_unitario_aplicado) : null;
-  const importe = tienePermisoCostos
-    ? Number((cantidad * Number(row.costo_unitario_aplicado)).toFixed(2))
+  const importe = tienePermisoCostos && row.importe !== null && row.importe !== undefined
+    ? Number(row.importe)
     : null;
 
   return {
@@ -199,50 +225,50 @@ function armarPedidoRespuesta(row: any) {
 
 // GET /:id/repuestos
 intervencionRepuestosApp.get('/:id/repuestos', requirePermission('INTERVENCIONES_VER'), async (c) => {
-  const client = await pool.connect();
   try {
-    const id = Number(c.req.param('id'));
-    if (isNaN(id) || id <= 0) {
+    const id = parseIdRuta(c.req.param('id'));
+    if (!id) {
       throw new ErrorNegocio(404, 'INTERVENCION_NO_ENCONTRADA', 'Intervención no encontrada');
     }
     const usuario = getUsuarioContext(c);
 
-    // Valida existencia, no eliminación y visibilidad
-    const { intervencion } = await bloquearIntervencion(client, id, usuario);
+    // Valida existencia, no eliminación y visibilidad sin bloquear
+    const resI = await pool.query(
+      `SELECT i.id, i.estado, i.responsable_usuario_id, i.creado_por_usuario_id, i.eliminado_en,
+              i.costo_repuestos, m.sector_id
+       FROM intervenciones i
+       JOIN maquinas m ON m.id = i.maquina_id
+       WHERE i.id = $1`,
+      [id]
+    );
+
+    if (resI.rows.length === 0 || resI.rows[0].eliminado_en !== null) {
+      throw new ErrorNegocio(404, 'INTERVENCION_NO_ENCONTRADA', 'Intervención no encontrada');
+    }
+
+    const intervencion = resI.rows[0];
+    const visible = puedeVerIntervencion(usuario, {
+      creado_por_usuario_id: Number(intervencion.creado_por_usuario_id),
+      responsable_usuario_id: intervencion.responsable_usuario_id ? Number(intervencion.responsable_usuario_id) : null,
+      sector_id: Number(intervencion.sector_id),
+    });
+
+    if (!visible) {
+      throw new ErrorNegocio(404, 'INTERVENCION_NO_ENCONTRADA', 'Intervención no encontrada');
+    }
 
     const tienePermisoCostos = veCostos(c);
     const { puede_registrar, puede_anular } = permisosRepuestos(usuario, intervencion);
 
     const sql = `
-      SELECT
-        ir.*,
-        r.codigo AS repuesto_codigo,
-        r.nombre AS repuesto_nombre,
-        r.unidad AS repuesto_unidad,
-        reg.id AS reg_user_id,
-        reg.nombre AS reg_user_nombre,
-        reg.apellido AS reg_user_apellido,
-        anul.id AS anul_user_id,
-        anul.nombre AS anul_user_nombre,
-        anul.apellido AS anul_user_apellido
-      FROM intervencion_repuestos ir
-      JOIN repuestos r ON r.id = ir.repuesto_id
-      LEFT JOIN usuarios reg ON reg.id = ir.registrado_por_usuario_id
-      LEFT JOIN usuarios anul ON anul.id = ir.anulado_por_usuario_id
+      ${SQL_CONSUMO_COMPLETO}
       WHERE ir.intervencion_id = $1
       ORDER BY ir.id ASC
     `;
 
-    const res = await client.query(sql, [id]);
+    const res = await pool.query(sql, [id]);
     const consumos = res.rows.map((row) => armarConsumoRespuesta(row, tienePermisoCostos));
-
-    let totalRepuestos: number | null = null;
-    if (tienePermisoCostos) {
-      const suma = consumos
-        .filter((co) => !co.anulado)
-        .reduce((acc, curr) => acc + (curr.importe || 0), 0);
-      totalRepuestos = Number(suma.toFixed(2));
-    }
+    const totalRepuestos = tienePermisoCostos ? Number(intervencion.costo_repuestos || 0) : null;
 
     return c.json(
       {
@@ -256,8 +282,6 @@ intervencionRepuestosApp.get('/:id/repuestos', requirePermission('INTERVENCIONES
     );
   } catch (err) {
     return responderError(c, err);
-  } finally {
-    client.release();
   }
 });
 
@@ -265,8 +289,8 @@ intervencionRepuestosApp.get('/:id/repuestos', requirePermission('INTERVENCIONES
 intervencionRepuestosApp.post('/:id/repuestos', async (c) => {
   const client = await pool.connect();
   try {
-    const id = Number(c.req.param('id'));
-    if (isNaN(id) || id <= 0) {
+    const id = parseIdRuta(c.req.param('id'));
+    if (!id) {
       throw new ErrorNegocio(404, 'INTERVENCION_NO_ENCONTRADA', 'Intervención no encontrada');
     }
     const usuario = getUsuarioContext(c);
@@ -312,10 +336,7 @@ intervencionRepuestosApp.post('/:id/repuestos', async (c) => {
     }
 
     // 3. Validar campos del consumo
-    const repuestoId = Number(body.repuesto_id);
-    if (isNaN(repuestoId) || repuestoId <= 0) {
-      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El repuesto_id es obligatorio');
-    }
+    const repuestoId = validarIdCuerpo(body.repuesto_id, 'DATOS_INVALIDOS', 'repuesto_id');
 
     const cantidad = validarCantidad(body.cantidad, 'cantidad');
 
@@ -379,11 +400,10 @@ intervencionRepuestosApp.post('/:id/repuestos', async (c) => {
          intervencion_id, repuesto_id, cantidad, costo_unitario_aplicado, observacion,
          movimiento_id, registrado_por_usuario_id, creado_en
        ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-       RETURNING id, creado_en`,
+       RETURNING id`,
       [id, repuestoId, cantidad, costoAplicado, observacion, movimientoId, usuario.id]
     );
     const consumoId = Number(insConsumo.rows[0].id);
-    const creadoEn = insConsumo.rows[0].creado_en;
 
     // 5. Recalcular costos de la intervención
     await recalcularCostosIntervencion(client, id);
@@ -394,7 +414,7 @@ intervencionRepuestosApp.post('/:id/repuestos', async (c) => {
         intervencionId: id,
         tipoEvento: 'CORRECCION_COSTO',
         campo: 'repuestos',
-        valorNuevo: `Se agregó: ${repuesto.nombre} × ${cantidad} ${repuesto.unidad || 'unidad'}`,
+        valorNuevo: `Se agregó: ${repuesto.nombre} × ${formatearCantidad(cantidad)} ${repuesto.unidad || 'unidad'}`,
         motivo: body.motivo.trim(),
         usuarioId: usuario.id,
       });
@@ -403,33 +423,12 @@ intervencionRepuestosApp.post('/:id/repuestos', async (c) => {
     await client.query('COMMIT');
 
     const tienePermisoCostos = veCostos(c);
-    const consumoFormat = {
-      id: consumoId,
-      repuesto: {
-        id: Number(repuesto.id),
-        codigo: repuesto.codigo || null,
-        nombre: repuesto.nombre,
-        unidad: repuesto.unidad || 'unidad',
-      },
-      cantidad,
-      costo_unitario_aplicado: tienePermisoCostos ? costoAplicado : null,
-      importe: tienePermisoCostos ? Number((cantidad * costoAplicado).toFixed(2)) : null,
-      observacion: observacion || null,
-      registrado_por: {
-        id: usuario.id,
-        nombre: (c.get as any)('jwtPayload')?.nombre || '',
-        apellido: (c.get as any)('jwtPayload')?.apellido || null,
-      },
-      registrado_en: creadoEn,
-      movimiento_id: movimientoId !== null ? Number(movimientoId) : null,
-      movio_stock: movimientoId !== null,
-      anulado: false,
-      anulado_por: null,
-      anulado_en: null,
-      motivo_anulacion: null,
-    };
+    const resConsumo = await pool.query(
+      `${SQL_CONSUMO_COMPLETO} WHERE ir.id = $1`,
+      [consumoId]
+    );
 
-    return c.json(consumoFormat, 201);
+    return c.json(armarConsumoRespuesta(resConsumo.rows[0], tienePermisoCostos), 201);
   } catch (err) {
     await client.query('ROLLBACK');
     return responderError(c, err);
@@ -442,9 +441,9 @@ intervencionRepuestosApp.post('/:id/repuestos', async (c) => {
 intervencionRepuestosApp.post('/:id/repuestos/:consumoId/anular', async (c) => {
   const client = await pool.connect();
   try {
-    const id = Number(c.req.param('id'));
-    const consumoId = Number(c.req.param('consumoId'));
-    if (isNaN(id) || id <= 0 || isNaN(consumoId) || consumoId <= 0) {
+    const id = parseIdRuta(c.req.param('id'));
+    const consumoId = parseIdRuta(c.req.param('consumoId'));
+    if (!id || !consumoId) {
       throw new ErrorNegocio(404, 'CONSUMO_NO_ENCONTRADO', 'Consumo no encontrado');
     }
     const usuario = getUsuarioContext(c);
@@ -528,17 +527,15 @@ intervencionRepuestosApp.post('/:id/repuestos/:consumoId/anular', async (c) => {
     }
 
     // 5. Completar datos de anulación
-    const nowRes = await client.query(
+    await client.query(
       `UPDATE intervencion_repuestos
        SET anulado_en = NOW(),
            anulado_por_usuario_id = $1,
            motivo_anulacion = $2,
            devolucion_movimiento_id = $3
-       WHERE id = $4
-       RETURNING anulado_en`,
+       WHERE id = $4`,
       [usuario.id, motivoTrim, devolucionMovimientoId, consumoId]
     );
-    const anuladoEn = nowRes.rows[0].anulado_en;
 
     // 6. Recalcular costos
     await recalcularCostosIntervencion(client, id);
@@ -549,7 +546,7 @@ intervencionRepuestosApp.post('/:id/repuestos/:consumoId/anular', async (c) => {
         intervencionId: id,
         tipoEvento: 'CORRECCION_COSTO',
         campo: 'repuestos',
-        valorNuevo: `Se anuló: ${consumo.repuesto_nombre} × ${consumo.cantidad} ${consumo.repuesto_unidad || 'unidad'}`,
+        valorNuevo: `Se anuló: ${consumo.repuesto_nombre} × ${formatearCantidad(consumo.cantidad)} ${consumo.repuesto_unidad || 'unidad'}`,
         motivo: motivoTrim,
         usuarioId: usuario.id,
       });
@@ -558,50 +555,12 @@ intervencionRepuestosApp.post('/:id/repuestos/:consumoId/anular', async (c) => {
     await client.query('COMMIT');
 
     const tienePermisoCostos = veCostos(c);
-    const regUser = await pool.query('SELECT id, nombre, apellido FROM usuarios WHERE id = $1', [
-      consumo.registrado_por_usuario_id,
-    ]);
-    const anulUser = await pool.query('SELECT id, nombre, apellido FROM usuarios WHERE id = $1', [
-      usuario.id,
-    ]);
+    const resConsumo = await pool.query(
+      `${SQL_CONSUMO_COMPLETO} WHERE ir.id = $1`,
+      [consumoId]
+    );
 
-    const consumoActualizado = {
-      id: consumoId,
-      repuesto: {
-        id: Number(consumo.repuesto_id),
-        codigo: consumo.repuesto_codigo || null,
-        nombre: consumo.repuesto_nombre,
-        unidad: consumo.repuesto_unidad || 'unidad',
-      },
-      cantidad: Number(consumo.cantidad),
-      costo_unitario_aplicado: tienePermisoCostos ? Number(consumo.costo_unitario_aplicado) : null,
-      importe: tienePermisoCostos
-        ? Number((Number(consumo.cantidad) * Number(consumo.costo_unitario_aplicado)).toFixed(2))
-        : null,
-      observacion: consumo.observacion || null,
-      registrado_por: regUser.rows[0]
-        ? {
-            id: Number(regUser.rows[0].id),
-            nombre: regUser.rows[0].nombre,
-            apellido: regUser.rows[0].apellido || null,
-          }
-        : null,
-      registrado_en: consumo.creado_en,
-      movimiento_id: consumo.movimiento_id !== null ? Number(consumo.movimiento_id) : null,
-      movio_stock: consumo.movimiento_id !== null,
-      anulado: true,
-      anulado_por: anulUser.rows[0]
-        ? {
-            id: Number(anulUser.rows[0].id),
-            nombre: anulUser.rows[0].nombre,
-            apellido: anulUser.rows[0].apellido || null,
-          }
-        : null,
-      anulado_en: anuladoEn,
-      motivo_anulacion: motivoTrim,
-    };
-
-    return c.json(consumoActualizado, 200);
+    return c.json(armarConsumoRespuesta(resConsumo.rows[0], tienePermisoCostos), 200);
   } catch (err) {
     await client.query('ROLLBACK');
     return responderError(c, err);
@@ -616,15 +575,37 @@ intervencionRepuestosApp.post('/:id/repuestos/:consumoId/anular', async (c) => {
 
 // GET /:id/pedidos
 intervencionRepuestosApp.get('/:id/pedidos', requirePermission('INTERVENCIONES_VER'), async (c) => {
-  const client = await pool.connect();
   try {
-    const id = Number(c.req.param('id'));
-    if (isNaN(id) || id <= 0) {
+    const id = parseIdRuta(c.req.param('id'));
+    if (!id) {
       throw new ErrorNegocio(404, 'INTERVENCION_NO_ENCONTRADA', 'Intervención no encontrada');
     }
     const usuario = getUsuarioContext(c);
 
-    const { intervencion } = await bloquearIntervencion(client, id, usuario);
+    // Valida existencia, no eliminación y visibilidad sin bloquear
+    const resI = await pool.query(
+      `SELECT i.id, i.estado, i.responsable_usuario_id, i.creado_por_usuario_id, i.eliminado_en, m.sector_id
+       FROM intervenciones i
+       JOIN maquinas m ON m.id = i.maquina_id
+       WHERE i.id = $1`,
+      [id]
+    );
+
+    if (resI.rows.length === 0 || resI.rows[0].eliminado_en !== null) {
+      throw new ErrorNegocio(404, 'INTERVENCION_NO_ENCONTRADA', 'Intervención no encontrada');
+    }
+
+    const intervencion = resI.rows[0];
+    const visible = puedeVerIntervencion(usuario, {
+      creado_por_usuario_id: Number(intervencion.creado_por_usuario_id),
+      responsable_usuario_id: intervencion.responsable_usuario_id ? Number(intervencion.responsable_usuario_id) : null,
+      sector_id: Number(intervencion.sector_id),
+    });
+
+    if (!visible) {
+      throw new ErrorNegocio(404, 'INTERVENCION_NO_ENCONTRADA', 'Intervención no encontrada');
+    }
+
     const { puede_crear, puede_gestionar } = permisosPedidos(usuario, intervencion);
 
     const sql = `
@@ -650,7 +631,7 @@ intervencionRepuestosApp.get('/:id/pedidos', requirePermission('INTERVENCIONES_V
         pr.id ASC
     `;
 
-    const res = await client.query(sql, [id]);
+    const res = await pool.query(sql, [id]);
     const pedidos = res.rows.map(armarPedidoRespuesta);
 
     return c.json(
@@ -663,8 +644,6 @@ intervencionRepuestosApp.get('/:id/pedidos', requirePermission('INTERVENCIONES_V
     );
   } catch (err) {
     return responderError(c, err);
-  } finally {
-    client.release();
   }
 });
 
@@ -672,8 +651,8 @@ intervencionRepuestosApp.get('/:id/pedidos', requirePermission('INTERVENCIONES_V
 intervencionRepuestosApp.post('/:id/pedidos', async (c) => {
   const client = await pool.connect();
   try {
-    const id = Number(c.req.param('id'));
-    if (isNaN(id) || id <= 0) {
+    const id = parseIdRuta(c.req.param('id'));
+    if (!id) {
       throw new ErrorNegocio(404, 'INTERVENCION_NO_ENCONTRADA', 'Intervención no encontrada');
     }
     const usuario = getUsuarioContext(c);
@@ -699,11 +678,8 @@ intervencionRepuestosApp.post('/:id/pedidos', async (c) => {
     // Validar repuesto_id y descripción
     let repuestoId: number | null = null;
     if (body.repuesto_id !== undefined && body.repuesto_id !== null) {
-      repuestoId = Number(body.repuesto_id);
-      if (isNaN(repuestoId) || repuestoId <= 0) {
-        throw new ErrorNegocio(422, 'REPUESTO_INVALIDO', 'Repuesto inválido');
-      }
-      const repRes = await client.query('SELECT id, activo FROM repuestos WHERE id = $1', [repuestoId]);
+      repuestoId = validarIdCuerpo(body.repuesto_id, 'REPUESTO_INVALIDO', 'repuesto_id');
+      const repRes = await client.query('SELECT id, activo FROM repuestos WHERE id = $1 FOR SHARE', [repuestoId]);
       if (repRes.rows.length === 0 || !repRes.rows[0].activo) {
         throw new ErrorNegocio(422, 'REPUESTO_INVALIDO', 'El repuesto no existe o está inactivo');
       }
@@ -730,11 +706,8 @@ intervencionRepuestosApp.post('/:id/pedidos', async (c) => {
     // proveedor_id
     let proveedorId: number | null = null;
     if (body.proveedor_id !== undefined && body.proveedor_id !== null) {
-      proveedorId = Number(body.proveedor_id);
-      if (isNaN(proveedorId) || proveedorId <= 0) {
-        throw new ErrorNegocio(422, 'PROVEEDOR_INVALIDO', 'Proveedor inválido');
-      }
-      const provRes = await client.query('SELECT id, activo FROM proveedores WHERE id = $1', [proveedorId]);
+      proveedorId = validarIdCuerpo(body.proveedor_id, 'PROVEEDOR_INVALIDO', 'proveedor_id');
+      const provRes = await client.query('SELECT id, activo FROM proveedores WHERE id = $1 FOR SHARE', [proveedorId]);
       if (provRes.rows.length === 0 || !provRes.rows[0].activo) {
         throw new ErrorNegocio(422, 'PROVEEDOR_INVALIDO', 'El proveedor no existe o está inactivo');
       }
@@ -821,9 +794,9 @@ intervencionRepuestosApp.post('/:id/pedidos', async (c) => {
 intervencionRepuestosApp.patch('/:id/pedidos/:pedidoId', async (c) => {
   const client = await pool.connect();
   try {
-    const id = Number(c.req.param('id'));
-    const pedidoId = Number(c.req.param('pedidoId'));
-    if (isNaN(id) || id <= 0 || isNaN(pedidoId) || pedidoId <= 0) {
+    const id = parseIdRuta(c.req.param('id'));
+    const pedidoId = parseIdRuta(c.req.param('pedidoId'));
+    if (!id || !pedidoId) {
       throw new ErrorNegocio(404, 'PEDIDO_NO_ENCONTRADO', 'Pedido no encontrado');
     }
     const usuario = getUsuarioContext(c);
@@ -862,11 +835,8 @@ intervencionRepuestosApp.patch('/:id/pedidos/:pedidoId', async (c) => {
       if (body.repuesto_id === null) {
         repuestoId = null;
       } else {
-        const rId = Number(body.repuesto_id);
-        if (isNaN(rId) || rId <= 0) {
-          throw new ErrorNegocio(422, 'REPUESTO_INVALIDO', 'Repuesto inválido');
-        }
-        const repRes = await client.query('SELECT id, activo FROM repuestos WHERE id = $1', [rId]);
+        const rId = validarIdCuerpo(body.repuesto_id, 'REPUESTO_INVALIDO', 'repuesto_id');
+        const repRes = await client.query('SELECT id, activo FROM repuestos WHERE id = $1 FOR SHARE', [rId]);
         if (repRes.rows.length === 0 || !repRes.rows[0].activo) {
           throw new ErrorNegocio(422, 'REPUESTO_INVALIDO', 'El repuesto no existe o está inactivo');
         }
@@ -903,11 +873,8 @@ intervencionRepuestosApp.patch('/:id/pedidos/:pedidoId', async (c) => {
       if (body.proveedor_id === null) {
         proveedorId = null;
       } else {
-        const pId = Number(body.proveedor_id);
-        if (isNaN(pId) || pId <= 0) {
-          throw new ErrorNegocio(422, 'PROVEEDOR_INVALIDO', 'Proveedor inválido');
-        }
-        const provRes = await client.query('SELECT id, activo FROM proveedores WHERE id = $1', [pId]);
+        const pId = validarIdCuerpo(body.proveedor_id, 'PROVEEDOR_INVALIDO', 'proveedor_id');
+        const provRes = await client.query('SELECT id, activo FROM proveedores WHERE id = $1 FOR SHARE', [pId]);
         if (provRes.rows.length === 0 || !provRes.rows[0].activo) {
           throw new ErrorNegocio(422, 'PROVEEDOR_INVALIDO', 'El proveedor no existe o está inactivo');
         }
@@ -1007,9 +974,9 @@ intervencionRepuestosApp.patch('/:id/pedidos/:pedidoId', async (c) => {
 intervencionRepuestosApp.post('/:id/pedidos/:pedidoId/recibir', async (c) => {
   const client = await pool.connect();
   try {
-    const id = Number(c.req.param('id'));
-    const pedidoId = Number(c.req.param('pedidoId'));
-    if (isNaN(id) || id <= 0 || isNaN(pedidoId) || pedidoId <= 0) {
+    const id = parseIdRuta(c.req.param('id'));
+    const pedidoId = parseIdRuta(c.req.param('pedidoId'));
+    if (!id || !pedidoId) {
       throw new ErrorNegocio(404, 'PEDIDO_NO_ENCONTRADO', 'Pedido no encontrado');
     }
     const usuario = getUsuarioContext(c);
@@ -1055,7 +1022,10 @@ intervencionRepuestosApp.post('/:id/pedidos/:pedidoId/recibir', async (c) => {
       recibidoEn = dRec.toISOString();
     }
 
-    const ingresarStock = Boolean(body.ingresar_stock);
+    let ingresarStock = false;
+    if (body.ingresar_stock !== undefined) {
+      ingresarStock = validarBooleano(body.ingresar_stock, 'ingresar_stock');
+    }
     let movimientoId: number | null = null;
 
     if (ingresarStock) {
@@ -1160,9 +1130,9 @@ intervencionRepuestosApp.post('/:id/pedidos/:pedidoId/recibir', async (c) => {
 intervencionRepuestosApp.post('/:id/pedidos/:pedidoId/cancelar', async (c) => {
   const client = await pool.connect();
   try {
-    const id = Number(c.req.param('id'));
-    const pedidoId = Number(c.req.param('pedidoId'));
-    if (isNaN(id) || id <= 0 || isNaN(pedidoId) || pedidoId <= 0) {
+    const id = parseIdRuta(c.req.param('id'));
+    const pedidoId = parseIdRuta(c.req.param('pedidoId'));
+    if (!id || !pedidoId) {
       throw new ErrorNegocio(404, 'PEDIDO_NO_ENCONTRADO', 'Pedido no encontrado');
     }
     const usuario = getUsuarioContext(c);

@@ -207,7 +207,8 @@ CREATE INDEX IF NOT EXISTS idx_pedidos_repuesto_pendientes_pedidos
 INSERT INTO proveedores (nombre, creado_en, actualizado_en)
 SELECT DISTINCT ON (lower(trim(proveedor))) trim(proveedor), NOW(), NOW()
 FROM repuestos
-WHERE proveedor IS NOT NULL AND trim(proveedor) <> ''
+WHERE proveedor_id IS NULL
+  AND proveedor IS NOT NULL AND trim(proveedor) <> ''
   AND NOT EXISTS (
     SELECT 1 FROM proveedores p WHERE lower(trim(p.nombre)) = lower(trim(repuestos.proveedor))
   )
@@ -216,8 +217,8 @@ ORDER BY lower(trim(proveedor)), id;
 UPDATE repuestos r
 SET proveedor_id = p.id
 FROM proveedores p
-WHERE r.proveedor IS NOT NULL AND trim(r.proveedor) <> ''
-  AND r.proveedor_id IS NULL
+WHERE r.proveedor_id IS NULL
+  AND r.proveedor IS NOT NULL AND trim(r.proveedor) <> ''
   AND lower(trim(p.nombre)) = lower(trim(r.proveedor));
 
 -- 7.2 Historial inicial de costos

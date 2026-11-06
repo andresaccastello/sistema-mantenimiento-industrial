@@ -70,6 +70,7 @@ test('Etapa R1 — Repuestos, proveedores y stock (RE-01 a RE-09)', async (t) =>
   const createdUsuarioIds: number[] = [];
   const createdProveedorIds: number[] = [];
   const createdRepuestoIds: number[] = [];
+  const createdIntervencionIds: number[] = [];
 
   try {
     const suf = Date.now();
@@ -858,9 +859,236 @@ test('Etapa R1 — Repuestos, proveedores y stock (RE-01 a RE-09)', async (t) =>
       assert.ok(listaPost.some((r: any) => r.id === repZero.id));
     });
 
+    // =========================================================================
+    // RE-10: Ids de ruta y booleanos mal validados
+    // =========================================================================
+    await t.test('RE-10: Ids de ruta y booleanos mal validados', async () => {
+      // Repuestos: ids de ruta inválidos dan 404
+      for (const badId of ['1.5', 'abc']) {
+        const r1 = await getJson(`/api/repuestos/${badId}`, tokenG);
+        assert.strictEqual(r1.status, 404);
+        const r2 = await putJson(`/api/repuestos/${badId}`, { nombre: 'Cambio' }, tokenG);
+        assert.strictEqual(r2.status, 404);
+        const r3 = await deleteJson(`/api/repuestos/${badId}`, tokenG);
+        assert.strictEqual(r3.status, 404);
+        const r4 = await getJson(`/api/repuestos/${badId}/movimientos`, tokenG);
+        assert.strictEqual(r4.status, 404);
+        const r5 = await postJson(`/api/repuestos/${badId}/movimientos`, { tipo: 'EGRESO', cantidad: 1, observacion: 'Motivo prueba' }, tokenG);
+        assert.strictEqual(r5.status, 404);
+        const r6 = await getJson(`/api/repuestos/${badId}/usos`, tokenG);
+        assert.strictEqual(r6.status, 404);
+        const r7 = await getJson(`/api/repuestos/${badId}/costos`, tokenG);
+        assert.strictEqual(r7.status, 404);
+      }
+
+      // Proveedores: ids de ruta inválidos dan 404
+      for (const badId of ['1.5', 'abc']) {
+        const p1 = await putJson(`/api/proveedores/${badId}`, { nombre: 'Cambio' }, tokenG);
+        assert.strictEqual(p1.status, 404);
+        const p2 = await deleteJson(`/api/proveedores/${badId}`, tokenG);
+        assert.strictEqual(p2.status, 404);
+      }
+
+      // Repuesto y proveedor de prueba para booleanos
+      const rRep = await postJson(
+        '/api/repuestos',
+        { nombre: `Rep Bool_${suf}`, stock_inicial: 0 },
+        tokenG
+      );
+      const rep = await rRep.json();
+      createdRepuestoIds.push(rep.id);
+
+      const rProv = await postJson(
+        '/api/proveedores',
+        { nombre: `Prov Bool_${suf}` },
+        tokenG
+      );
+      const prov = await rProv.json();
+      createdProveedorIds.push(prov.id);
+
+      // lleva_stock: "false" da 422
+      const rBadLlevaStockPost = await postJson(
+        '/api/repuestos',
+        { nombre: `Rep Bad Bool_${suf}`, lleva_stock: "false" as any },
+        tokenG
+      );
+      assert.strictEqual(rBadLlevaStockPost.status, 422);
+
+      const rBadLlevaStockPut = await putJson(
+        `/api/repuestos/${rep.id}`,
+        { lleva_stock: "false" as any },
+        tokenG
+      );
+      assert.strictEqual(rBadLlevaStockPut.status, 422);
+
+      // activo: 1 da 422
+      const rBadActivoRep = await putJson(
+        `/api/repuestos/${rep.id}`,
+        { activo: 1 as any },
+        tokenG
+      );
+      assert.strictEqual(rBadActivoRep.status, 422);
+
+      const rBadActivoProv = await putJson(
+        `/api/proveedores/${prov.id}`,
+        { activo: 1 as any },
+        tokenG
+      );
+      assert.strictEqual(rBadActivoProv.status, 422);
+    });
+
+    // =========================================================================
+    // RE-11: Concurrencia
+    // =========================================================================
+    await t.test('RE-11: Casos de concurrencia (10 intentos de cada caso)', async () => {
+      const maqRes = await client.query('SELECT id FROM maquinas WHERE activo = TRUE LIMIT 1');
+      assert.ok(maqRes.rows.length > 0, 'Debe haber al menos una máquina');
+      const maquinaId = maqRes.rows[0].id;
+
+      const tipoRes = await client.query('SELECT id FROM tipos_intervencion WHERE activo = TRUE LIMIT 1');
+      const tipoId = tipoRes.rows[0]?.id || 1;
+
+      const intRes = await client.query(
+        `INSERT INTO intervenciones (maquina_id, tipo_intervencion_id, estado, creado_por_usuario_id, descripcion, fecha_creacion)
+         VALUES ($1, $2, 'EN_PROCESO', $3, 'Intervención prueba RE-11', NOW()) RETURNING id`,
+        [maquinaId, tipoId, userG.id]
+      );
+      const intervencionId = intRes.rows[0].id;
+      createdIntervencionIds.push(intervencionId);
+
+      // Caso 1: Desactivar un repuesto y un ingreso (10 intentos)
+      for (let i = 0; i < 10; i++) {
+        const rR = await postJson('/api/repuestos', { nombre: `Rep Conc1_${i}_${suf}`, stock_inicial: 0 }, tokenG);
+        const rep = await rR.json();
+        createdRepuestoIds.push(rep.id);
+
+        const [resDel, resIng] = await Promise.all([
+          deleteJson(`/api/repuestos/${rep.id}`, tokenG),
+          postJson(`/api/repuestos/${rep.id}/movimientos`, { tipo: 'INGRESO', cantidad: 5, observacion: 'Ingreso concurrente' }, tokenG),
+        ]);
+        assert.ok(resDel.status !== 500, `Caso 1 del no debe dar 500 (dio ${resDel.status})`);
+        assert.ok(resIng.status !== 500, `Caso 1 ing no debe dar 500 (dio ${resIng.status})`);
+
+        const dbRes = await client.query('SELECT activo, cantidad_disponible FROM repuestos WHERE id = $1', [rep.id]);
+        const rAct = dbRes.rows[0];
+        if (!rAct.activo) {
+          assert.strictEqual(Number(rAct.cantidad_disponible), 0, 'No puede quedar inactivo con stock');
+        }
+      }
+
+      // Caso 2: Desactivar un repuesto y el alta de un pedido (10 intentos)
+      for (let i = 0; i < 10; i++) {
+        const rR = await postJson('/api/repuestos', { nombre: `Rep Conc2_${i}_${suf}`, stock_inicial: 0 }, tokenG);
+        const rep = await rR.json();
+        createdRepuestoIds.push(rep.id);
+
+        const [resDel, resPed] = await Promise.all([
+          deleteJson(`/api/repuestos/${rep.id}`, tokenG),
+          postJson(`/api/intervenciones/${intervencionId}/pedidos`, { repuesto_id: rep.id, cantidad: 1 }, tokenG),
+        ]);
+        assert.ok(resDel.status !== 500, `Caso 2 del no debe dar 500 (dio ${resDel.status})`);
+        assert.ok(resPed.status !== 500, `Caso 2 ped no debe dar 500 (dio ${resPed.status})`);
+
+        const dbRes = await client.query('SELECT activo FROM repuestos WHERE id = $1', [rep.id]);
+        const rAct = dbRes.rows[0];
+        if (!rAct.activo) {
+          const pedAbiertos = await client.query(
+            "SELECT COUNT(*)::int AS count FROM pedidos_repuesto WHERE repuesto_id = $1 AND estado IN ('PENDIENTE', 'PEDIDO')",
+            [rep.id]
+          );
+          assert.strictEqual(Number(pedAbiertos.rows[0].count), 0, 'No puede quedar inactivo con pedidos abiertos');
+        }
+      }
+
+      // Caso 3: Desactivar un repuesto y editar su ubicación (10 intentos)
+      for (let i = 0; i < 10; i++) {
+        const rR = await postJson('/api/repuestos', { nombre: `Rep Conc3_${i}_${suf}`, stock_inicial: 0 }, tokenG);
+        const rep = await rR.json();
+        createdRepuestoIds.push(rep.id);
+
+        const [resDel, resPut] = await Promise.all([
+          deleteJson(`/api/repuestos/${rep.id}`, tokenG),
+          putJson(`/api/repuestos/${rep.id}`, { ubicacion: `Estante Conc_${i}` }, tokenG),
+        ]);
+        assert.ok(resDel.status !== 500, `Caso 3 del no debe dar 500 (dio ${resDel.status})`);
+        assert.ok(resPut.status !== 500, `Caso 3 put no debe dar 500 (dio ${resPut.status})`);
+
+        if (resDel.status === 200) {
+          const dbRes = await client.query('SELECT activo FROM repuestos WHERE id = $1', [rep.id]);
+          assert.strictEqual(dbRes.rows[0].activo, false, 'No puede quedar reactivado si DELETE respondió 200');
+        }
+      }
+
+      // Caso 4: Dejar de llevar stock y un ingreso (10 intentos)
+      for (let i = 0; i < 10; i++) {
+        const rR = await postJson('/api/repuestos', { nombre: `Rep Conc4_${i}_${suf}`, stock_inicial: 0, lleva_stock: true }, tokenG);
+        const rep = await rR.json();
+        createdRepuestoIds.push(rep.id);
+
+        const [resPut, resIng] = await Promise.all([
+          putJson(`/api/repuestos/${rep.id}`, { lleva_stock: false }, tokenG),
+          postJson(`/api/repuestos/${rep.id}/movimientos`, { tipo: 'INGRESO', cantidad: 5, observacion: 'Ingreso conc' }, tokenG),
+        ]);
+        assert.ok(resPut.status !== 500, `Caso 4 put no debe dar 500 (dio ${resPut.status})`);
+        assert.ok(resIng.status !== 500, `Caso 4 ing no debe dar 500 (dio ${resIng.status})`);
+      }
+
+      // Caso 5: Dos proveedores con el mismo nombre (10 intentos)
+      for (let i = 0; i < 10; i++) {
+        const nombre = `Prov Conc Dup ${suf}_${i}`;
+        const [p1, p2] = await Promise.all([
+          postJson('/api/proveedores', { nombre }, tokenG),
+          postJson('/api/proveedores', { nombre }, tokenG),
+        ]);
+        assert.ok(p1.status !== 500, `Caso 5 p1 no debe dar 500 (dio ${p1.status})`);
+        assert.ok(p2.status !== 500, `Caso 5 p2 no debe dar 500 (dio ${p2.status})`);
+        const statuses = [p1.status, p2.status].sort();
+        assert.deepStrictEqual(statuses, [201, 409]);
+        const d1 = p1.status === 201 ? await p1.json() : await p2.json();
+        createdProveedorIds.push(d1.id);
+      }
+
+      // Caso 6: Dos repuestos con el mismo código (10 intentos)
+      for (let i = 0; i < 10; i++) {
+        const codigo = `C-CONC-${suf}-${i}`;
+        const [r1, r2] = await Promise.all([
+          postJson('/api/repuestos', { nombre: `Rep Conc 6A_${i}`, codigo }, tokenG),
+          postJson('/api/repuestos', { nombre: `Rep Conc 6B_${i}`, codigo }, tokenG),
+        ]);
+        assert.ok(r1.status !== 500, `Caso 6 r1 no debe dar 500 (dio ${r1.status})`);
+        assert.ok(r2.status !== 500, `Caso 6 r2 no debe dar 500 (dio ${r2.status})`);
+        const statuses = [r1.status, r2.status].sort();
+        assert.deepStrictEqual(statuses, [201, 409]);
+        const d1 = r1.status === 201 ? await r1.json() : await r2.json();
+        createdRepuestoIds.push(d1.id);
+      }
+    });
+
+    // =========================================================================
+    // RE-12: Repuesto con texto viejo y PUT con proveedor_id: null
+    // =========================================================================
+    await t.test('RE-12: Repuesto con texto viejo y PUT con proveedor_id: null', async () => {
+      const resSql = await client.query(
+        "INSERT INTO repuestos (nombre, proveedor) VALUES ('Repuesto Texto Viejo', 'Casa Vieja') RETURNING id"
+      );
+      const repId = resSql.rows[0].id;
+      createdRepuestoIds.push(repId);
+
+      const resPut = await putJson(`/api/repuestos/${repId}`, { proveedor_id: null }, tokenG);
+      assert.strictEqual(resPut.status, 200);
+
+      const resDb = await client.query('SELECT proveedor, proveedor_id FROM repuestos WHERE id = $1', [repId]);
+      assert.strictEqual(resDb.rows[0].proveedor, null);
+      assert.strictEqual(resDb.rows[0].proveedor_id, null);
+    });
+
   } finally {
     // Limpieza estricta en orden: movimientos, historial costos, repuestos, proveedores, excepciones, usuarios
     try {
+      if (createdIntervencionIds.length > 0) {
+        await client.query('DELETE FROM pedidos_repuesto WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);
+        await client.query('DELETE FROM intervenciones WHERE id = ANY($1)', [createdIntervencionIds]);
+      }
       if (createdRepuestoIds.length > 0) {
         await client.query('DELETE FROM movimientos_stock WHERE repuesto_id = ANY($1)', [createdRepuestoIds]);
         await client.query('DELETE FROM repuesto_costos WHERE repuesto_id = ANY($1)', [createdRepuestoIds]);

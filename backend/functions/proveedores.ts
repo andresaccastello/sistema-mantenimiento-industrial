@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { pool } from './db.ts';
 import { jwtVerify, dbVerify, requirePermission, requireAlgunPermiso } from './middleware.ts';
 import { ErrorNegocio, responderError } from './intervenciones/errores.ts';
-import { validarEmail } from './repuestos/validaciones.ts';
+import { validarEmail, parseIdRuta, validarBooleano } from './repuestos/validaciones.ts';
 
 const proveedoresApp = new Hono();
 
@@ -115,13 +115,21 @@ proveedoresApp.post('/', requirePermission('REPUESTOS_GESTIONAR'), async (c) => 
       throw new ErrorNegocio(409, 'NOMBRE_DUPLICADO', 'Ya existe un proveedor con ese nombre');
     }
 
-    const ins = await pool.query(
-      `INSERT INTO proveedores (nombre, contacto, telefono, email, notas, activo, creado_en, actualizado_en)
-       VALUES ($1, $2, $3, $4, $5, TRUE, NOW(), NOW())
-       RETURNING id, nombre, contacto, telefono, email, notas, activo, creado_en, actualizado_en`,
-      [nombreRaw, contacto, telefono, email, notas]
-    );
-    const nuevo = ins.rows[0];
+    let nuevo: any;
+    try {
+      const ins = await pool.query(
+        `INSERT INTO proveedores (nombre, contacto, telefono, email, notas, activo, creado_en, actualizado_en)
+         VALUES ($1, $2, $3, $4, $5, TRUE, NOW(), NOW())
+         RETURNING id, nombre, contacto, telefono, email, notas, activo, creado_en, actualizado_en`,
+        [nombreRaw, contacto, telefono, email, notas]
+      );
+      nuevo = ins.rows[0];
+    } catch (dbErr: any) {
+      if (dbErr.code === '23505' || dbErr.constraint === 'uq_proveedores_nombre') {
+        throw new ErrorNegocio(409, 'NOMBRE_DUPLICADO', 'Ya existe un proveedor con ese nombre');
+      }
+      throw dbErr;
+    }
 
     return c.json(
       {
@@ -143,9 +151,10 @@ proveedoresApp.post('/', requirePermission('REPUESTOS_GESTIONAR'), async (c) => 
 
 // PUT /:id
 proveedoresApp.put('/:id', requirePermission('REPUESTOS_GESTIONAR'), async (c) => {
+  const client = await pool.connect();
   try {
-    const id = Number(c.req.param('id'));
-    if (isNaN(id) || id <= 0) {
+    const id = parseIdRuta(c.req.param('id'));
+    if (!id) {
       throw new ErrorNegocio(404, 'PROVEEDOR_NO_ENCONTRADO', 'Proveedor no encontrado');
     }
 
@@ -156,7 +165,9 @@ proveedoresApp.put('/:id', requirePermission('REPUESTOS_GESTIONAR'), async (c) =
       throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'Cuerpo JSON inválido');
     }
 
-    const existingRes = await pool.query('SELECT * FROM proveedores WHERE id = $1', [id]);
+    await client.query('BEGIN');
+
+    const existingRes = await client.query('SELECT * FROM proveedores WHERE id = $1 FOR UPDATE', [id]);
     if (existingRes.rows.length === 0) {
       throw new ErrorNegocio(404, 'PROVEEDOR_NO_ENCONTRADO', 'Proveedor no encontrado');
     }
@@ -168,7 +179,7 @@ proveedoresApp.put('/:id', requirePermission('REPUESTOS_GESTIONAR'), async (c) =
       if (nombreRaw.length < 2 || nombreRaw.length > 150) {
         throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El nombre debe tener entre 2 y 150 caracteres');
       }
-      const dup = await pool.query(
+      const dup = await client.query(
         'SELECT id FROM proveedores WHERE lower(trim(nombre)) = lower(trim($1)) AND id <> $2',
         [nombreRaw, id]
       );
@@ -209,17 +220,28 @@ proveedoresApp.put('/:id', requirePermission('REPUESTOS_GESTIONAR'), async (c) =
 
     let activo = actual.activo;
     if (body.activo !== undefined) {
-      activo = Boolean(body.activo);
+      validarBooleano(body.activo, 'activo');
+      activo = body.activo;
     }
 
-    const upd = await pool.query(
-      `UPDATE proveedores
-       SET nombre = $1, contacto = $2, telefono = $3, email = $4, notas = $5, activo = $6, actualizado_en = NOW()
-       WHERE id = $7
-       RETURNING id, nombre, contacto, telefono, email, notas, activo, creado_en, actualizado_en`,
-      [nombre, contacto, telefono, email, notas, activo, id]
-    );
-    const mod = upd.rows[0];
+    let mod: any;
+    try {
+      const upd = await client.query(
+        `UPDATE proveedores
+         SET nombre = $1, contacto = $2, telefono = $3, email = $4, notas = $5, activo = $6, actualizado_en = NOW()
+         WHERE id = $7
+         RETURNING id, nombre, contacto, telefono, email, notas, activo, creado_en, actualizado_en`,
+        [nombre, contacto, telefono, email, notas, activo, id]
+      );
+      mod = upd.rows[0];
+    } catch (dbErr: any) {
+      if (dbErr.code === '23505' || dbErr.constraint === 'uq_proveedores_nombre') {
+        throw new ErrorNegocio(409, 'NOMBRE_DUPLICADO', 'Ya existe un proveedor con ese nombre');
+      }
+      throw dbErr;
+    }
+
+    await client.query('COMMIT');
 
     const repCount = await pool.query(
       'SELECT COUNT(*)::int AS count FROM repuestos WHERE proveedor_id = $1 AND activo = TRUE',
@@ -240,36 +262,43 @@ proveedoresApp.put('/:id', requirePermission('REPUESTOS_GESTIONAR'), async (c) =
       200
     );
   } catch (err) {
+    await client.query('ROLLBACK');
     return responderError(c, err);
+  } finally {
+    client.release();
   }
 });
 
 // DELETE /:id
 proveedoresApp.delete('/:id', requirePermission('REPUESTOS_GESTIONAR'), async (c) => {
+  const client = await pool.connect();
   try {
-    const id = Number(c.req.param('id'));
-    if (isNaN(id) || id <= 0) {
+    const id = parseIdRuta(c.req.param('id'));
+    if (!id) {
       throw new ErrorNegocio(404, 'PROVEEDOR_NO_ENCONTRADO', 'Proveedor no encontrado');
     }
 
-    const provRes = await pool.query('SELECT id, activo FROM proveedores WHERE id = $1', [id]);
+    await client.query('BEGIN');
+
+    const provRes = await client.query('SELECT id, activo FROM proveedores WHERE id = $1 FOR UPDATE', [id]);
     if (provRes.rows.length === 0) {
       throw new ErrorNegocio(404, 'PROVEEDOR_NO_ENCONTRADO', 'Proveedor no encontrado');
     }
     const prov = provRes.rows[0];
 
     if (!prov.activo) {
+      await client.query('COMMIT');
       return c.json({ ok: true, mensaje: 'Proveedor ya inactivo' }, 200);
     }
 
     // Verificar si está en uso
-    const repRes = await pool.query(
+    const repRes = await client.query(
       'SELECT COUNT(*)::int AS count FROM repuestos WHERE proveedor_id = $1 AND activo = TRUE',
       [id]
     );
     const repActivos = Number(repRes.rows[0]?.count || 0);
 
-    const pedRes = await pool.query(
+    const pedRes = await client.query(
       "SELECT COUNT(*)::int AS count FROM pedidos_repuesto WHERE proveedor_id = $1 AND estado IN ('PENDIENTE', 'PEDIDO')",
       [id]
     );
@@ -282,10 +311,14 @@ proveedoresApp.delete('/:id', requirePermission('REPUESTOS_GESTIONAR'), async (c
       });
     }
 
-    await pool.query('UPDATE proveedores SET activo = FALSE, actualizado_en = NOW() WHERE id = $1', [id]);
+    await client.query('UPDATE proveedores SET activo = FALSE, actualizado_en = NOW() WHERE id = $1', [id]);
+    await client.query('COMMIT');
     return c.json({ ok: true, mensaje: 'Proveedor desactivado' }, 200);
   } catch (err) {
+    await client.query('ROLLBACK');
     return responderError(c, err);
+  } finally {
+    client.release();
   }
 });
 

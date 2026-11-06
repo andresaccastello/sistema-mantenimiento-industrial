@@ -446,6 +446,34 @@ test('Migración 016 — Repuestos, stock y pedidos: base de datos', async (t) =
           "SELECT id FROM proveedores WHERE lower(trim(nombre)) = 'casa uno'"
         );
         assert.strictEqual(resProv2.rows.length, 1);
+
+        // Renombrar el proveedor y reaplicar: no se crea otro
+        await client.query(
+          "UPDATE proveedores SET nombre = 'Casa Uno SRL' WHERE id = $1",
+          [provId]
+        );
+        await client.query(sqlSinTransaccion);
+        const resProvViejo = await client.query(
+          "SELECT id FROM proveedores WHERE lower(trim(nombre)) = 'casa uno'"
+        );
+        assert.strictEqual(resProvViejo.rows.length, 0);
+        const resProvNuevo = await client.query(
+          "SELECT id FROM proveedores WHERE lower(trim(nombre)) = 'casa uno srl'"
+        );
+        assert.strictEqual(resProvNuevo.rows.length, 1);
+
+        // Dejar un repuesto con proveedor_id y proveedor en NULL, como lo deja la API, y reaplicar: sigue sin proveedor
+        const r3 = await client.query(
+          "INSERT INTO repuestos (nombre, proveedor_id, proveedor) VALUES ('Repuesto Sin Proveedor', NULL, NULL) RETURNING id"
+        );
+        const id3 = r3.rows[0].id;
+        await client.query(sqlSinTransaccion);
+        const resR3 = await client.query(
+          "SELECT id, proveedor_id, proveedor FROM repuestos WHERE id = $1",
+          [id3]
+        );
+        assert.strictEqual(resR3.rows[0].proveedor_id, null);
+        assert.strictEqual(resR3.rows[0].proveedor, null);
       } finally {
         await client.query('ROLLBACK');
       }
