@@ -29,6 +29,7 @@
     "test:permisos": "tsx --env-file=.env --test backend/tests/permisos_granulares.test.ts",
     "test:intervenciones": "tsx --env-file=.env --test backend/tests/intervenciones.test.ts",
     "test:tiempos": "tsx --env-file=.env --test backend/tests/tiempos.test.ts",
+    "test:reportes": "tsx --env-file=.env --test backend/tests/reportes.test.ts",
     "test:motor": "tsx --env-file=.env --test backend/tests/motor_estados.test.ts",
     "test:cierres": "tsx --env-file=.env --test backend/tests/motor_cierres.test.ts",
     "test:etapa6": "tsx --env-file=.env --test backend/tests/reapertura_eliminacion.test.ts",

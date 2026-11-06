@@ -192,3 +192,20 @@ La campana sigue siendo el aviso principal. El email es una copia para quien no 
 - WhatsApp queda preparado (datos de contacto y reglas) hasta tener su transporte.
 
 **Motivo:** decisión del usuario. Que cada instalación elija cuánto avisar, sin tocar el código.
+
+---
+
+## D-017 — Indicadores de mantenimiento
+
+**Estado:** Aceptada
+
+Sobre las máquinas activas de la selección y el período elegido:
+
+- **Disponibilidad:** tiempo sin detenciones ÷ tiempo del período. El tiempo fuera de servicio no cuenta como detención (D-07).
+- **Fallas:** intervenciones correctivas reportadas en el período, sin contar las canceladas.
+- **MTTR** (tiempo medio de reparación): duración neta promedio de las correctivas finalizadas en el período, sin las pausas.
+- **Tiempo de respuesta:** espera promedio de esas mismas correctivas, desde el reporte hasta el inicio del trabajo.
+- **MTBF** (tiempo medio entre fallas): tiempo del período sin detenciones correctivas ÷ cantidad de fallas.
+
+**Motivo:** son los indicadores usuales del área. Se definen acá para que el número del sistema y el de la tesis sean el mismo.
+

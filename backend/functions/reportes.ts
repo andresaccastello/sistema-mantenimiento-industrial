@@ -18,7 +18,219 @@ function getUsuarioContext(c: any): UsuarioVisibilidad {
 }
 
 /**
- * 5.2 GET /api/reportes/inactividad?desde=&hasta=&sector_id=
+ * 5.1 GET /api/reportes/indicadores?desde=&hasta=&planta_id=&sector_id=
+ * Indicadores clave de mantenimiento (Etapa F5).
+ */
+reportesApp.get('/indicadores', requirePermission('REPORTES_CONSULTAR'), async (c) => {
+  try {
+    const usuario = getUsuarioContext(c);
+    const scope = getUserScope(c, 'REPORTES_CONSULTAR');
+
+    const { desde, hasta } = await validarIntervaloReporte(
+      pool,
+      c.req.query('desde'),
+      c.req.query('hasta')
+    );
+
+    let sectorId: number | null = null;
+    const sectorIdQuery = c.req.query('sector_id');
+    if (sectorIdQuery !== undefined && sectorIdQuery !== null && sectorIdQuery.trim() !== '') {
+      sectorId = parseId(sectorIdQuery);
+      if (!sectorId) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El sector_id debe ser un entero válido');
+      }
+    }
+
+    let plantaId: number | null = null;
+    const plantaIdQuery = c.req.query('planta_id');
+    if (plantaIdQuery !== undefined && plantaIdQuery !== null && plantaIdQuery.trim() !== '') {
+      plantaId = parseId(plantaIdQuery);
+      if (!plantaId) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El planta_id debe ser un entero válido');
+      }
+    }
+
+    const respuestaVacia = () =>
+      c.json({
+        desde,
+        hasta,
+        maquinas: 0,
+        minutos_periodo: 0,
+        inactividad_minutos: 0,
+        inactividad_correctiva_minutos: 0,
+        inactividad_preventiva_minutos: 0,
+        disponibilidad: null,
+        fallas: 0,
+        correctivas_finalizadas: 0,
+        preventivas_finalizadas: 0,
+        mttr_minutos: null,
+        respuesta_promedio_minutos: null,
+        mtbf_horas: null,
+      });
+
+    if (scope !== 'TODAS') {
+      if (usuario.sectores.length === 0) {
+        return respuestaVacia();
+      }
+      if (sectorId !== null && !usuario.sectores.includes(sectorId)) {
+        return respuestaVacia();
+      }
+    }
+
+    const condMaquinas: string[] = ['m.activo = TRUE'];
+    const paramsMaquinas: any[] = [];
+    let pIdx = 1;
+
+    if (scope !== 'TODAS') {
+      condMaquinas.push(`m.sector_id = ANY($${pIdx})`);
+      paramsMaquinas.push(usuario.sectores);
+      pIdx++;
+    }
+
+    if (sectorId !== null) {
+      condMaquinas.push(`m.sector_id = $${pIdx}`);
+      paramsMaquinas.push(sectorId);
+      pIdx++;
+    }
+
+    if (plantaId !== null) {
+      condMaquinas.push(`s.planta_id = $${pIdx}`);
+      paramsMaquinas.push(plantaId);
+      pIdx++;
+    }
+
+    const qMaquinas = `
+      SELECT m.id
+      FROM maquinas m
+      JOIN sectores s ON s.id = m.sector_id
+      WHERE ${condMaquinas.join(' AND ')}
+    `;
+
+    const resMaquinas = await pool.query(qMaquinas, paramsMaquinas);
+    const maquinaIds = resMaquinas.rows.map((r: any) => Number(r.id));
+    const cantMaquinas = maquinaIds.length;
+
+    if (cantMaquinas === 0) {
+      return respuestaVacia();
+    }
+
+    const resMinutos = await pool.query(
+      `SELECT ROUND(EXTRACT(EPOCH FROM ($2::timestamptz - $1::timestamptz)) / 60)::INTEGER AS m`,
+      [desde, hasta]
+    );
+    const minutosUnEquipo = Number(resMinutos.rows[0].m);
+    const minutosPeriodo = minutosUnEquipo * cantMaquinas;
+
+    const qInactividad = `
+      SELECT
+        COALESCE(SUM(f.total_minutos), 0)::INTEGER AS inactividad_minutos,
+        COALESCE(SUM(f.correctivo_minutos), 0)::INTEGER AS inactividad_correctiva_minutos,
+        COALESCE(SUM(f.preventivo_minutos), 0)::INTEGER AS inactividad_preventiva_minutos
+      FROM maquinas m
+      CROSS JOIN LATERAL fn_inactividad_maquina(m.id, $2::timestamptz, $3::timestamptz) f
+      WHERE m.id = ANY($1::bigint[])
+    `;
+    const resInactividad = await pool.query(qInactividad, [maquinaIds, desde, hasta]);
+    const rowInac = resInactividad.rows[0];
+    const inactividadMinutos = Number(rowInac.inactividad_minutos);
+    const inactividadCorrectivaMinutos = Number(rowInac.inactividad_correctiva_minutos);
+    const inactividadPreventivaMinutos = Number(rowInac.inactividad_preventiva_minutos);
+
+    let disponibilidad: number | null = null;
+    if (minutosPeriodo > 0) {
+      const dispRaw = 1 - inactividadMinutos / minutosPeriodo;
+      const dispClamped = Math.max(0, Math.min(1, dispRaw));
+      disponibilidad = Number(dispClamped.toFixed(4));
+    }
+
+    const qIntervenciones = `
+      SELECT
+        COUNT(*) FILTER (
+          WHERE ti.codigo = 'CORRECTIVO'
+            AND i.estado != 'CANCELADA'
+            AND i.fecha_creacion >= $2::timestamptz
+            AND i.fecha_creacion <= $3::timestamptz
+        )::INTEGER AS fallas,
+
+        COUNT(*) FILTER (
+          WHERE ti.codigo = 'CORRECTIVO'
+            AND i.estado = 'FINALIZADA'
+            AND i.fecha_finalizacion >= $2::timestamptz
+            AND i.fecha_finalizacion <= $3::timestamptz
+        )::INTEGER AS correctivas_finalizadas,
+
+        ROUND(AVG(vit.duracion_neta_minutos) FILTER (
+          WHERE ti.codigo = 'CORRECTIVO'
+            AND i.estado = 'FINALIZADA'
+            AND i.fecha_finalizacion >= $2::timestamptz
+            AND i.fecha_finalizacion <= $3::timestamptz
+        ))::INTEGER AS mttr_minutos,
+
+        ROUND(AVG(vit.espera_minutos) FILTER (
+          WHERE ti.codigo = 'CORRECTIVO'
+            AND i.estado = 'FINALIZADA'
+            AND i.fecha_finalizacion >= $2::timestamptz
+            AND i.fecha_finalizacion <= $3::timestamptz
+        ))::INTEGER AS respuesta_promedio_minutos,
+
+        COUNT(*) FILTER (
+          WHERE ti.codigo = 'PREVENTIVO'
+            AND i.estado = 'FINALIZADA'
+            AND i.fecha_finalizacion >= $2::timestamptz
+            AND i.fecha_finalizacion <= $3::timestamptz
+        )::INTEGER AS preventivas_finalizadas
+
+      FROM intervenciones i
+      JOIN tipos_intervencion ti ON ti.id = i.tipo_intervencion_id
+      LEFT JOIN v_intervencion_tiempos vit ON vit.intervencion_id = i.id
+      WHERE i.maquina_id = ANY($1::bigint[])
+        AND i.eliminado_en IS NULL
+        AND (
+          (ti.codigo = 'CORRECTIVO' AND i.estado != 'CANCELADA' AND i.fecha_creacion >= $2::timestamptz AND i.fecha_creacion <= $3::timestamptz)
+          OR
+          (ti.codigo IN ('CORRECTIVO', 'PREVENTIVO') AND i.estado = 'FINALIZADA' AND i.fecha_finalizacion >= $2::timestamptz AND i.fecha_finalizacion <= $3::timestamptz)
+        )
+    `;
+
+    const resIntervenciones = await pool.query(qIntervenciones, [maquinaIds, desde, hasta]);
+    const rowInt = resIntervenciones.rows[0];
+
+    const fallas = Number(rowInt.fallas);
+    const correctivasFinalizadas = Number(rowInt.correctivas_finalizadas);
+    const preventivasFinalizadas = Number(rowInt.preventivas_finalizadas);
+    const mttrMinutos = rowInt.mttr_minutos !== null ? Number(rowInt.mttr_minutos) : null;
+    const respuestaPromedioMinutos =
+      rowInt.respuesta_promedio_minutos !== null ? Number(rowInt.respuesta_promedio_minutos) : null;
+
+    let mtbfHoras: number | null = null;
+    if (fallas > 0) {
+      const mtbf = (minutosPeriodo - inactividadCorrectivaMinutos) / fallas / 60;
+      mtbfHoras = Number(mtbf.toFixed(1));
+    }
+
+    return c.json({
+      desde,
+      hasta,
+      maquinas: cantMaquinas,
+      minutos_periodo: minutosPeriodo,
+      inactividad_minutos: inactividadMinutos,
+      inactividad_correctiva_minutos: inactividadCorrectivaMinutos,
+      inactividad_preventiva_minutos: inactividadPreventivaMinutos,
+      disponibilidad,
+      fallas,
+      correctivas_finalizadas: correctivasFinalizadas,
+      preventivas_finalizadas: preventivasFinalizadas,
+      mttr_minutos: mttrMinutos,
+      respuesta_promedio_minutos: respuestaPromedioMinutos,
+      mtbf_horas: mtbfHoras,
+    });
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+/**
+ * 5.2 GET /api/reportes/inactividad?desde=&hasta=&sector_id=&planta_id=
  * Ranking de inactividad por máquina.
  * - Una fila por máquina activa (respetando el alcance).
  * - Orden: mayor inactividad primero, empates por nombre.
@@ -63,6 +275,18 @@ reportesApp.get('/inactividad', requirePermission('REPORTES_CONSULTAR'), async (
 
       conditions.push(`m.sector_id = $${paramIndex}`);
       params.push(sectorId);
+      paramIndex++;
+    }
+
+    const plantaIdQuery = c.req.query('planta_id');
+    if (plantaIdQuery !== undefined && plantaIdQuery !== null && plantaIdQuery.trim() !== '') {
+      const plantaId = parseId(plantaIdQuery);
+      if (!plantaId) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El planta_id debe ser un entero válido');
+      }
+
+      conditions.push(`s.planta_id = $${paramIndex}`);
+      params.push(plantaId);
       paramIndex++;
     }
 
@@ -153,13 +377,43 @@ reportesApp.get('/tiempos', requirePermission('REPORTES_CONSULTAR'), async (c) =
       'i.fecha_finalizacion <= $2::timestamptz',
     ];
     const params: any[] = [desde, hasta];
+    let paramIndex = 3;
 
     if (scope !== 'TODAS') {
       if (usuario.sectores.length === 0) {
         return c.json([]);
       }
-      conditions.push('m.sector_id = ANY($3)');
+      conditions.push(`m.sector_id = ANY($${paramIndex})`);
       params.push(usuario.sectores);
+      paramIndex++;
+    }
+
+    const sectorIdQuery = c.req.query('sector_id');
+    if (sectorIdQuery !== undefined && sectorIdQuery !== null && sectorIdQuery.trim() !== '') {
+      const sectorId = parseId(sectorIdQuery);
+      if (!sectorId) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El sector_id debe ser un entero válido');
+      }
+
+      if (scope !== 'TODAS' && !usuario.sectores.includes(sectorId)) {
+        return c.json([]);
+      }
+
+      conditions.push(`m.sector_id = $${paramIndex}`);
+      params.push(sectorId);
+      paramIndex++;
+    }
+
+    const plantaIdQuery = c.req.query('planta_id');
+    if (plantaIdQuery !== undefined && plantaIdQuery !== null && plantaIdQuery.trim() !== '') {
+      const plantaId = parseId(plantaIdQuery);
+      if (!plantaId) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El planta_id debe ser un entero válido');
+      }
+
+      conditions.push(`s.planta_id = $${paramIndex}`);
+      params.push(plantaId);
+      paramIndex++;
     }
 
     const whereClause = `WHERE ${conditions.join(' AND ')}`;
