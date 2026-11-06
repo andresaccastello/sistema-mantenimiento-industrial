@@ -44,7 +44,7 @@
     "test:repuestos-intervenciones": "tsx --env-file=.env --test backend/tests/repuestos_intervenciones.test.ts",
     "test:administracion": "tsx --env-file=.env --test backend/tests/administracion.test.ts",
     "test:avisos": "tsx --env-file=.env --test backend/tests/avisos.test.ts",
-    "test:front": "tsx --test frontend/src/lib/*.test.ts",
+    "test:front": "tsx --test frontend/src/lib/*.test.ts frontend/src/api/*.test.ts",
     "test:e2e": "tsx --env-file=.env --test backend/tests/crud.test.ts",
     "test:todo": "node scripts/run-all-tests.mjs",
     "marca:cargar": "node --env-file=.env scripts/cargar-marca.mjs",

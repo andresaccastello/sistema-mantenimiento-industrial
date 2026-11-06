@@ -73,6 +73,7 @@ export function ModalAnularConsumo({
       queryClient.invalidateQueries({ queryKey: ['intervencion', intervencionId, 'repuestos'] });
       queryClient.invalidateQueries({ queryKey: ['intervencion', intervencionId] });
       queryClient.invalidateQueries({ queryKey: ['repuestos'] });
+      queryClient.invalidateQueries({ queryKey: ['repuesto'] });
       onCerrar();
       if (onExito) onExito();
     } catch (err: any) {

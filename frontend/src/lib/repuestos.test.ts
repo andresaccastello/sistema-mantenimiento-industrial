@@ -12,6 +12,7 @@ import {
   hoyLocal,
   infoPedido,
   textoMovimiento,
+  cuerpoMovimiento,
 } from './repuestos';
 
 describe('FE-47: formatMoneda y formatCantidad', () => {
@@ -239,3 +240,52 @@ describe('FE-52: textoMovimiento', () => {
     assert.deepEqual(movViejoAj, { etiqueta: 'Ajuste', cantidad: '8' });
   });
 });
+
+describe('FE-56: cuerpoMovimiento', () => {
+  it('arma el cuerpo de INGRESO exacto según sección 1.4', () => {
+    const res = cuerpoMovimiento('INGRESO', {
+      cantidad: 5,
+      costo_unitario: 100,
+      proveedor_id: 2,
+      comprobante: 'FAC-001',
+      observacion: 'Ingreso de repuestos nuevos',
+      motivo: 'Texto motivo',
+    });
+    assert.deepEqual(res, {
+      tipo: 'INGRESO',
+      cantidad: 5,
+      costo_unitario: 100,
+      proveedor_id: 2,
+      comprobante: 'FAC-001',
+      observacion: 'Ingreso de repuestos nuevos',
+    });
+    assert.equal('motivo' in res, false);
+  });
+
+  it('arma el cuerpo de EGRESO exacto según sección 1.4', () => {
+    const res = cuerpoMovimiento('EGRESO', {
+      cantidad: 3,
+      observacion: 'Egreso para mantenimiento',
+    });
+    assert.deepEqual(res, {
+      tipo: 'EGRESO',
+      cantidad: 3,
+      observacion: 'Egreso para mantenimiento',
+    });
+    assert.equal('motivo' in res, false);
+  });
+
+  it('arma el cuerpo de AJUSTE exacto según sección 1.4', () => {
+    const res = cuerpoMovimiento('AJUSTE', {
+      cantidad_contada: 12,
+      observacion: 'Conteo físico anual',
+    });
+    assert.deepEqual(res, {
+      tipo: 'AJUSTE',
+      cantidad_contada: 12,
+      observacion: 'Conteo físico anual',
+    });
+    assert.equal('motivo' in res, false);
+  });
+});
+

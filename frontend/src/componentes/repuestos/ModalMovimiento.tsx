@@ -13,11 +13,11 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { clienteApi } from '../../api/cliente';
-import { RepuestoDetalle } from '../../api/tipos';
+import { RepuestoDetalle, RespuestaMovimientoManual, ProveedorOpcion } from '../../api/tipos';
 import { useAuth } from '../../auth/AuthContext';
 import { ApiError, mensajeError } from '../../lib/errores';
 import { formatCantidad, formatMoneda } from '../../lib/formato';
-import { validarCantidad, validarCosto } from '../../lib/repuestos';
+import { validarCantidad, validarCosto, cuerpoMovimiento } from '../../lib/repuestos';
 
 export type TipoMovimientoModal = 'ingreso' | 'egreso' | 'ajuste';
 
@@ -60,9 +60,9 @@ export function ModalMovimiento({
   const [guardando, setGuardando] = useState(false);
 
   // Opciones de proveedores (solo para ingreso)
-  const { data: opcionesProveedores } = useQuery<Array<{ id: number; nombre: string }>>({
+  const { data: opcionesProveedores } = useQuery<ProveedorOpcion[]>({
     queryKey: ['proveedores', 'opciones'],
-    queryFn: () => clienteApi.get('/api/proveedores/opciones'),
+    queryFn: () => clienteApi.get<ProveedorOpcion[]>('/api/proveedores/opciones'),
     enabled: abierto && tipo === 'ingreso',
   });
 
@@ -86,13 +86,13 @@ export function ModalMovimiento({
       setComprobante('');
       setObservacion('');
       setMotivo('');
-      setCantidadContada(repuesto.stock_actual ?? 0);
+      setCantidadContada(repuesto.cantidad_disponible ?? 0);
     }
   }, [abierto, tipo, repuesto]);
 
   if (!repuesto) return null;
 
-  const stockActual = repuesto.stock_actual ?? 0;
+  const stockActual = repuesto.cantidad_disponible ?? 0;
   const contadaNum = Number(cantidadContada);
   const diferencia = isNaN(contadaNum) ? 0 : contadaNum - stockActual;
 
@@ -105,6 +105,8 @@ export function ModalMovimiento({
     setGuardando(true);
 
     try {
+      let payload: Record<string, any>;
+
       if (tipo === 'ingreso') {
         const errCant = validarCantidad(cantidad);
         if (errCant) {
@@ -120,19 +122,16 @@ export function ModalMovimiento({
           return;
         }
 
-        const payload: Record<string, any> = {
+        payload = cuerpoMovimiento('INGRESO', {
           cantidad: Number(cantidad),
-          proveedor_id: proveedorId ? Number(proveedorId) : null,
-          comprobante: comprobante.trim() ? comprobante.trim() : null,
-          observacion: observacion.trim() ? observacion.trim() : null,
-        };
-
-        if (puedeCargarCostos && costoUnitario !== '' && costoUnitario !== null) {
-          payload.costo_unitario = Number(costoUnitario);
-        }
-
-        await clienteApi.post(`/api/repuestos/${repuesto.id}/ingreso`, payload);
-        notifications.show({ message: 'Ingreso de stock registrado.', color: 'green' });
+          costo_unitario:
+            puedeCargarCostos && costoUnitario !== '' && costoUnitario !== null
+              ? Number(costoUnitario)
+              : undefined,
+          proveedor_id: proveedorId ? Number(proveedorId) : undefined,
+          comprobante: comprobante.trim() ? comprobante.trim() : undefined,
+          observacion: observacion.trim() ? observacion.trim() : undefined,
+        });
       } else if (tipo === 'egreso') {
         const errCant = validarCantidad(cantidad, stockActual);
         if (errCant) {
@@ -142,18 +141,17 @@ export function ModalMovimiento({
         }
 
         const motTrim = motivo.trim();
-        if (!motTrim || motTrim.length < 3) {
-          setErrorMotivo('Ingresá un motivo de al menos 3 caracteres.');
+        if (!motTrim || motTrim.length < 5) {
+          setErrorMotivo('Ingresá un motivo de al menos 5 caracteres.');
           setGuardando(false);
           return;
         }
 
-        await clienteApi.post(`/api/repuestos/${repuesto.id}/egreso`, {
+        payload = cuerpoMovimiento('EGRESO', {
           cantidad: Number(cantidad),
-          motivo: motTrim,
+          observacion: motTrim,
         });
-        notifications.show({ message: 'Egreso de stock registrado.', color: 'green' });
-      } else if (tipo === 'ajuste') {
+      } else {
         if (isNaN(contadaNum) || contadaNum < 0) {
           setErrorCantidad('La cantidad contada no puede ser negativa.');
           setGuardando(false);
@@ -161,27 +159,39 @@ export function ModalMovimiento({
         }
 
         const motTrim = motivo.trim();
-        if (!motTrim || motTrim.length < 3) {
-          setErrorMotivo('Ingresá un motivo de al menos 3 caracteres.');
+        if (!motTrim || motTrim.length < 5) {
+          setErrorMotivo('Ingresá un motivo de al menos 5 caracteres.');
           setGuardando(false);
           return;
         }
 
-        await clienteApi.post(`/api/repuestos/${repuesto.id}/ajuste`, {
+        payload = cuerpoMovimiento('AJUSTE', {
           cantidad_contada: contadaNum,
-          motivo: motTrim,
+          observacion: motTrim,
         });
-        notifications.show({ message: 'Ajuste de inventario registrado.', color: 'green' });
       }
+
+      await clienteApi.post<RespuestaMovimientoManual>(
+        `/api/repuestos/${repuesto.id}/movimientos`,
+        payload
+      );
+
+      const mensajeExito =
+        tipo === 'ingreso'
+          ? 'Ingreso de stock registrado.'
+          : tipo === 'egreso'
+            ? 'Egreso de stock registrado.'
+            : 'Ajuste de inventario registrado.';
+      notifications.show({ message: mensajeExito, color: 'green' });
 
       queryClient.invalidateQueries({ queryKey: ['repuesto', repuesto.id] });
       queryClient.invalidateQueries({ queryKey: ['repuestos'] });
       onCerrar();
       if (onExito) onExito();
-    } catch (err: any) {
-      if (err instanceof ApiError || err?.codigo) {
-        if (err.codigo === 'STOCK_INSUFICIENTE') {
-          const disp = err.datos?.disponible ?? stockActual;
+    } catch (err: unknown) {
+      if (err instanceof ApiError || (err as any)?.codigo) {
+        if ((err as any).codigo === 'STOCK_INSUFICIENTE') {
+          const disp = (err as any).datos?.disponible ?? stockActual;
           setErrorCantidad(`Ya no alcanza: hay ${formatCantidad(disp)} en stock.`);
           queryClient.invalidateQueries({ queryKey: ['repuesto', repuesto.id] });
           return;

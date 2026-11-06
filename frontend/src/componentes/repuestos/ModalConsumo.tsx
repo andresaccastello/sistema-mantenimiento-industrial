@@ -12,6 +12,7 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { clienteApi } from '../../api/cliente';
+import { RepuestoOpcion } from '../../api/tipos';
 import { useAuth } from '../../auth/AuthContext';
 import { ApiError, mensajeError } from '../../lib/errores';
 import { formatCantidad } from '../../lib/formato';
@@ -57,19 +58,9 @@ export function ModalConsumo({
   const [guardando, setGuardando] = useState(false);
 
   // Opciones de repuestos
-  const { data: opcionesRepuestos } = useQuery<
-    Array<{
-      id: number;
-      codigo: string | null;
-      nombre: string;
-      unidad: string;
-      lleva_stock: boolean;
-      stock_actual: number | null;
-      costo_unitario: number | null;
-    }>
-  >({
+  const { data: opcionesRepuestos } = useQuery<RepuestoOpcion[]>({
     queryKey: ['repuestos', 'opciones'],
-    queryFn: () => clienteApi.get('/api/repuestos/opciones'),
+    queryFn: () => clienteApi.get<RepuestoOpcion[]>('/api/repuestos/opciones'),
     enabled: abierto,
   });
 
@@ -78,7 +69,7 @@ export function ModalConsumo({
   const selectRepuestos = (opcionesRepuestos || []).map((r) => {
     const prefijo = r.codigo ? `${r.codigo} · ${r.nombre}` : r.nombre;
     const sufijo = r.lleva_stock
-      ? ` — stock: ${formatCantidad(r.stock_actual)} (${r.unidad})`
+      ? ` — stock: ${formatCantidad(r.cantidad_disponible)} (${r.unidad})`
       : ' — sin control de stock';
     return {
       value: String(r.id),
@@ -126,7 +117,7 @@ export function ModalConsumo({
     }
 
     const errCant = repuestoElegido.lleva_stock
-      ? validarCantidad(cantidad, repuestoElegido.stock_actual)
+      ? validarCantidad(cantidad, repuestoElegido.cantidad_disponible)
       : validarCantidad(cantidad);
 
     if (errCant) {
@@ -173,12 +164,13 @@ export function ModalConsumo({
       queryClient.invalidateQueries({ queryKey: ['intervencion', intervencionId, 'repuestos'] });
       queryClient.invalidateQueries({ queryKey: ['intervencion', intervencionId] });
       queryClient.invalidateQueries({ queryKey: ['repuestos'] });
+      queryClient.invalidateQueries({ queryKey: ['repuesto'] });
       onCerrar();
       if (onExito) onExito();
     } catch (err: any) {
       if (err instanceof ApiError || err?.codigo) {
         if (err.codigo === 'STOCK_INSUFICIENTE') {
-          const disp = err.datos?.disponible ?? repuestoElegido.stock_actual;
+          const disp = err.datos?.disponible ?? repuestoElegido.cantidad_disponible;
           setErrorCantidad(`Ya no alcanza: hay ${formatCantidad(disp)} en stock.`);
           queryClient.invalidateQueries({ queryKey: ['repuestos', 'opciones'] });
           return;
@@ -213,7 +205,7 @@ export function ModalConsumo({
               thousandSeparator="."
               decimalScale={3}
               min={0.001}
-              max={repuestoElegido.lleva_stock ? repuestoElegido.stock_actual ?? undefined : undefined}
+              max={repuestoElegido.lleva_stock ? repuestoElegido.cantidad_disponible ?? undefined : undefined}
               value={cantidad}
               onChange={setCantidad}
               error={errorCantidad}

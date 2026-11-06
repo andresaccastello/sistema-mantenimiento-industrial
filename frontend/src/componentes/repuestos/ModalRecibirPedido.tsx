@@ -11,7 +11,7 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { clienteApi } from '../../api/cliente';
-import { PedidoRepuestoItem } from '../../api/tipos';
+import { PedidoIntervencionItem } from '../../api/tipos';
 import { useAuth } from '../../auth/AuthContext';
 import { ApiError, mensajeError } from '../../lib/errores';
 import { Momento, momentoAIso } from '../../lib/fechas';
@@ -20,7 +20,7 @@ import { SelectorMomento } from '../SelectorMomento';
 export interface ModalRecibirPedidoProps {
   abierto: boolean;
   onCerrar: () => void;
-  pedido: PedidoRepuestoItem | null;
+  pedido: PedidoIntervencionItem | null;
   onExito?: () => void;
 }
 

@@ -36,11 +36,13 @@ export function ModalProveedor({
   const [notas, setNotas] = useState('');
 
   const [errorNombre, setErrorNombre] = useState<string | null>(null);
+  const [errorEmail, setErrorEmail] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
     if (abierto) {
       setErrorNombre(null);
+      setErrorEmail(null);
       if (proveedor) {
         setNombre(proveedor.nombre);
         setContacto(proveedor.contacto || '');
@@ -60,6 +62,7 @@ export function ModalProveedor({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorNombre(null);
+    setErrorEmail(null);
 
     const nomTrim = nombre.trim();
     if (!nomTrim) {
@@ -94,6 +97,10 @@ export function ModalProveedor({
       if (err instanceof ApiError || err?.codigo) {
         if (err.codigo === 'NOMBRE_DUPLICADO') {
           setErrorNombre('Ya existe un proveedor con este nombre.');
+          return;
+        }
+        if (err.codigo === 'EMAIL_INVALIDO') {
+          setErrorEmail('Ingresá un correo electrónico válido.');
           return;
         }
       }
@@ -141,7 +148,11 @@ export function ModalProveedor({
               label="Email"
               placeholder="contacto@proveedor.com"
               value={email}
-              onChange={(e) => setEmail(e.currentTarget.value)}
+              onChange={(e) => {
+                setEmail(e.currentTarget.value);
+                if (errorEmail) setErrorEmail(null);
+              }}
+              error={errorEmail}
             />
           </Group>
 

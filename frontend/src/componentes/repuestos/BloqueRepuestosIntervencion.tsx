@@ -21,6 +21,7 @@ import {
   IconAlertCircle,
 } from '@tabler/icons-react';
 import { clienteApi } from '../../api/cliente';
+import { IntervencionRepuestosRespuesta } from '../../api/tipos';
 import { formatCantidad, formatFechaHora, formatMoneda } from '../../lib/formato';
 import { nombreCompleto } from '../../lib/personas';
 import { ModalConsumo } from './ModalConsumo';
@@ -31,30 +32,6 @@ export interface BloqueRepuestosIntervencionProps {
   estadoIntervencion: string;
 }
 
-interface ConsumoItem {
-  id: number;
-  repuesto: { id: number; codigo: string | null; nombre: string; unidad: string };
-  cantidad: number;
-  costo_unitario_aplicado: number | null;
-  importe: number | null;
-  observacion: string | null;
-  registrado_por: { id: number; nombre: string; apellido: string | null } | null;
-  registrado_en: string;
-  movio_stock: boolean;
-  anulado: boolean;
-  anulado_por: { id: number; nombre: string; apellido: string | null } | null;
-  anulado_en: string | null;
-  motivo_anulacion: string | null;
-}
-
-interface RespuestaRepuestosIntervencion {
-  consumos: ConsumoItem[];
-  total_repuestos: number | null;
-  ve_costos: boolean;
-  puede_registrar: boolean;
-  puede_anular: boolean;
-}
-
 export function BloqueRepuestosIntervencion({
   intervencionId,
   estadoIntervencion,
@@ -62,9 +39,9 @@ export function BloqueRepuestosIntervencion({
   const [modalConsumoAbierto, setModalConsumoAbierto] = useState(false);
   const [consumoParaAnular, setConsumoParaAnular] = useState<ConsumoParaAnular | null>(null);
 
-  const { data, isLoading, error } = useQuery<RespuestaRepuestosIntervencion>({
+  const { data, isLoading, error } = useQuery<IntervencionRepuestosRespuesta>({
     queryKey: ['intervencion', intervencionId, 'repuestos'],
-    queryFn: () => clienteApi.get<RespuestaRepuestosIntervencion>(`/api/intervenciones/${intervencionId}/repuestos`),
+    queryFn: () => clienteApi.get<IntervencionRepuestosRespuesta>(`/api/intervenciones/${intervencionId}/repuestos`),
   });
 
   if (isLoading) {
@@ -124,8 +101,8 @@ export function BloqueRepuestosIntervencion({
                 <Table.Tr>
                   <Table.Th>Repuesto</Table.Th>
                   <Table.Th>Cantidad</Table.Th>
-                  {ve_costos && <Table.Th>Costo unitario</Table.Th>}
-                  {ve_costos && <Table.Th>Importe</Table.Th>}
+                  {ve_costos && <Table.Th style={{ whiteSpace: 'nowrap' }}>Costo unitario</Table.Th>}
+                  {ve_costos && <Table.Th style={{ whiteSpace: 'nowrap' }}>Importe</Table.Th>}
                   <Table.Th>Registró</Table.Th>
                   {puede_anular && <Table.Th style={{ width: 40 }}></Table.Th>}
                 </Table.Tr>
@@ -169,13 +146,13 @@ export function BloqueRepuestosIntervencion({
                       </Table.Td>
 
                       {ve_costos && (
-                        <Table.Td>
+                        <Table.Td style={{ whiteSpace: 'nowrap' }}>
                           <Text size="sm">{formatMoneda(c.costo_unitario_aplicado)}</Text>
                         </Table.Td>
                       )}
 
                       {ve_costos && (
-                        <Table.Td>
+                        <Table.Td style={{ whiteSpace: 'nowrap' }}>
                           <Text size="sm">{formatMoneda(c.importe)}</Text>
                         </Table.Td>
                       )}
@@ -195,7 +172,7 @@ export function BloqueRepuestosIntervencion({
                           {!c.anulado && (
                             <Menu position="bottom-end" shadow="md">
                               <Menu.Target>
-                                <ActionIcon variant="subtle" color="gray" size="sm">
+                                <ActionIcon variant="subtle" color="gray" size="sm" aria-label="Acciones del consumo">
                                   <IconDotsVertical size={14} />
                                 </ActionIcon>
                               </Menu.Target>

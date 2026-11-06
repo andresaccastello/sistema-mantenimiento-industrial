@@ -14,7 +14,7 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { clienteApi } from '../../api/cliente';
-import { RepuestoDetalle, RepuestoListaItem } from '../../api/tipos';
+import { RepuestoDetalle, RepuestoListaItem, ProveedorOpcion } from '../../api/tipos';
 import { ApiError, mensajeError } from '../../lib/errores';
 
 export interface ModalRepuestoProps {
@@ -47,9 +47,9 @@ export function ModalRepuesto({ abierto, onCerrar, repuesto, onExito }: ModalRep
   const [guardando, setGuardando] = useState(false);
 
   // Opciones de proveedores (solo activos)
-  const { data: opcionesProveedores } = useQuery<Array<{ id: number; nombre: string }>>({
+  const { data: opcionesProveedores } = useQuery<ProveedorOpcion[]>({
     queryKey: ['proveedores', 'opciones'],
-    queryFn: () => clienteApi.get('/api/proveedores/opciones'),
+    queryFn: () => clienteApi.get<ProveedorOpcion[]>('/api/proveedores/opciones'),
     enabled: abierto,
   });
 
@@ -68,7 +68,7 @@ export function ModalRepuesto({ abierto, onCerrar, repuesto, onExito }: ModalRep
         setNombre(repuesto.nombre);
         setUnidad(repuesto.unidad);
         setLlevaStock(repuesto.lleva_stock);
-        setStockInicial(repuesto.stock_actual ?? 0);
+        setStockInicial(repuesto.cantidad_disponible ?? 0);
         setStockMinimo(repuesto.stock_minimo !== null && repuesto.stock_minimo !== undefined ? repuesto.stock_minimo : '');
         setCostoUnitario(repuesto.costo_unitario !== null && repuesto.costo_unitario !== undefined ? repuesto.costo_unitario : '');
         setProveedorId(repuesto.proveedor ? String(repuesto.proveedor.id) : null);

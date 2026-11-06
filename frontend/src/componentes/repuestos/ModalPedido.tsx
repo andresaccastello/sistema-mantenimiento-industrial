@@ -13,7 +13,7 @@ import {
 import { DatePickerInput } from '@mantine/dates';
 import { notifications } from '@mantine/notifications';
 import { clienteApi } from '../../api/cliente';
-import { PedidoRepuestoItem } from '../../api/tipos';
+import { PedidoIntervencionItem, RepuestoOpcion, ProveedorOpcion } from '../../api/tipos';
 import { ApiError, mensajeError } from '../../lib/errores';
 import { hoyLocal } from '../../lib/repuestos';
 
@@ -21,7 +21,7 @@ export interface ModalPedidoProps {
   abierto: boolean;
   onCerrar: () => void;
   intervencionId: number;
-  pedido?: PedidoRepuestoItem | null;
+  pedido?: PedidoIntervencionItem | null;
   onExito?: () => void;
 }
 
@@ -65,18 +65,16 @@ export function ModalPedido({
   const [guardando, setGuardando] = useState(false);
 
   // Opciones de repuestos
-  const { data: opcionesRepuestos } = useQuery<
-    Array<{ id: number; codigo: string | null; nombre: string; unidad: string; lleva_stock: boolean; proveedor_id?: number | null }>
-  >({
+  const { data: opcionesRepuestos } = useQuery<RepuestoOpcion[]>({
     queryKey: ['repuestos', 'opciones'],
-    queryFn: () => clienteApi.get('/api/repuestos/opciones'),
+    queryFn: () => clienteApi.get<RepuestoOpcion[]>('/api/repuestos/opciones'),
     enabled: abierto,
   });
 
   // Opciones de proveedores
-  const { data: opcionesProveedores } = useQuery<Array<{ id: number; nombre: string }>>({
+  const { data: opcionesProveedores } = useQuery<ProveedorOpcion[]>({
     queryKey: ['proveedores', 'opciones'],
-    queryFn: () => clienteApi.get('/api/proveedores/opciones'),
+    queryFn: () => clienteApi.get<ProveedorOpcion[]>('/api/proveedores/opciones'),
     enabled: abierto,
   });
 
@@ -115,15 +113,8 @@ export function ModalPedido({
     }
   }, [abierto, pedido]);
 
-  // Al elegir un repuesto, proponer su proveedor habitual si tiene y aún no se eligió proveedor
   const handleRepuestoChange = (val: string | null) => {
     setRepuestoId(val);
-    if (val && opcionesRepuestos) {
-      const rep = opcionesRepuestos.find((r) => String(r.id) === val);
-      if (rep?.proveedor_id) {
-        setProveedorId(String(rep.proveedor_id));
-      }
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

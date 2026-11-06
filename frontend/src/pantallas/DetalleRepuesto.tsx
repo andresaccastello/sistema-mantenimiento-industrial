@@ -167,7 +167,7 @@ export function DetalleRepuesto() {
                   Stock actual
                 </Text>
                 <Text size="xl" fw={700}>
-                  {formatCantidad(repuesto.stock_actual)} {repuesto.unidad}
+                  {formatCantidad(repuesto.cantidad_disponible)} {repuesto.unidad}
                 </Text>
               </Stack>
             )}
@@ -215,7 +215,7 @@ export function DetalleRepuesto() {
 
             <Menu shadow="md" width={180} position="bottom-end">
               <Menu.Target>
-                <ActionIcon variant="subtle" color="gray">
+                <ActionIcon variant="subtle" color="gray" aria-label="Acciones del repuesto">
                   <IconDotsVertical size={16} />
                 </ActionIcon>
               </Menu.Target>
@@ -318,7 +318,7 @@ export function DetalleRepuesto() {
                         const { etiqueta, cantidad } = textoMovimiento(m);
                         return (
                           <Table.Tr key={m.id}>
-                            <Table.Td>{formatFechaHora(m.creado_en)}</Table.Td>
+                            <Table.Td>{formatFechaHora(m.realizado_en)}</Table.Td>
                             <Table.Td>
                               <Text size="sm" fw={600}>
                                 {etiqueta} {cantidad} {repuesto.unidad}
@@ -334,13 +334,13 @@ export function DetalleRepuesto() {
                               {!m.proveedor && !m.comprobante ? '—' : ''}
                             </Table.Td>
                             <Table.Td>
-                              {m.intervencion ? (
-                                <Link to={`/intervenciones/${m.intervencion.id}`} style={{ color: 'inherit' }}>
-                                  N.º {m.intervencion.id}
+                              {m.intervencion_id ? (
+                                <Link to={`/intervenciones/${m.intervencion_id}`} style={{ color: 'inherit' }}>
+                                  N.º {m.intervencion_id}
                                 </Link>
                               ) : '—'}
                             </Table.Td>
-                            <Table.Td>{nombreCompleto(m.creado_por)}</Table.Td>
+                            <Table.Td>{nombreCompleto(m.realizado_por)}</Table.Td>
                             <Table.Td>{m.observacion || '—'}</Table.Td>
                           </Table.Tr>
                         );
@@ -372,7 +372,7 @@ export function DetalleRepuesto() {
                   <Table.Tbody>
                     {usos?.map((u) => (
                       <Table.Tr
-                        key={u.id}
+                        key={u.consumo_id}
                         style={{
                           textDecoration: u.anulado ? 'line-through' : 'none',
                           opacity: u.anulado ? 0.6 : 1,
@@ -390,8 +390,8 @@ export function DetalleRepuesto() {
                           </Group>
                         </Table.Td>
                         <Table.Td>
-                          {u.intervencion.maquina.codigo ? `${u.intervencion.maquina.codigo} · ` : ''}
-                          {u.intervencion.maquina.nombre}
+                          {u.maquina.codigo ? `${u.maquina.codigo} · ` : ''}
+                          {u.maquina.nombre}
                         </Table.Td>
                         <Table.Td>
                           {formatCantidad(u.cantidad)} {repuesto.unidad}
@@ -424,14 +424,14 @@ export function DetalleRepuesto() {
                   <Table.Tbody>
                     {costos?.map((c) => (
                       <Table.Tr key={c.id}>
-                        <Table.Td>{formatFechaHora(c.creado_en)}</Table.Td>
-                        <Table.Td>{formatMoneda(c.costo)}</Table.Td>
+                        <Table.Td>{formatFechaHora(c.registrado_en)}</Table.Td>
+                        <Table.Td>{formatMoneda(c.costo_unitario)}</Table.Td>
                         <Table.Td>
                           <Badge size="sm" variant="outline">
                             {c.origen}
                           </Badge>
                         </Table.Td>
-                        <Table.Td>{nombreCompleto(c.usuario)}</Table.Td>
+                        <Table.Td>{nombreCompleto(c.registrado_por)}</Table.Td>
                       </Table.Tr>
                     ))}
                   </Table.Tbody>

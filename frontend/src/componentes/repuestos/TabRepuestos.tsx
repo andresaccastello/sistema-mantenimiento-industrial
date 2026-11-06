@@ -18,7 +18,7 @@ import {
 } from '@mantine/core';
 import { IconSearch, IconPlus, IconAlertCircle, IconPackage } from '@tabler/icons-react';
 import { clienteApi } from '../../api/cliente';
-import { RepuestoListaItem } from '../../api/tipos';
+import { RepuestoListaItem, ProveedorOpcion } from '../../api/tipos';
 import { formatCantidad, formatMoneda } from '../../lib/formato';
 import {
   FiltrosRepuestos,
@@ -48,9 +48,9 @@ export function TabRepuestos({ filtros, onCambiarFiltros }: TabRepuestosProps) {
   });
 
   // Opciones de proveedores para el filtro
-  const { data: opcionesProveedores } = useQuery<Array<{ id: number; nombre: string }>>({
+  const { data: opcionesProveedores } = useQuery<ProveedorOpcion[]>({
     queryKey: ['proveedores', 'opciones'],
-    queryFn: () => clienteApi.get('/api/proveedores/opciones'),
+    queryFn: () => clienteApi.get<ProveedorOpcion[]>('/api/proveedores/opciones'),
   });
 
   const selectProveedores = useMemo(() => {
@@ -236,7 +236,7 @@ export function TabRepuestos({ filtros, onCambiarFiltros }: TabRepuestosProps) {
                         <Group gap="xs" align="center">
                           <Text size="sm">
                             {r.lleva_stock
-                              ? `${formatCantidad(r.stock_actual)} ${r.unidad}`
+                              ? `${formatCantidad(r.cantidad_disponible)} ${r.unidad}`
                               : '—'}
                           </Text>
                           <Badge

@@ -583,9 +583,16 @@ export interface TiemposAgrupadosFila {
 // Repuestos, Proveedores y Pedidos (Etapa R1)
 // =============================================================================
 
-export interface ProveedorSimple {
+export interface ProveedorOpcion {
   id: number;
   nombre: string;
+}
+export type ProveedorSimple = ProveedorOpcion;
+
+export interface ProveedorRepuesto {
+  id: number;
+  nombre: string;
+  activo: boolean;
 }
 
 export interface ProveedorItem {
@@ -596,11 +603,11 @@ export interface ProveedorItem {
   email: string | null;
   notas: string | null;
   activo: boolean;
-  creado_en: string;
-  actualizado_en: string;
   repuestos_activos: number;
-  pedidos_abiertos: number;
 }
+export type ProveedorFila = ProveedorItem;
+
+export type EstadoStockRepuesto = 'OK' | 'BAJO' | 'SIN_STOCK' | 'SIN_CONTROL';
 
 export interface RepuestoListaItem {
   id: number;
@@ -608,59 +615,101 @@ export interface RepuestoListaItem {
   nombre: string;
   unidad: string;
   lleva_stock: boolean;
-  stock_actual: number | null;
+  cantidad_disponible: number;
   stock_minimo: number | null;
+  estado_stock: EstadoStockRepuesto;
   costo_unitario: number | null;
-  proveedor: ProveedorSimple | null;
+  proveedor: ProveedorRepuesto | null;
   ubicacion: string | null;
   activo: boolean;
-  estado_stock: 'OK' | 'BAJO' | 'SIN_STOCK' | 'SIN_CONTROL';
-  pedidos_abiertos: number;
+}
+export type RepuestoFila = RepuestoListaItem;
+
+export interface RepuestoOpcion {
+  id: number;
+  codigo: string | null;
+  nombre: string;
+  unidad: string;
+  lleva_stock: boolean;
+  cantidad_disponible: number;
+  costo_unitario: number | null;
 }
 
 export interface RepuestoDetalle {
   id: number;
   codigo: string | null;
   nombre: string;
-  descripcion: string | null;
   unidad: string;
   lleva_stock: boolean;
-  stock_actual: number | null;
+  cantidad_disponible: number;
   stock_minimo: number | null;
+  estado_stock: EstadoStockRepuesto;
   costo_unitario: number | null;
-  proveedor: ProveedorSimple | null;
+  proveedor: ProveedorRepuesto | null;
   ubicacion: string | null;
   activo: boolean;
+  descripcion: string | null;
   creado_en: string;
   actualizado_en: string;
-  estado_stock: string;
   pedidos_abiertos: number;
   consumos_vigentes: number;
 }
 
+export type TipoMovimientoStock = 'INGRESO' | 'EGRESO' | 'AJUSTE' | 'DEVOLUCION';
+
 export interface MovimientoStockItem {
   id: number;
-  repuesto_id: number;
-  tipo: 'INGRESO' | 'EGRESO' | 'AJUSTE' | 'DEVOLUCION';
-  delta: number | null;
+  tipo: TipoMovimientoStock;
   cantidad: number;
-  stock_anterior: number | null;
+  delta: number | null;
   stock_resultante: number | null;
   costo_unitario: number | null;
-  proveedor: ProveedorSimple | null;
+  proveedor: ProveedorOpcion | null;
   comprobante: string | null;
-  intervencion: { id: number } | null;
   observacion: string | null;
-  creado_por: { id: number; nombre: string; apellido: string | null } | null;
-  creado_en: string;
+  intervencion_id: number | null;
+  realizado_por: { id: number; nombre: string; apellido: string | null } | null;
+  realizado_en: string;
+}
+
+export interface RespuestaMovimientoManual {
+  movimiento: MovimientoStockItem;
+  repuesto: RepuestoDetalle;
 }
 
 export interface UsoRepuestoItem {
-  id: number;
+  consumo_id: number;
   intervencion: {
     id: number;
     estado: string;
-    maquina: { id: number; codigo: string | null; nombre: string };
+  };
+  maquina: {
+    id: number;
+    codigo: string | null;
+    nombre: string;
+  };
+  cantidad: number;
+  costo_unitario_aplicado: number | null;
+  importe: number | null;
+  registrado_en: string;
+  anulado: boolean;
+}
+
+export interface CostoHistorialItem {
+  id: number;
+  costo_unitario: number;
+  origen: string;
+  registrado_por: { id: number; nombre: string; apellido: string | null } | null;
+  registrado_en: string;
+}
+
+export interface ConsumoIntervencionItem {
+  id: number;
+  repuesto: {
+    id: number;
+    codigo: string | null;
+    nombre: string;
+    unidad: string;
   };
   cantidad: number;
   costo_unitario_aplicado: number | null;
@@ -668,20 +717,25 @@ export interface UsoRepuestoItem {
   observacion: string | null;
   registrado_por: { id: number; nombre: string; apellido: string | null } | null;
   registrado_en: string;
+  movimiento_id: number | null;
+  movio_stock: boolean;
   anulado: boolean;
+  anulado_por: { id: number; nombre: string; apellido: string | null } | null;
   anulado_en: string | null;
   motivo_anulacion: string | null;
 }
 
-export interface CostoHistorialItem {
-  id: number;
-  costo: number;
-  origen: string;
-  usuario: { id: number; nombre: string; apellido: string | null } | null;
-  creado_en: string;
+export interface IntervencionRepuestosRespuesta {
+  consumos: ConsumoIntervencionItem[];
+  total_repuestos: number | null;
+  ve_costos: boolean;
+  puede_registrar: boolean;
+  puede_anular: boolean;
 }
 
-export interface PedidoRepuestoItem {
+export type EstadoPedidoRepuesto = 'PENDIENTE' | 'PEDIDO' | 'RECIBIDO' | 'CANCELADO';
+
+export interface PedidoIntervencionItem {
   id: number;
   intervencion_id: number;
   repuesto: {
@@ -693,20 +747,74 @@ export interface PedidoRepuestoItem {
   } | null;
   descripcion: string | null;
   cantidad: number;
-  proveedor: ProveedorSimple | null;
-  estado: 'PENDIENTE' | 'PEDIDO' | 'RECIBIDO' | 'CANCELADO';
+  proveedor: ProveedorOpcion | null;
+  estado: EstadoPedidoRepuesto;
   pedido_en: string | null;
   esperado_para: string | null;
   recibido_en: string | null;
   observacion: string | null;
   motivo_cancelacion: string | null;
   ingreso_stock: boolean;
-  creado_por: { id: number; nombre: string; apellido: string | null };
+  creado_por: { id: number; nombre: string; apellido: string | null } | null;
   creado_en: string;
   actualizado_en: string;
-  intervencion?: { id: number; estado: string; descripcion: string };
-  maquina?: { id: number; codigo: string | null; nombre: string };
-  sector?: { id: number; nombre: string };
+}
+
+export interface IntervencionPedidosRespuesta {
+  pedidos: PedidoIntervencionItem[];
+  puede_crear: boolean;
+  puede_gestionar: boolean;
+}
+
+export interface PedidoRepuestoItem extends PedidoIntervencionItem {
+  intervencion: {
+    id: number;
+    estado: string;
+    descripcion: string;
+  };
+  maquina: {
+    id: number;
+    codigo: string | null;
+    nombre: string;
+  };
+  sector: {
+    id: number;
+    nombre: string;
+  };
+}
+
+export interface ReporteRepuestosRespuesta {
+  desde: string;
+  hasta: string;
+  ve_costos: boolean;
+  consumos: number;
+  intervenciones: number;
+  importe_total: number | null;
+  por_repuesto: Array<{
+    repuesto: {
+      id: number;
+      codigo: string | null;
+      nombre: string;
+      unidad: string;
+    };
+    cantidad: number;
+    consumos: number;
+    intervenciones: number;
+    importe: number | null;
+  }>;
+  por_maquina: Array<{
+    maquina: {
+      id: number;
+      codigo: string | null;
+      nombre: string;
+    };
+    sector: {
+      id: number;
+      nombre: string;
+    };
+    consumos: number;
+    importe: number | null;
+  }>;
 }
 
 

@@ -23,7 +23,7 @@ import {
   IconInfoCircle,
 } from '@tabler/icons-react';
 import { clienteApi } from '../../api/cliente';
-import { PedidoRepuestoItem } from '../../api/tipos';
+import { IntervencionPedidosRespuesta, PedidoIntervencionItem } from '../../api/tipos';
 import { formatCantidad } from '../../lib/formato';
 import { infoPedido, badgeColorStock } from '../../lib/repuestos';
 import { ModalPedido } from './ModalPedido';
@@ -35,24 +35,18 @@ export interface BloquePedidosIntervencionProps {
   estadoIntervencion: string;
 }
 
-interface RespuestaPedidosIntervencion {
-  pedidos: PedidoRepuestoItem[];
-  puede_crear: boolean;
-  puede_gestionar: boolean;
-}
-
 export function BloquePedidosIntervencion({
   intervencionId,
   estadoIntervencion,
 }: BloquePedidosIntervencionProps) {
   const [modalNuevoAbierto, setModalNuevoAbierto] = useState(false);
-  const [pedidoParaEditar, setPedidoParaEditar] = useState<PedidoRepuestoItem | null>(null);
-  const [pedidoParaRecibir, setPedidoParaRecibir] = useState<PedidoRepuestoItem | null>(null);
-  const [pedidoParaCancelar, setPedidoParaCancelar] = useState<PedidoRepuestoItem | null>(null);
+  const [pedidoParaEditar, setPedidoParaEditar] = useState<PedidoIntervencionItem | null>(null);
+  const [pedidoParaRecibir, setPedidoParaRecibir] = useState<PedidoIntervencionItem | null>(null);
+  const [pedidoParaCancelar, setPedidoParaCancelar] = useState<PedidoIntervencionItem | null>(null);
 
-  const { data, isLoading, error } = useQuery<RespuestaPedidosIntervencion>({
+  const { data, isLoading, error } = useQuery<IntervencionPedidosRespuesta>({
     queryKey: ['intervencion', intervencionId, 'pedidos'],
-    queryFn: () => clienteApi.get<RespuestaPedidosIntervencion>(`/api/intervenciones/${intervencionId}/pedidos`),
+    queryFn: () => clienteApi.get<IntervencionPedidosRespuesta>(`/api/intervenciones/${intervencionId}/pedidos`),
   });
 
   if (isLoading) {
@@ -162,7 +156,7 @@ export function BloquePedidosIntervencion({
                     {puede_gestionar && estaAbierto && (
                       <Menu position="bottom-end" shadow="md">
                         <Menu.Target>
-                          <ActionIcon variant="subtle" color="gray" size="sm">
+                          <ActionIcon variant="subtle" color="gray" size="sm" aria-label="Acciones del pedido">
                             <IconDotsVertical size={14} />
                           </ActionIcon>
                         </Menu.Target>

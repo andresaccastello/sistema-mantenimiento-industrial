@@ -155,6 +155,7 @@ export function TabProveedores({ filtros, onCambiarFiltros }: TabProveedoresProp
                           <ActionIcon
                             variant="subtle"
                             color="gray"
+                            aria-label="Editar proveedor"
                             onClick={() => setProveedorParaEditar(prov)}
                           >
                             <IconEdit size={16} />
@@ -166,6 +167,7 @@ export function TabProveedores({ filtros, onCambiarFiltros }: TabProveedoresProp
                             <ActionIcon
                               variant="subtle"
                               color="red"
+                              aria-label="Desactivar proveedor"
                               onClick={() => setProveedorParaDesactivar(prov)}
                             >
                               <IconBan size={16} />
@@ -176,6 +178,7 @@ export function TabProveedores({ filtros, onCambiarFiltros }: TabProveedoresProp
                             <ActionIcon
                               variant="subtle"
                               color="green"
+                              aria-label="Reactivar proveedor"
                               onClick={() => setProveedorParaReactivar(prov)}
                             >
                               <IconRotateClockwise size={16} />

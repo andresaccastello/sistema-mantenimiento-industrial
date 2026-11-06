@@ -464,3 +464,67 @@ export function textoMovimiento(movimiento: {
     cantidad: cantidadTexto,
   };
 }
+
+export type TipoMovimientoManual = 'INGRESO' | 'EGRESO' | 'AJUSTE';
+
+export interface CamposMovimientoManual {
+  cantidad?: number;
+  cantidad_contada?: number;
+  costo_unitario?: number | null;
+  proveedor_id?: number | null;
+  comprobante?: string | null;
+  observacion?: string | null;
+  motivo?: string | null;
+}
+
+/**
+ * Arma el cuerpo del JSON para el registro manual de movimientos de stock
+ * según la sección 1.4 de la etapa R1.1.
+ */
+export function cuerpoMovimiento(
+  tipo: TipoMovimientoManual,
+  campos: CamposMovimientoManual
+): Record<string, any> {
+  const obs =
+    campos.observacion !== undefined && campos.observacion !== null
+      ? campos.observacion
+      : campos.motivo !== undefined && campos.motivo !== null
+        ? campos.motivo
+        : undefined;
+
+  if (tipo === 'INGRESO') {
+    const res: Record<string, any> = {
+      tipo: 'INGRESO',
+      cantidad: campos.cantidad,
+    };
+    if (campos.costo_unitario !== undefined && campos.costo_unitario !== null) {
+      res.costo_unitario = campos.costo_unitario;
+    }
+    if (campos.proveedor_id !== undefined && campos.proveedor_id !== null) {
+      res.proveedor_id = campos.proveedor_id;
+    }
+    if (campos.comprobante !== undefined && campos.comprobante !== null && campos.comprobante !== '') {
+      res.comprobante = campos.comprobante;
+    }
+    if (obs !== undefined && obs !== null && obs !== '') {
+      res.observacion = obs;
+    }
+    return res;
+  }
+
+  if (tipo === 'EGRESO') {
+    return {
+      tipo: 'EGRESO',
+      cantidad: campos.cantidad,
+      observacion: obs,
+    };
+  }
+
+  // AJUSTE
+  return {
+    tipo: 'AJUSTE',
+    cantidad_contada: campos.cantidad_contada !== undefined ? campos.cantidad_contada : campos.cantidad,
+    observacion: obs,
+  };
+}
+

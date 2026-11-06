@@ -10,13 +10,13 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { clienteApi } from '../../api/cliente';
-import { PedidoRepuestoItem } from '../../api/tipos';
+import { PedidoIntervencionItem } from '../../api/tipos';
 import { ApiError, mensajeError } from '../../lib/errores';
 
 export interface ModalCancelarPedidoProps {
   abierto: boolean;
   onCerrar: () => void;
-  pedido: PedidoRepuestoItem | null;
+  pedido: PedidoIntervencionItem | null;
   onExito?: () => void;
 }
 

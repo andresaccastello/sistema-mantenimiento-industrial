@@ -12,6 +12,8 @@ import {
   Alert,
 } from '@mantine/core';
 import { IconDownload, IconPackage } from '@tabler/icons-react';
+import { clienteApi } from '../../api/cliente';
+import { ReporteRepuestosRespuesta } from '../../api/tipos';
 import { formatCantidad, formatMoneda } from '../../lib/formato';
 import {
   aCsv,
@@ -20,30 +22,10 @@ import {
   filasReporteRepuestos,
 } from '../../lib/reportes';
 
-export interface ReporteRepuestosData {
-  desde: string;
-  hasta: string;
-  ve_costos: boolean;
-  consumos: number;
-  intervenciones: number;
-  importe_total: number | null;
-  por_repuesto: Array<{
-    repuesto: { id: number; codigo: string | null; nombre: string; unidad: string };
-    cantidad: number;
-    consumos: number;
-    intervenciones: number;
-    importe: number | null;
-  }>;
-  por_maquina: Array<{
-    maquina: { id: number; codigo: string | null; nombre: string };
-    sector: { id: number; nombre: string };
-    consumos: number;
-    importe: number | null;
-  }>;
-}
+export type ReporteRepuestosData = ReporteRepuestosRespuesta;
 
 export interface TabReporteRepuestosProps {
-  datos?: ReporteRepuestosData | null;
+  datos?: ReporteRepuestosRespuesta | null;
 }
 
 export function TabReporteRepuestos({ datos }: TabReporteRepuestosProps) {

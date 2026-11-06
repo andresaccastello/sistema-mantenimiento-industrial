@@ -81,7 +81,7 @@ export function ModalDesactivarElemento({
       });
       onCerrar();
     } catch (err: any) {
-      if (err?.codigo === 'EN_USO' || err?.datos?.codigo === 'EN_USO') {
+      if ((tipo === 'proveedor' || tipo === 'repuesto') && (err?.codigo === 'EN_USO' || err?.datos?.codigo === 'EN_USO')) {
         const datos = err.datos || err;
         const rep = datos.repuestos_activos ?? 0;
         const ped = datos.pedidos_abiertos ?? 0;
