@@ -59,24 +59,26 @@ describe('FE-04: itemsMenu con los permisos de cada perfil', () => {
     assert.deepEqual(items, ['Inicio', 'Reportar falla', 'Intervenciones', 'Máquinas']);
   });
 
-  it('RESPONSABLE_MANTENIMIENTO: Inicio, Reportar falla, Intervenciones, Máquinas, Reportes', () => {
+  it('RESPONSABLE_MANTENIMIENTO: Inicio, Reportar falla, Intervenciones, Máquinas, Repuestos, Reportes', () => {
     const items = itemsMenu(permisosResponsable).map((i) => i.etiqueta);
     assert.deepEqual(items, [
       'Inicio',
       'Reportar falla',
       'Intervenciones',
       'Máquinas',
+      'Repuestos',
       'Reportes',
     ]);
   });
 
-  it('I_D: Inicio, Reportar falla, Intervenciones, Máquinas, Reportes', () => {
+  it('I_D: Inicio, Reportar falla, Intervenciones, Máquinas, Repuestos, Reportes', () => {
     const items = itemsMenu(permisosID).map((i) => i.etiqueta);
     assert.deepEqual(items, [
       'Inicio',
       'Reportar falla',
       'Intervenciones',
       'Máquinas',
+      'Repuestos',
       'Reportes',
     ]);
   });
@@ -91,13 +93,14 @@ describe('FE-04: itemsMenu con los permisos de cada perfil', () => {
     assert.deepEqual(items, ['Inicio', 'Intervenciones', 'Máquinas', 'Reportes']);
   });
 
-  it('ADMINISTRADOR: los 8 ítems, incluyendo Configuración al final', () => {
+  it('ADMINISTRADOR: los 9 ítems, incluyendo Repuestos y Configuración', () => {
     const items = itemsMenu(permisosAdmin).map((i) => i.etiqueta);
     assert.deepEqual(items, [
       'Inicio',
       'Reportar falla',
       'Intervenciones',
       'Máquinas',
+      'Repuestos',
       'Reportes',
       'Usuarios',
       'Sectores y catálogos',

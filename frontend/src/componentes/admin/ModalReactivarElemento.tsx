@@ -17,7 +17,7 @@ import { mensajeError } from '../../lib/errores';
 export interface ModalReactivarElementoProps {
   abierto: boolean;
   onCerrar: () => void;
-  tipo: 'sector' | 'planta' | 'criticidad' | 'tipo_equipo';
+  tipo: 'sector' | 'planta' | 'criticidad' | 'tipo_equipo' | 'proveedor' | 'repuesto';
   id: number | null;
   nombre: string;
 }
@@ -63,6 +63,14 @@ export function ModalReactivarElemento({
         await clienteApi.put(`/api/tipos-equipo/${id}`, { activo: true });
         await queryClient.invalidateQueries({ queryKey: ['tipos-equipo'] });
         await queryClient.invalidateQueries({ queryKey: ['maquinas'] });
+      } else if (tipo === 'proveedor') {
+        await clienteApi.put(`/api/proveedores/${id}/reactivar`);
+        await queryClient.invalidateQueries({ queryKey: ['proveedores'] });
+        await queryClient.invalidateQueries({ queryKey: ['proveedores', 'opciones'] });
+      } else if (tipo === 'repuesto') {
+        await clienteApi.put(`/api/repuestos/${id}/reactivar`);
+        await queryClient.invalidateQueries({ queryKey: ['repuestos'] });
+        await queryClient.invalidateQueries({ queryKey: ['repuesto', id] });
       }
 
       notifications.show({
@@ -82,7 +90,9 @@ export function ModalReactivarElemento({
     if (tipo === 'sector') return 'Reactivar sector';
     if (tipo === 'planta') return 'Reactivar planta';
     if (tipo === 'criticidad') return 'Reactivar criticidad';
-    return 'Reactivar tipo de equipo';
+    if (tipo === 'tipo_equipo') return 'Reactivar tipo de equipo';
+    if (tipo === 'proveedor') return 'Reactivar proveedor';
+    return 'Reactivar repuesto';
   };
 
   return (

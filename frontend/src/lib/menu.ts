@@ -74,6 +74,14 @@ export function itemsMenu(permisos: PermisosEntrada): ItemMenu[] {
     icono: 'IconCpu',
   });
 
+  if (verificarPermiso(permisos, 'REPUESTOS_GESTIONAR')) {
+    items.push({
+      etiqueta: 'Repuestos',
+      ruta: '/repuestos',
+      icono: 'IconPackage',
+    });
+  }
+
   if (verificarPermiso(permisos, 'REPORTES_CONSULTAR')) {
     items.push({
       etiqueta: 'Reportes',

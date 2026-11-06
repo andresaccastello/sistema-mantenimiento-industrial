@@ -17,7 +17,7 @@ import { mensajeError } from '../../lib/errores';
 export interface ModalDesactivarElementoProps {
   abierto: boolean;
   onCerrar: () => void;
-  tipo: 'sector' | 'planta' | 'criticidad' | 'tipo_equipo';
+  tipo: 'sector' | 'planta' | 'criticidad' | 'tipo_equipo' | 'proveedor' | 'repuesto';
   id: number | null;
   nombre: string;
   motivoBloqueo: string | null;
@@ -65,6 +65,14 @@ export function ModalDesactivarElemento({
         await clienteApi.delete(`/api/tipos-equipo/${id}`);
         await queryClient.invalidateQueries({ queryKey: ['tipos-equipo'] });
         await queryClient.invalidateQueries({ queryKey: ['maquinas'] });
+      } else if (tipo === 'proveedor') {
+        await clienteApi.delete(`/api/proveedores/${id}`);
+        await queryClient.invalidateQueries({ queryKey: ['proveedores'] });
+        await queryClient.invalidateQueries({ queryKey: ['proveedores', 'opciones'] });
+      } else if (tipo === 'repuesto') {
+        await clienteApi.delete(`/api/repuestos/${id}`);
+        await queryClient.invalidateQueries({ queryKey: ['repuestos'] });
+        await queryClient.invalidateQueries({ queryKey: ['repuesto', id] });
       }
 
       notifications.show({
@@ -73,6 +81,18 @@ export function ModalDesactivarElemento({
       });
       onCerrar();
     } catch (err: any) {
+      if (err?.codigo === 'EN_USO' || err?.datos?.codigo === 'EN_USO') {
+        const datos = err.datos || err;
+        const rep = datos.repuestos_activos ?? 0;
+        const ped = datos.pedidos_abiertos ?? 0;
+        const partes: string[] = [];
+        if (rep > 0) partes.push(`${rep} ${rep === 1 ? 'repuesto activo' : 'repuestos activos'}`);
+        if (ped > 0) partes.push(`${ped} ${ped === 1 ? 'pedido abierto' : 'pedidos abiertos'}`);
+        const detalle = partes.length > 0 ? ` Lo usan ${partes.join(' y ')}.` : '';
+        const msg = `No se puede desactivar.${detalle}`;
+        setErrorAlerta(msg);
+        return;
+      }
       setErrorAlerta(mensajeError(err));
       notifications.show({ message: mensajeError(err), color: 'red' });
     } finally {
@@ -84,7 +104,9 @@ export function ModalDesactivarElemento({
     if (tipo === 'sector') return 'Desactivar sector';
     if (tipo === 'planta') return 'Desactivar planta';
     if (tipo === 'criticidad') return 'Desactivar criticidad';
-    return 'Desactivar tipo de equipo';
+    if (tipo === 'tipo_equipo') return 'Desactivar tipo de equipo';
+    if (tipo === 'proveedor') return 'Desactivar proveedor';
+    return 'Desactivar repuesto';
   };
 
   const getTextoConfirmacion = () => {
@@ -97,7 +119,13 @@ export function ModalDesactivarElemento({
     if (tipo === 'criticidad') {
       return 'La criticidad deja de aparecer para máquinas nuevas. Su historial se conserva.';
     }
-    return 'El tipo de equipo deja de aparecer para máquinas nuevas. Su historial se conserva.';
+    if (tipo === 'tipo_equipo') {
+      return 'El tipo de equipo deja de aparecer para máquinas nuevas. Su historial se conserva.';
+    }
+    if (tipo === 'proveedor') {
+      return 'El proveedor deja de aparecer en las listas de opciones. Su historial se conserva.';
+    }
+    return 'El repuesto deja de aparecer para nuevas intervenciones. Su historial se conserva.';
   };
 
   return (

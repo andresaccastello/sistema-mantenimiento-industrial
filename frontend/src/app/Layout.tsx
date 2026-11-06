@@ -27,6 +27,7 @@ import {
   IconUser,
   IconQuestionMark,
   IconSettings,
+  IconPackage,
 } from '@tabler/icons-react';
 import { useLocation, useNavigate, Outlet } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
@@ -50,6 +51,7 @@ const ICONOS_MENU: Record<string, React.ComponentType<{ size?: number }>> = {
   IconUsers,
   IconBuildingFactory2,
   IconSettings,
+  IconPackage,
 };
 
 export function Layout() {

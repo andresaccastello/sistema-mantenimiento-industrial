@@ -119,3 +119,48 @@ export function parsearId(texto?: string | number | null): number | null {
   }
   return n;
 }
+
+/**
+ * Formatea un valor monetario en pesos con dos decimales, separador de miles con punto
+ * y coma para decimales.
+ * Ejemplos:
+ * 12345.5 -> "$ 12.345,50"
+ * 0 -> "$ 0,00"
+ * null / undefined -> "—"
+ * Usa espacio común (U+0020), no espacio duro.
+ */
+export function formatMoneda(valor?: number | null): string {
+  if (valor === null || valor === undefined || typeof valor !== 'number' || isNaN(valor)) {
+    return '—';
+  }
+  const esNegativo = valor < 0;
+  const abs = Math.abs(valor);
+  const partes = abs.toFixed(2).split('.');
+  const enteroConPuntos = partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const res = `$ ${enteroConPuntos},${partes[1]}`;
+  return esNegativo ? `-${res}` : res;
+}
+
+/**
+ * Formatea una cantidad numérica con hasta 3 decimales, omitiendo decimales innecesarios,
+ * separador de miles con punto y coma para decimales.
+ * Ejemplos:
+ * 2 -> "2"
+ * 1.5 -> "1,5"
+ * 1234.25 -> "1.234,25"
+ * 0.125 -> "0,125"
+ * null / undefined -> "—"
+ */
+export function formatCantidad(valor?: number | null): string {
+  if (valor === null || valor === undefined || typeof valor !== 'number' || isNaN(valor)) {
+    return '—';
+  }
+  const esNegativo = valor < 0;
+  const abs = Math.abs(valor);
+  const redondeado = Math.round(abs * 1000) / 1000;
+  const partes = redondeado.toString().split('.');
+  const enteroConPuntos = partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const res = partes.length > 1 ? `${enteroConPuntos},${partes[1]}` : enteroConPuntos;
+  return esNegativo ? `-${res}` : res;
+}
+

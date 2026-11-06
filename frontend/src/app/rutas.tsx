@@ -26,6 +26,8 @@ import { SectoresCatalogos } from '../pantallas/SectoresCatalogos';
 import { Perfiles } from '../pantallas/Perfiles';
 import { Configuracion } from '../pantallas/Configuracion';
 import { Reportes } from '../pantallas/Reportes';
+import { Repuestos } from '../pantallas/Repuestos';
+import { DetalleRepuesto } from '../pantallas/DetalleRepuesto';
 import { vistaDetalle } from '../lib/intervenciones';
 
 // Componentes generales
@@ -138,6 +140,22 @@ export function RutasApp() {
         <Route
           path="/maquinas/:id"
           element={<DetalleMaquina />}
+        />
+        <Route
+          path="/repuestos"
+          element={
+            <RutaProtegida permiso="REPUESTOS_GESTIONAR">
+              <Repuestos />
+            </RutaProtegida>
+          }
+        />
+        <Route
+          path="/repuestos/:id"
+          element={
+            <RutaProtegida permiso="REPUESTOS_GESTIONAR">
+              <DetalleRepuesto />
+            </RutaProtegida>
+          }
         />
         <Route
           path="/reportes"
