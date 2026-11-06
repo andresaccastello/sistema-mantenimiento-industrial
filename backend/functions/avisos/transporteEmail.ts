@@ -141,6 +141,9 @@ export function obtenerTransporteEmail(): TransporteEmail | null {
         user,
         pass,
       },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 30000,
     });
 
     return {

@@ -1310,11 +1310,21 @@ test('Etapa 7 — Notificaciones internas, reglas de destinatarios, bandeja y ca
     // N-16: Canales y bandeja de salida
     // =========================================================================
     await t.test('N-16: Activar EMAIL por SQL -> Un envío PENDIENTE por notificación; inactivos -> cero envíos', async () => {
-      // Guardar modo actual de ('FALLA_REGISTRADA', 'EMAIL') y poner en SIEMPRE
+      // Guardar modo, actualizado_en y actualizado_por_usuario_id de ('FALLA_REGISTRADA', 'EMAIL')
       const resReglaPre = await client.query(
-        "SELECT modo FROM notificacion_reglas WHERE tipo_evento = 'FALLA_REGISTRADA' AND canal = 'EMAIL'"
+        "SELECT modo, actualizado_en, actualizado_por_usuario_id FROM notificacion_reglas WHERE tipo_evento = 'FALLA_REGISTRADA' AND canal = 'EMAIL'"
       );
-      const modoPre = resReglaPre.rows[0]?.modo ?? 'SOLO_ALTA';
+      const reglaPre = resReglaPre.rows[0];
+      const modoPre = reglaPre?.modo ?? 'SOLO_ALTA';
+      const reglaActualizadoEn = reglaPre?.actualizado_en;
+      const reglaActualizadoPor = reglaPre?.actualizado_por_usuario_id;
+
+      // Guardar canales antes de modificarlos (activo, actualizado_en, actualizado_por_usuario_id)
+      const resCanalesPre = await client.query(
+        "SELECT canal, activo, actualizado_en, actualizado_por_usuario_id FROM notificacion_canales"
+      );
+      const canalesPre = resCanalesPre.rows;
+
       await client.query(
         "UPDATE notificacion_reglas SET modo = 'SIEMPRE' WHERE tipo_evento = 'FALLA_REGISTRADA' AND canal = 'EMAIL'"
       );
@@ -1382,10 +1392,18 @@ test('Etapa 7 — Notificaciones internas, reglas de destinatarios, bandeja y ca
         );
         assert.strictEqual(envios2.rows.length, 0, 'No debe haber envíos con canales inactivos');
       } finally {
-        await client.query(
-          "UPDATE notificacion_reglas SET modo = $1 WHERE tipo_evento = 'FALLA_REGISTRADA' AND canal = 'EMAIL'",
-          [modoPre]
-        );
+        if (reglaPre) {
+          await client.query(
+            "UPDATE notificacion_reglas SET modo = $1, actualizado_en = $2, actualizado_por_usuario_id = $3 WHERE tipo_evento = 'FALLA_REGISTRADA' AND canal = 'EMAIL'",
+            [modoPre, reglaActualizadoEn, reglaActualizadoPor]
+          );
+        }
+        for (const c of canalesPre) {
+          await client.query(
+            "UPDATE notificacion_canales SET activo = $1, actualizado_en = $2, actualizado_por_usuario_id = $3 WHERE canal = $4",
+            [c.activo, c.actualizado_en, c.actualizado_por_usuario_id, c.canal]
+          );
+        }
       }
     });
 

@@ -22,6 +22,9 @@ describe('FE-40: lib/contacto.ts', () => {
     assert.equal(validarEmail(null), null);
     assert.equal(validarEmail(''), null);
     assert.equal(validarEmail('ana@empresa.com'), null);
+    const email255 = 'a'.repeat(243) + '@empresa.com';
+    assert.equal(email255.length, 255);
+    assert.notEqual(validarEmail(email255), null);
   });
 
   it('normalizarTelefono: saca caracteres y 00 pasa a +; vacío a null', () => {

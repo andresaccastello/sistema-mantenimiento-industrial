@@ -622,7 +622,7 @@ usuariosApp.post('/', async (c) => {
     }
     const trimmed = email.trim();
     if (trimmed.length > 0) {
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmed)) {
+      if (trimmed.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmed)) {
         return c.json({ error: 'El email no tiene un formato válido.', codigo: 'EMAIL_INVALIDO' }, 422);
       }
       emailNormalizado = trimmed.toLowerCase();
@@ -876,7 +876,7 @@ usuariosApp.patch('/:id', async (c) => {
         }
         const trimmed = email.trim();
         if (trimmed.length > 0) {
-          if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmed)) {
+          if (trimmed.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmed)) {
             await client.query('ROLLBACK');
             return c.json({ error: 'El email no tiene un formato válido.', codigo: 'EMAIL_INVALIDO' }, 422);
           }

@@ -100,8 +100,5 @@ JOIN permisos pe ON pe.codigo = 'CONFIGURACION_GESTIONAR'
 WHERE p.nombre = 'ADMINISTRADOR'
 ON CONFLICT (perfil_id, permiso_id) DO NOTHING;
 
-DELETE FROM perfil_permiso
-WHERE permiso_id = (SELECT id FROM permisos WHERE codigo = 'CONFIGURACION_GESTIONAR')
-  AND perfil_id != (SELECT id FROM perfiles WHERE nombre = 'ADMINISTRADOR');
 
 COMMIT;

@@ -26,6 +26,7 @@ import {
   IconLogout,
   IconUser,
   IconQuestionMark,
+  IconSettings,
 } from '@tabler/icons-react';
 import { useLocation, useNavigate, Outlet } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
@@ -48,6 +49,7 @@ const ICONOS_MENU: Record<string, React.ComponentType<{ size?: number }>> = {
   IconReportAnalytics,
   IconUsers,
   IconBuildingFactory2,
+  IconSettings,
 };
 
 export function Layout() {

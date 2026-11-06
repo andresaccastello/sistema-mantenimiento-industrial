@@ -237,8 +237,8 @@ test('Migración 015 — Avisos por email: base de datos', async (t) => {
       assert.strictEqual(resPerfiles.rows[0].perfil, 'ADMINISTRADOR');
     });
 
-    // M15-06: Aplicarla de nuevo no cambia un modo ni un canal modificados (en transacción con ROLLBACK)
-    await t.test('M15-06: Idempotencia respeta cambios en reglas y canales modificados', async () => {
+    // M15-06: Aplicarla de nuevo no cambia un modo, canal modificado ni quita permisos a otros perfiles (en transacción con ROLLBACK)
+    await t.test('M15-06: Idempotencia respeta cambios en reglas, canales y permisos asignados', async () => {
       // Eliminar BEGIN; y COMMIT; del SQL para no interferir con la transacción de prueba
       const sqlSinTransaccion = sqlContent
         .replace(/^\s*BEGIN;\s*/im, '')
@@ -254,6 +254,16 @@ test('Migración 015 — Avisos por email: base de datos', async (t) => {
           "UPDATE notificacion_canales SET activo = TRUE WHERE canal = 'EMAIL'"
         );
 
+        // Asignar CONFIGURACION_GESTIONAR a otro perfil
+        await client.query(`
+          INSERT INTO perfil_permiso (perfil_id, permiso_id, alcance)
+          SELECT p.id, pe.id, 'TODAS'
+          FROM perfiles p
+          JOIN permisos pe ON pe.codigo = 'CONFIGURACION_GESTIONAR'
+          WHERE p.nombre = 'RESPONSABLE_MANTENIMIENTO'
+          ON CONFLICT (perfil_id, permiso_id) DO NOTHING
+        `);
+
         // Re-ejecutar la migración dentro de la transacción
         await client.query(sqlSinTransaccion);
 
@@ -267,6 +277,16 @@ test('Migración 015 — Avisos por email: base de datos', async (t) => {
           "SELECT activo FROM notificacion_canales WHERE canal = 'EMAIL'"
         );
         assert.strictEqual(resCanal.rows[0].activo, true);
+
+        // Verificar que el otro perfil conserva el permiso
+        const resOtroPerfil = await client.query(`
+          SELECT 1
+          FROM perfil_permiso pp
+          JOIN perfiles p ON p.id = pp.perfil_id
+          JOIN permisos pe ON pe.id = pp.permiso_id
+          WHERE pe.codigo = 'CONFIGURACION_GESTIONAR' AND p.nombre = 'RESPONSABLE_MANTENIMIENTO'
+        `);
+        assert.strictEqual(resOtroPerfil.rows.length, 1);
       } finally {
         await client.query('ROLLBACK');
       }

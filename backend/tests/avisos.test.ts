@@ -92,18 +92,20 @@ test('Etapa N1a — Avisos por email configurables', async (t) => {
   const createdEnvioIds: number[] = [];
 
   // Guardar estado inicial de canales y reglas (Regla 6 sección 0 / AV-14)
-  const resInitCanales = await client.query('SELECT canal, activo, actualizado_por_usuario_id FROM notificacion_canales');
+  const resInitCanales = await client.query('SELECT canal, activo, actualizado_en, actualizado_por_usuario_id FROM notificacion_canales');
   const initCanales = resInitCanales.rows.map((r) => ({
     canal: r.canal,
     activo: Boolean(r.activo),
+    actualizado_en: r.actualizado_en,
     actualizado_por_usuario_id: r.actualizado_por_usuario_id ? Number(r.actualizado_por_usuario_id) : null,
   }));
 
-  const resInitReglas = await client.query('SELECT tipo_evento, canal, modo, actualizado_por_usuario_id FROM notificacion_reglas');
+  const resInitReglas = await client.query('SELECT tipo_evento, canal, modo, actualizado_en, actualizado_por_usuario_id FROM notificacion_reglas');
   const initReglas = resInitReglas.rows.map((r) => ({
     tipo_evento: r.tipo_evento,
     canal: r.canal,
     modo: r.modo,
+    actualizado_en: r.actualizado_en,
     actualizado_por_usuario_id: r.actualizado_por_usuario_id ? Number(r.actualizado_por_usuario_id) : null,
   }));
 
@@ -814,6 +816,14 @@ test('Etapa N1a — Avisos por email configurables', async (t) => {
       const bBadMail = await rBadMail.json();
       assert.strictEqual(bBadMail.codigo, 'EMAIL_INVALIDO');
 
+      // Email de 255 caracteres (> 254) devuelve 422 EMAIL_INVALIDO
+      const email255 = 'a'.repeat(243) + '@empresa.com';
+      assert.strictEqual(email255.length, 255);
+      const rLargo = await patchJson(`/api/usuarios/${bAlta.id}`, { email: email255 }, adminToken);
+      assert.strictEqual(rLargo.status, 422);
+      const bLargo = await rLargo.json();
+      assert.strictEqual(bLargo.codigo, 'EMAIL_INVALIDO');
+
       // (c) "" lo borra
       const rClear = await patchJson(`/api/usuarios/${bAlta.id}`, { email: '', telefono_whatsapp: '' }, adminToken);
       assert.strictEqual(rClear.status, 200);
@@ -866,30 +876,50 @@ test('Etapa N1a — Avisos por email configurables', async (t) => {
       // Restaurar canales
       for (const ic of initCanales) {
         await client.query(
-          'UPDATE notificacion_canales SET activo = $1, actualizado_por_usuario_id = $2 WHERE canal = $3',
-          [ic.activo, ic.actualizado_por_usuario_id, ic.canal]
+          'UPDATE notificacion_canales SET activo = $1, actualizado_en = $2, actualizado_por_usuario_id = $3 WHERE canal = $4',
+          [ic.activo, ic.actualizado_en, ic.actualizado_por_usuario_id, ic.canal]
         );
       }
 
       // Restaurar reglas
       for (const ir of initReglas) {
         await client.query(
-          'UPDATE notificacion_reglas SET modo = $1, actualizado_por_usuario_id = $2 WHERE tipo_evento = $3 AND canal = $4',
-          [ir.modo, ir.actualizado_por_usuario_id, ir.tipo_evento, ir.canal]
+          'UPDATE notificacion_reglas SET modo = $1, actualizado_en = $2, actualizado_por_usuario_id = $3 WHERE tipo_evento = $4 AND canal = $5',
+          [ir.modo, ir.actualizado_en, ir.actualizado_por_usuario_id, ir.tipo_evento, ir.canal]
         );
       }
 
-      const resCanalesFinal = await client.query('SELECT canal, activo FROM notificacion_canales WHERE canal IN (\'EMAIL\', \'WHATSAPP\')');
+      const resCanalesFinal = await client.query('SELECT canal, activo, actualizado_en, actualizado_por_usuario_id FROM notificacion_canales WHERE canal IN (\'EMAIL\', \'WHATSAPP\')');
       for (const r of resCanalesFinal.rows) {
         const orig = initCanales.find((c) => c.canal === r.canal);
         assert.strictEqual(Boolean(r.activo), orig?.activo, `Canal ${r.canal} debe coincidir con estado inicial`);
+        assert.strictEqual(
+          new Date(r.actualizado_en).toISOString(),
+          new Date(orig?.actualizado_en).toISOString(),
+          `Canal ${r.canal} actualizado_en debe coincidir`
+        );
+        assert.strictEqual(
+          r.actualizado_por_usuario_id ? Number(r.actualizado_por_usuario_id) : null,
+          orig?.actualizado_por_usuario_id,
+          `Canal ${r.canal} actualizado_por_usuario_id debe coincidir`
+        );
       }
 
-      const resReglasFinal = await client.query('SELECT tipo_evento, canal, modo FROM notificacion_reglas');
+      const resReglasFinal = await client.query('SELECT tipo_evento, canal, modo, actualizado_en, actualizado_por_usuario_id FROM notificacion_reglas');
       assert.strictEqual(resReglasFinal.rows.length, 16);
       for (const r of resReglasFinal.rows) {
         const orig = initReglas.find((ir) => ir.tipo_evento === r.tipo_evento && ir.canal === r.canal);
         assert.strictEqual(r.modo, orig?.modo, `Regla ${r.tipo_evento}/${r.canal} debe coincidir con estado inicial`);
+        assert.strictEqual(
+          new Date(r.actualizado_en).toISOString(),
+          new Date(orig?.actualizado_en).toISOString(),
+          `Regla ${r.tipo_evento}/${r.canal} actualizado_en debe coincidir`
+        );
+        assert.strictEqual(
+          r.actualizado_por_usuario_id ? Number(r.actualizado_por_usuario_id) : null,
+          orig?.actualizado_por_usuario_id,
+          `Regla ${r.tipo_evento}/${r.canal} actualizado_por_usuario_id debe coincidir`
+        );
       }
     });
 
@@ -930,14 +960,14 @@ test('Etapa N1a — Avisos por email configurables', async (t) => {
       // Restauración de canales y reglas
       for (const ic of initCanales) {
         await client.query(
-          'UPDATE notificacion_canales SET activo = $1, actualizado_por_usuario_id = $2 WHERE canal = $3',
-          [ic.activo, ic.actualizado_por_usuario_id, ic.canal]
+          'UPDATE notificacion_canales SET activo = $1, actualizado_en = $2, actualizado_por_usuario_id = $3 WHERE canal = $4',
+          [ic.activo, ic.actualizado_en, ic.actualizado_por_usuario_id, ic.canal]
         );
       }
       for (const ir of initReglas) {
         await client.query(
-          'UPDATE notificacion_reglas SET modo = $1, actualizado_por_usuario_id = $2 WHERE tipo_evento = $3 AND canal = $4',
-          [ir.modo, ir.actualizado_por_usuario_id, ir.tipo_evento, ir.canal]
+          'UPDATE notificacion_reglas SET modo = $1, actualizado_en = $2, actualizado_por_usuario_id = $3 WHERE tipo_evento = $4 AND canal = $5',
+          [ir.modo, ir.actualizado_en, ir.actualizado_por_usuario_id, ir.tipo_evento, ir.canal]
         );
       }
     } catch (cleanupErr) {

@@ -14,6 +14,9 @@ export function validarEmail(email?: string | null): string | null {
   if (email === null || email === undefined || email === '') {
     return null;
   }
+  if (email.length > 254) {
+    return 'El email no tiene un formato válido.';
+  }
   const patron = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
   if (!patron.test(email)) {
     return 'El email no tiene un formato válido.';
