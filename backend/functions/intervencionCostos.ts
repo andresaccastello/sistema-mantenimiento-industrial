@@ -7,7 +7,7 @@ import { bloquearIntervencion } from './intervenciones/bloqueos.ts';
 import { UsuarioVisibilidad, puedeVerIntervencion } from './intervenciones/visibilidad.ts';
 import { registrarAuditoria } from './intervenciones/auditoria.ts';
 import { recalcularCostosIntervencion } from './intervenciones/costos.ts';
-import { parseIdRuta, validarIdCuerpo } from './repuestos/validaciones.ts';
+import { parseIdRuta, validarIdCuerpo, formatearCantidad } from './repuestos/validaciones.ts';
 
 /**
  * Etapa C1, sección 4: renglones de costo de la intervención.
@@ -28,6 +28,38 @@ const ETIQUETA_TIPO: Record<TipoCosto, string> = {
 
 function etiquetaTipo(tipo: string): string {
   return (ETIQUETA_TIPO as Record<string, string>)[tipo] ?? tipo;
+}
+
+/** La descripción que lleva una mano de obra cuando no se escribe ninguna. */
+const DESCRIPCION_MANO_OBRA = 'Mano de obra';
+
+/**
+ * Texto del renglón para la auditoría, sin importes ni valor hora (C1.1, sección 5).
+ * - MANO_OBRA: "Mano de obra — <persona o proveedor>, <horas> h", y ": <descripción>"
+ *   al final si no es la de omisión.
+ * - Los demás: "<tipo> — <descripción>".
+ * Se llama dentro de la transacción, con el renglón ya escrito o bloqueado.
+ */
+async function textoRenglonAuditoria(client: pg.PoolClient, renglonId: number): Promise<string> {
+  const res = await client.query(
+    `SELECT c.tipo, c.descripcion, c.horas,
+            per.nombre AS per_nombre, per.apellido AS per_apellido, prov.nombre AS prov_nombre
+     FROM intervencion_costos c
+     LEFT JOIN usuarios per ON per.id = c.usuario_id
+     LEFT JOIN proveedores prov ON prov.id = c.proveedor_id
+     WHERE c.id = $1`,
+    [renglonId]
+  );
+  const r = res.rows[0];
+  if (r.tipo !== 'MANO_OBRA') {
+    return `${etiquetaTipo(r.tipo)} — ${r.descripcion}`;
+  }
+  const quien =
+    r.per_nombre !== null
+      ? [r.per_nombre, r.per_apellido].filter((x: string | null) => x).join(' ')
+      : String(r.prov_nombre);
+  const detalle = r.descripcion !== DESCRIPCION_MANO_OBRA ? `: ${r.descripcion}` : '';
+  return `${etiquetaTipo(r.tipo)} — ${quien}, ${formatearCantidad(r.horas)} h${detalle}`;
 }
 
 function getUsuarioContext(c: any): UsuarioVisibilidad {
@@ -202,12 +234,12 @@ intervencionCostosApp.get('/:id/costos', requirePermission('INTERVENCIONES_VER')
 
     const resSum = await pool.query(
       `SELECT
-         COALESCE(SUM(importe) FILTER (WHERE tipo = 'MANO_OBRA'), 0)::numeric(14,2) AS mano_obra,
-         COALESCE(SUM(importe) FILTER (WHERE tipo = 'SERVICIO_EXTERNO'), 0)::numeric(14,2) AS servicio_externo,
-         COALESCE(SUM(importe) FILTER (WHERE tipo = 'TRANSPORTE'), 0)::numeric(14,2) AS transporte,
-         COALESCE(SUM(importe) FILTER (WHERE tipo = 'OTRO'), 0)::numeric(14,2) AS otro,
-         COALESCE(SUM(importe) FILTER (WHERE tipo = 'AJUSTE'), 0)::numeric(14,2) AS ajuste,
-         COALESCE(SUM(horas) FILTER (WHERE tipo = 'MANO_OBRA'), 0)::numeric(10,2) AS horas_mano_obra
+         COALESCE(SUM(importe) FILTER (WHERE tipo = 'MANO_OBRA'), 0) AS mano_obra,
+         COALESCE(SUM(importe) FILTER (WHERE tipo = 'SERVICIO_EXTERNO'), 0) AS servicio_externo,
+         COALESCE(SUM(importe) FILTER (WHERE tipo = 'TRANSPORTE'), 0) AS transporte,
+         COALESCE(SUM(importe) FILTER (WHERE tipo = 'OTRO'), 0) AS otro,
+         COALESCE(SUM(importe) FILTER (WHERE tipo = 'AJUSTE'), 0) AS ajuste,
+         COALESCE(SUM(horas) FILTER (WHERE tipo = 'MANO_OBRA'), 0) AS horas_mano_obra
        FROM intervencion_costos
        WHERE intervencion_id = $1 AND anulado_en IS NULL`,
       [id]
@@ -283,7 +315,7 @@ function validarRenglon(body: any, finalizada: boolean): RenglonValidado {
   }
   let descripcion = typeof body.descripcion === 'string' ? body.descripcion.trim() : '';
   if (descripcion === '' && esManoObra) {
-    descripcion = 'Mano de obra';
+    descripcion = DESCRIPCION_MANO_OBRA;
   }
   if (descripcion.length < 3 || descripcion.length > 200) {
     throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'La descripción debe tener entre 3 y 200 caracteres');
@@ -405,6 +437,18 @@ intervencionCostosApp.post('/:id/costos', async (c) => {
     const finalizada = intervencion.estado === 'FINALIZADA';
     const r = validarRenglon(body, finalizada);
 
+    // El importe calculado tiene el mismo máximo que el cargado a mano,
+    // comparado en SQL con el mismo ROUND del INSERT
+    if (r.valorHora !== null) {
+      const resTope = await client.query(
+        'SELECT ROUND($1::numeric * $2::numeric, 2) > 1000000000 AS excede',
+        [r.horas, r.valorHora]
+      );
+      if (resTope.rows[0].excede) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El importe de la mano de obra supera el máximo permitido');
+      }
+    }
+
     if (r.usuarioId !== null) {
       const resU = await client.query('SELECT id, activo FROM usuarios WHERE id = $1 FOR SHARE', [r.usuarioId]);
       if (resU.rows.length === 0 || !resU.rows[0].activo) {
@@ -453,7 +497,7 @@ intervencionCostosApp.post('/:id/costos', async (c) => {
         intervencionId: id,
         tipoEvento: 'CORRECCION_COSTO',
         campo: 'costos',
-        valorNuevo: `Se agregó: ${etiquetaTipo(r.tipo)} — ${r.descripcion}`,
+        valorNuevo: `Se agregó: ${await textoRenglonAuditoria(client, renglonId)}`,
         motivo: r.motivo,
         usuarioId: usuario.id,
       });
@@ -540,7 +584,7 @@ intervencionCostosApp.post('/:id/costos/:renglonId/anular', async (c) => {
         intervencionId: id,
         tipoEvento: 'CORRECCION_COSTO',
         campo: 'costos',
-        valorNuevo: `Se anuló: ${etiquetaTipo(renglon.tipo)} — ${renglon.descripcion}`,
+        valorNuevo: `Se anuló: ${await textoRenglonAuditoria(client, renglonId)}`,
         motivo: motivoTrim,
         usuarioId: usuario.id,
       });

@@ -260,7 +260,10 @@ export function ModalCosto({ abierto, onCerrar, intervencionId, estadoIntervenci
                 required
                 decimalScale={2}
                 value={horas}
-                onChange={setHoras}
+                onChange={(v) => {
+                  setHoras(v);
+                  limpiar('horas');
+                }}
                 error={error('horas')}
               />
               <CampoNumero
@@ -269,7 +272,10 @@ export function ModalCosto({ abierto, onCerrar, intervencionId, estadoIntervenci
                 prefix="$ "
                 decimalScale={2}
                 value={valorHora}
-                onChange={setValorHora}
+                onChange={(v) => {
+                  setValorHora(v);
+                  limpiar('valorHora');
+                }}
                 error={error('valorHora')}
               />
             </Group>
@@ -289,7 +295,10 @@ export function ModalCosto({ abierto, onCerrar, intervencionId, estadoIntervenci
               prefix="$ "
               decimalScale={2}
               value={importe}
-              onChange={setImporte}
+              onChange={(v) => {
+                setImporte(v);
+                limpiar('importe');
+              }}
               error={error('importe')}
             />
           )}

@@ -502,7 +502,7 @@ test('Etapa C1 — Costos de la intervención y reporte de costos (CO-01 a CO-15
 
       const aud1 = await auditoria();
       assert.strictEqual(aud1.length, 1);
-      assert.strictEqual(aud1[0].valor_nuevo, 'Se agregó: Mano de obra — Ajuste de guías');
+      assert.strictEqual(aud1[0].valor_nuevo, 'Se agregó: Mano de obra — Persona CO, 2 h: Ajuste de guías');
       assert.strictEqual(aud1[0].motivo, 'Faltó cargar horas');
 
       const rAnul = await anular(id, d.id, { motivo: 'Horas mal cargadas' }, tokenA);
@@ -510,7 +510,7 @@ test('Etapa C1 — Costos de la intervención y reporte de costos (CO-01 a CO-15
 
       const aud2 = await auditoria();
       assert.strictEqual(aud2.length, 2);
-      assert.strictEqual(aud2[1].valor_nuevo, 'Se anuló: Mano de obra — Ajuste de guías');
+      assert.strictEqual(aud2[1].valor_nuevo, 'Se anuló: Mano de obra — Persona CO, 2 h: Ajuste de guías');
       assert.strictEqual(aud2[1].motivo, 'Horas mal cargadas');
 
       // Sin el importe ni el valor hora en ningún texto
@@ -801,6 +801,123 @@ test('Etapa C1 — Costos de la intervención y reporte de costos (CO-01 a CO-15
       const rRep = await reporte(tokenA);
       assert.strictEqual(rRep.status, 200);
       verificar('GET /api/reportes/costos', await rRep.json(), reporteCostosEjemplo);
+    });
+
+    // =========================================================================
+    // CO-16: Importes y totales fuera de rango (C1.1, sección 3)
+    // =========================================================================
+    await t.test('CO-16: Importes y totales fuera de rango', async () => {
+      // Mano de obra de 1000 h × 10.000.000: el importe calculado pasa de 1.000.000.000
+      const id1 = await enProceso(m1Id);
+      const antes1 = await costosDb(id1);
+      const rMo = await costo(id1, { tipo: 'MANO_OBRA', usuario_id: P.id, horas: 1000, valor_hora: 10000000 }, tokenR);
+      assert.strictEqual(rMo.status, 422);
+      assert.strictEqual((await rMo.json()).codigo, 'DATOS_INVALIDOS');
+      assert.strictEqual(await cantidadRenglones(id1), 0, 'No se guarda el renglón');
+      assert.deepStrictEqual(await costosDb(id1), antes1, 'Los costos de la intervención no cambian');
+
+      // 1000 renglones OTRO de 1.000.000.000 por SQL, con fecha fija de julio de 2025
+      const id2 = await enProceso(m1Id);
+      await client.query(
+        `INSERT INTO intervencion_costos (intervencion_id, tipo, descripcion, importe, registrado_por_usuario_id, registrado_en)
+         SELECT $1, 'OTRO', 'Gasto grande CO-16', 1000000000, $2, '2025-07-10T12:00:00.000Z'
+         FROM generate_series(1, 1000)`,
+        [id2, R.id]
+      );
+      const antes2 = await costosDb(id2);
+
+      const rUno = await costo(id2, otro(1), tokenR);
+      const dUno = await rUno.json();
+      assert.strictEqual(rUno.status, 409, JSON.stringify(dUno));
+      assert.strictEqual(dUno.codigo, 'TOTAL_FUERA_DE_RANGO');
+      assert.deepStrictEqual(await costosDb(id2), antes2, 'costo_total_estimado no cambia');
+      assert.strictEqual(await cantidadRenglones(id2), 1000, 'No se guarda el renglón nuevo');
+
+      // El reporte del período da 200, con la suma completa
+      const rRep = await getJson(
+        `/api/reportes/costos?desde=${encodeURIComponent('2025-07-01T00:00:00.000Z')}` +
+          `&hasta=${encodeURIComponent('2025-07-20T00:00:00.000Z')}&planta_id=${pl1Id}`,
+        tokenR
+      );
+      const dRep = await rRep.json();
+      assert.strictEqual(rRep.status, 200, JSON.stringify(dRep));
+      assert.strictEqual(dRep.total, 1000000000000);
+      assert.strictEqual(dRep.por_tipo.otro, 1000000000000);
+      assert.strictEqual(dRep.intervenciones, 1);
+
+      // El GET de la intervención también da 200
+      const rGet = await getJson(`/api/intervenciones/${id2}/costos`, tokenR);
+      const dGet = await rGet.json();
+      assert.strictEqual(rGet.status, 200, JSON.stringify(dGet));
+      assert.strictEqual(dGet.resumen.otro, 1000000000000);
+    });
+
+    // =========================================================================
+    // CO-17: Auditoría de la mano de obra con la persona y las horas (C1.1, sección 5)
+    // =========================================================================
+    await t.test('CO-17: Auditoría de la mano de obra con la persona y las horas', async () => {
+      // Una persona "Responsable Demo" y un proveedor "Taller Gómez", de la prueba
+      const resRD = await client.query(
+        `INSERT INTO usuarios (legajo, nombre, apellido, password_hash, perfil_id, activo, sesion_version)
+         VALUES ($1, 'Responsable', 'Demo', $2, $3, TRUE, 1) RETURNING id`,
+        [`CO_RD_${suf}`, passHash, perfilMap['OPERARIO']]
+      );
+      const rdId = Number(resRD.rows[0].id);
+      createdUsuarioIds.push(rdId);
+
+      const nombreTaller = `Taller Gómez ${suf}`;
+      const resTaller = await postJson('/api/proveedores', { nombre: nombreTaller }, tokenR);
+      assert.strictEqual(resTaller.status, 201);
+      const tallerId = Number((await resTaller.json()).id);
+      createdProveedorIds.push(tallerId);
+
+      const id = await enProceso();
+      await finalizar(id);
+
+      const interna = await costoOk(
+        id,
+        { tipo: 'MANO_OBRA', usuario_id: rdId, horas: 2.5, valor_hora: 1200, motivo: 'Faltó cargar horas' },
+        tokenA
+      );
+      const externa = await costoOk(
+        id,
+        {
+          tipo: 'MANO_OBRA',
+          proveedor_id: tallerId,
+          horas: 4,
+          importe: 20000,
+          descripcion: 'Rebobinado del motor',
+          motivo: 'Faltó cargar el taller',
+        },
+        tokenA
+      );
+      assert.strictEqual(interna.importe, 3000);
+      assert.strictEqual((await anular(id, externa.id, { motivo: 'Cargado dos veces' }, tokenA)).status, 200);
+      // Los otros tipos no cambian
+      await costoOk(id, { ...otro(150), motivo: 'Faltaron insumos' }, tokenA);
+
+      const aud = (
+        await client.query(
+          `SELECT valor_nuevo FROM intervencion_auditoria
+           WHERE intervencion_id = $1 AND tipo_evento = 'CORRECCION_COSTO' AND campo_modificado = 'costos'
+           ORDER BY id`,
+          [id]
+        )
+      ).rows.map((r) => r.valor_nuevo);
+
+      assert.deepStrictEqual(aud, [
+        'Se agregó: Mano de obra — Responsable Demo, 2,5 h',
+        `Se agregó: Mano de obra — ${nombreTaller}, 4 h: Rebobinado del motor`,
+        `Se anuló: Mano de obra — ${nombreTaller}, 4 h: Rebobinado del motor`,
+        'Se agregó: Otro — Insumos varios',
+      ]);
+      for (const fila of aud) {
+        // Sin el nombre del proveedor, que lleva el sufijo numérico de la prueba
+        const texto = fila.split(nombreTaller).join('');
+        for (const numero of ['3000', '3.000', '1200', '1.200', '20000', '20.000', '$']) {
+          assert.ok(!texto.includes(numero), `La auditoría no muestra ${numero}: ${texto}`);
+        }
+      }
     });
   } finally {
     // Limpieza: solo lo que creó esta prueba

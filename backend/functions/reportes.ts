@@ -812,14 +812,14 @@ reportesApp.get('/costos', requirePermission('REPORTES_CONSULTAR'), async (c) =>
     const resTot = await pool.query(
       `${sqlGastos}
        SELECT
-         COALESCE(SUM(importe), 0)::numeric(14,2) AS total,
+         COALESCE(SUM(importe), 0) AS total,
          COUNT(DISTINCT intervencion_id)::integer AS intervenciones,
-         COALESCE(SUM(importe) FILTER (WHERE tipo = 'REPUESTOS'), 0)::numeric(14,2) AS repuestos,
-         COALESCE(SUM(importe) FILTER (WHERE tipo = 'MANO_OBRA'), 0)::numeric(14,2) AS mano_obra,
-         COALESCE(SUM(importe) FILTER (WHERE tipo = 'SERVICIO_EXTERNO'), 0)::numeric(14,2) AS servicio_externo,
-         COALESCE(SUM(importe) FILTER (WHERE tipo = 'TRANSPORTE'), 0)::numeric(14,2) AS transporte,
-         COALESCE(SUM(importe) FILTER (WHERE tipo = 'OTRO'), 0)::numeric(14,2) AS otro,
-         COALESCE(SUM(importe) FILTER (WHERE tipo = 'AJUSTE'), 0)::numeric(14,2) AS ajuste
+         COALESCE(SUM(importe) FILTER (WHERE tipo = 'REPUESTOS'), 0) AS repuestos,
+         COALESCE(SUM(importe) FILTER (WHERE tipo = 'MANO_OBRA'), 0) AS mano_obra,
+         COALESCE(SUM(importe) FILTER (WHERE tipo = 'SERVICIO_EXTERNO'), 0) AS servicio_externo,
+         COALESCE(SUM(importe) FILTER (WHERE tipo = 'TRANSPORTE'), 0) AS transporte,
+         COALESCE(SUM(importe) FILTER (WHERE tipo = 'OTRO'), 0) AS otro,
+         COALESCE(SUM(importe) FILTER (WHERE tipo = 'AJUSTE'), 0) AS ajuste
        FROM gastos`,
       params
     );
@@ -831,10 +831,10 @@ reportesApp.get('/costos', requirePermission('REPORTES_CONSULTAR'), async (c) =>
        SELECT
          m.id AS maquina_id, m.codigo AS maquina_codigo, m.nombre AS maquina_nombre,
          s.id AS sector_id, s.nombre AS sector_nombre,
-         COALESCE(SUM(g.importe) FILTER (WHERE g.tipo = 'REPUESTOS'), 0)::numeric(14,2) AS repuestos,
-         COALESCE(SUM(g.importe) FILTER (WHERE g.tipo = 'MANO_OBRA'), 0)::numeric(14,2) AS mano_obra,
-         COALESCE(SUM(g.importe) FILTER (WHERE g.tipo NOT IN ('REPUESTOS', 'MANO_OBRA')), 0)::numeric(14,2) AS otros,
-         COALESCE(SUM(g.importe), 0)::numeric(14,2) AS total
+         COALESCE(SUM(g.importe) FILTER (WHERE g.tipo = 'REPUESTOS'), 0) AS repuestos,
+         COALESCE(SUM(g.importe) FILTER (WHERE g.tipo = 'MANO_OBRA'), 0) AS mano_obra,
+         COALESCE(SUM(g.importe) FILTER (WHERE g.tipo NOT IN ('REPUESTOS', 'MANO_OBRA')), 0) AS otros,
+         COALESCE(SUM(g.importe), 0) AS total
        FROM gastos g
        JOIN maquinas m ON m.id = g.maquina_id
        JOIN sectores s ON s.id = m.sector_id
@@ -849,8 +849,8 @@ reportesApp.get('/costos', requirePermission('REPORTES_CONSULTAR'), async (c) =>
        SELECT
          u.id AS usuario_id, u.nombre AS usuario_nombre, u.apellido AS usuario_apellido,
          p.id AS proveedor_id, p.nombre AS proveedor_nombre,
-         COALESCE(SUM(g.horas), 0)::numeric(10,2) AS horas,
-         COALESCE(SUM(g.importe), 0)::numeric(14,2) AS importe
+         COALESCE(SUM(g.horas), 0) AS horas,
+         COALESCE(SUM(g.importe), 0) AS importe
        FROM gastos g
        LEFT JOIN usuarios u ON u.id = g.usuario_id
        LEFT JOIN proveedores p ON p.id = g.proveedor_id
