@@ -22,6 +22,10 @@ import { FiltrosReportesBarra } from '../componentes/reportes/FiltrosReportes';
 import { TabIndicadores } from '../componentes/reportes/TabIndicadores';
 import { TabInactividad } from '../componentes/reportes/TabInactividad';
 import { TabTiempos } from '../componentes/reportes/TabTiempos';
+import {
+  TabReporteRepuestos,
+  ReporteRepuestosData,
+} from '../componentes/reportes/TabReporteRepuestos';
 
 export function Reportes() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -82,6 +86,12 @@ export function Reportes() {
     enabled: filtros.vista === 'tiempos',
   });
 
+  const queryRepuestos = useQuery<ReporteRepuestosData>({
+    queryKey: ['reportes', 'repuestos', queryParams],
+    queryFn: () => clienteApi.get<ReporteRepuestosData>('/api/reportes/repuestos', { params: queryParams }),
+    enabled: filtros.vista === 'repuestos',
+  });
+
   // 6. Actualización de filtros sincronizada con la URL
   const handleFiltrosChange = (cambios: Partial<FiltrosReportes>) => {
     const nuevosFiltros: FiltrosReportes = {
@@ -115,12 +125,13 @@ export function Reportes() {
         rango={rango}
       />
 
-      {/* Pestañas: Indicadores · Inactividad · Tiempos */}
+      {/* Pestañas: Indicadores · Inactividad · Tiempos · Repuestos */}
       <Tabs value={filtros.vista} onChange={handleTabChange}>
         <Tabs.List>
           <Tabs.Tab value="indicadores">Indicadores</Tabs.Tab>
           <Tabs.Tab value="inactividad">Inactividad</Tabs.Tab>
           <Tabs.Tab value="tiempos">Tiempos</Tabs.Tab>
+          <Tabs.Tab value="repuestos">Repuestos</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="indicadores">
@@ -161,6 +172,18 @@ export function Reportes() {
               onAgruparChange={handleAgruparChange}
               rango={rango}
             />
+          )}
+        </Tabs.Panel>
+
+        <Tabs.Panel value="repuestos">
+          {queryRepuestos.isLoading && <Skeleton height={260} mt="md" radius="sm" />}
+          {queryRepuestos.isError && (
+            <Alert color="red" my="md">
+              <Text size="sm">No se pudo cargar el reporte de repuestos.</Text>
+            </Alert>
+          )}
+          {queryRepuestos.data && (
+            <TabReporteRepuestos datos={queryRepuestos.data} />
           )}
         </Tabs.Panel>
       </Tabs>

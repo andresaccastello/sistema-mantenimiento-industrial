@@ -30,7 +30,7 @@ La meta inicial es un MVP que demuestre de extremo a extremo el flujo de manteni
 ## Etapa 3 — Módulos complementarios
 
 - [ ] Mantenimiento preventivo configurable.
-- [ ] Repuestos y movimientos de stock.
+- [x] Repuestos y movimientos de stock.
 - [ ] Documentos adjuntos.
 - [ ] Reportes e indicadores.
 

@@ -33,6 +33,8 @@ import { formatFechaHora, formatDuracion, parsearId } from '../lib/formato';
 import { nombreCompleto } from '../lib/personas';
 import { eventosHistorial } from '../lib/intervenciones';
 import { ordenarAcciones, etiquetaAccion, CodigoAccion } from '../lib/acciones';
+import { BloqueRepuestosIntervencion } from '../componentes/repuestos/BloqueRepuestosIntervencion';
+import { BloquePedidosIntervencion } from '../componentes/repuestos/BloquePedidosIntervencion';
 import { minutosEntre } from '../lib/fechas';
 import { obtenerInfoEstado } from '../lib/estados';
 import { mensajeError, requiereRecargar, ApiError } from '../lib/errores';
@@ -262,6 +264,16 @@ export function DetalleIntervencion() {
                 </Stack>
               </Card>
             )}
+
+            {/* Repuestos usados y Pedidos */}
+            <BloqueRepuestosIntervencion
+              intervencionId={reporte.id}
+              estadoIntervencion={reporte.estado}
+            />
+            <BloquePedidosIntervencion
+              intervencionId={reporte.id}
+              estadoIntervencion={reporte.estado}
+            />
 
             {/* 3. Historial */}
             <Card withBorder radius="md" p="md">

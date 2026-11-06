@@ -67,9 +67,11 @@ Los tonos exactos se definen en la etapa F0.
 | :-: | :--- | :--- | :--- | :--- |
 | R1 | Tablero | Contadores de máquinas detenidas, en mantenimiento y fuera de servicio; contadores de intervenciones sin asignar, en proceso, esperando repuestos y asignadas a mí. Lista "Detenidas ahora", con el tiempo de inactividad en curso. | Tocar un contador abre la lista filtrada | **Falta** (API-03) |
 | R2 | Intervenciones | Pestañas: Sin asignar · Mías · Abiertas · Cerradas. Filtros por estado, máquina, sector, tipo, responsable y fechas; búsqueda por texto. En computadora es una tabla: número, máquina, estado, tipo, responsable, antigüedad, si detiene la máquina y duración. | Abrir; nueva intervención | `GET /intervenciones` + **falta** filtros y paginación (API-02) |
-| R3 | **Detalle de intervención** (la pantalla central) | Cabecera: número, máquina, estado, tipo, responsable, si detiene la máquina. Bloques: descripción y trabajo realizado; **tiempos** (espera, bruta, neta, total, inactividad, marca "en curso"); detenciones de la máquina; **historial** (cada cambio con cuándo ocurrió y cuándo se registró). Más adelante: repuestos, costos y documentos. | **Barra de acciones con solo las disponibles:** tomar, asignar o quitar responsable, iniciar, esperar repuestos, reanudar, finalizar, resolver ahora, cancelar, reabrir, registrar detención, editar, eliminar. Cada una abre un diálogo corto con los datos que pide. Ejemplo: finalizar pide trabajo realizado, interna o externa, fecha de fin y si la máquina volvió a funcionar. | `GET /intervenciones/:id` + las acciones existentes; **falta** API-01 |
+| R3 | **Detalle de intervención** (la pantalla central) | Cabecera: número, máquina, estado, tipo, responsable, si detiene la máquina. Bloques: descripción y trabajo realizado; **repuestos usados y pedidos de repuestos**; **tiempos** (espera, bruta, neta, total, inactividad, marca "en curso"); detenciones de la máquina; **historial** (cada cambio con cuándo ocurrió y cuándo se registró). Más adelante: costos y documentos. | **Barra de acciones con solo las disponibles:** tomar, asignar o quitar responsable, iniciar, esperar repuestos, reanudar, finalizar, resolver ahora, cancelar, reabrir, registrar detención, editar, eliminar. Cada una abre un diálogo corto con los datos que pide. Ejemplo: finalizar pide trabajo realizado, interna o externa, fecha de fin y si la máquina volvió a funcionar. | `GET /intervenciones/:id` + las acciones existentes; **falta** API-01 |
 | R4 | Máquinas | Lista con estado (color), sector e intervenciones abiertas. Filtros por sector y estado. | Abrir; nueva máquina (si tiene `MAQUINAS_GESTIONAR`) | `GET /maquinas` + **falta** la cantidad de abiertas (API-06) |
 | R5 | Detalle de máquina | Datos; estado actual y desde cuándo; detenciones abiertas; inactividad de los últimos 30 días, con selector de fechas; historial de intervenciones de esa máquina. | Reportar falla en esta máquina; confirmar recuperación (volver a operativa); fuera de servicio y vuelta; editar o desactivar (si tiene permiso) | `GET /maquinas/:id`, `/detenciones-abiertas`, `/inactividad`, `/confirmar-recuperacion`, `/estado`; **falta** filtrar intervenciones por máquina (API-02) |
+| R6 | Repuestos | Pestañas: Repuestos · Pedidos · Proveedores. Filtros por texto, estado de stock, proveedor e inactivos/cerrados. | Alta y edición de repuestos y proveedores, recibir y cancelar pedidos | `GET /repuestos`, `GET /pedidos-repuesto`, `GET /proveedores` |
+| R7 | Detalle de repuesto | Encabezado con código, nombre, estado y stock actual grande. Tarjeta de datos. Pestañas: Movimientos, Usos, Costos. | Ingreso, egreso, ajuste, editar, desactivar y reactivar | `GET /repuestos/:id`, `/movimientos`, `/usos`, `/costos` |
 
 ### 4.3 Administrador — computadora
 
@@ -86,7 +88,7 @@ El alta, edición y baja de máquinas se hace desde R4 y R5, con los botones que
 
 | ID | Pantalla | Qué muestra | Acciones | API |
 | :-: | :--- | :--- | :--- | :--- |
-| D1 | Reportes | Pestañas: Indicadores · Inactividad · Tiempos. Filtros: período (relativo o personalizado con rango de fechas), planta y sector. Botón Descargar CSV en cada pestaña. **Indicadores:** 6 tarjetas de indicadores clave (disponibilidad, fallas, MTTR, MTBF, respuesta promedio, preventivas finalizadas). **Inactividad por máquina:** ranking con barras de progreso correctivo/preventivo y switch de máquinas sin detenciones. **Tiempos:** tabla agrupada por ejecución, tipo o sector. | Cambiar período, filtros, agrupación y descargar CSV | `GET /reportes/indicadores`, `GET /reportes/inactividad`, `GET /reportes/tiempos` |
+| D1 | Reportes | Pestañas: Indicadores · Inactividad · Tiempos · Repuestos. Filtros: período (relativo o personalizado con rango de fechas), planta y sector. Botón Descargar CSV en cada pestaña. **Indicadores:** 6 tarjetas de indicadores clave. **Inactividad por máquina:** ranking con barras de progreso correctivo/preventivo y switch de máquinas sin detenciones. **Tiempos:** tabla agrupada por ejecución, tipo o sector. **Repuestos:** tarjetas de métricas, tabla de más usados y tabla por máquina. | Cambiar período, filtros, agrupación y descargar CSV | `GET /reportes/indicadores`, `GET /reportes/inactividad`, `GET /reportes/tiempos`, `GET /reportes/repuestos` |
 
 Además ven R1, R2, R3, R4 y R5 en modo consulta, según sus permisos.
 
@@ -100,6 +102,7 @@ Además ven R1, R2, R3, R4 y R5 en modo consulta, según sus permisos.
 | Reportar falla | `INTERVENCIONES_CREAR` | O2 |
 | Intervenciones | `INTERVENCIONES_VER` | R2 (el operario ve solo las suyas) |
 | Máquinas | siempre | R4 |
+| Repuestos | `REPUESTOS_GESTIONAR` | R6 |
 | Reportes | `REPORTES_CONSULTAR` | D1 |
 | Usuarios | `USUARIOS_GESTIONAR` | A1 |
 | Sectores y catálogos | `MAQUINAS_GESTIONAR` | A3 |

@@ -10,6 +10,7 @@ import {
   aCsv,
   nombreArchivoReporte,
   filaTiempos,
+  filasReporteRepuestos,
   FILTROS_REPORTES_POR_DEFECTO,
   FiltrosReportes,
 } from './reportes';
@@ -64,6 +65,15 @@ describe('FE-41: leerFiltrosReportes y escribirFiltrosReportes', () => {
     const params = escribirFiltrosReportes(completos);
     const leidos = leerFiltrosReportes(params);
     assert.deepEqual(leidos, completos);
+  });
+
+  it('vista=repuestos es válida y se conserva', () => {
+    const p = new URLSearchParams('vista=repuestos');
+    const f = leerFiltrosReportes(p);
+    assert.equal(f.vista, 'repuestos');
+
+    const params = escribirFiltrosReportes(f);
+    assert.equal(params.get('vista'), 'repuestos');
   });
 });
 
@@ -276,4 +286,90 @@ describe('FE-45: barrasInactividad', () => {
     ]);
   });
 });
+
+describe('FE-53: filasReporteRepuestos', () => {
+  it('con costos incluye columna Importe y formatea repuesto código · nombre', () => {
+    const respuestaApi = {
+      desde: '2026-10-01T00:00:00.000Z',
+      hasta: '2026-10-31T23:59:59.999Z',
+      ve_costos: true,
+      consumos: 5,
+      intervenciones: 3,
+      importe_total: 1250,
+      por_repuesto: [
+        {
+          repuesto: { id: 1, codigo: 'ROD-6204', nombre: 'Rodamiento 6204', unidad: 'unidad' },
+          cantidad: 4,
+          consumos: 3,
+          intervenciones: 2,
+          importe: 1000,
+        },
+      ],
+      por_maquina: [],
+    };
+
+    const res = filasReporteRepuestos(respuestaApi);
+    assert.deepEqual(res.columnas, [
+      'Repuesto',
+      'Cantidad',
+      'Unidad',
+      'Consumos',
+      'Intervenciones',
+      'Importe',
+    ]);
+    assert.equal(res.filas.length, 1);
+    assert.deepEqual(res.filas[0], ['ROD-6204 · Rodamiento 6204', 4, 'unidad', 3, 2, 1000]);
+  });
+
+  it('sin costos no incluye columna Importe', () => {
+    const respuestaApiSinCostos = {
+      desde: '2026-10-01T00:00:00.000Z',
+      hasta: '2026-10-31T23:59:59.999Z',
+      ve_costos: false,
+      consumos: 2,
+      intervenciones: 1,
+      importe_total: null,
+      por_repuesto: [
+        {
+          repuesto: { id: 2, codigo: 'COR-01', nombre: 'Correa', unidad: 'metro' },
+          cantidad: 1.5,
+          consumos: 1,
+          intervenciones: 1,
+          importe: null,
+        },
+      ],
+      por_maquina: [],
+    };
+
+    const res = filasReporteRepuestos(respuestaApiSinCostos);
+    assert.deepEqual(res.columnas, [
+      'Repuesto',
+      'Cantidad',
+      'Unidad',
+      'Consumos',
+      'Intervenciones',
+    ]);
+    assert.equal(res.filas.length, 1);
+    assert.deepEqual(res.filas[0], ['COR-01 · Correa', 1.5, 'metro', 1, 1]);
+  });
+
+  it('sin código sale solo el nombre del repuesto', () => {
+    const respuestaApiSinCodigo = {
+      ve_costos: true,
+      por_repuesto: [
+        {
+          repuesto: { id: 3, codigo: null, nombre: 'Grasa lubricante', unidad: 'kg' },
+          cantidad: 2,
+          consumos: 1,
+          intervenciones: 1,
+          importe: 250,
+        },
+      ],
+    };
+
+    const res = filasReporteRepuestos(respuestaApiSinCodigo);
+    assert.equal(res.filas[0][0], 'Grasa lubricante');
+  });
+});
+
 

@@ -279,6 +279,13 @@ export function eventosHistorial(detalle: {
           const val = a.valor_anterior === 'EXTERNA' ? 'Servicio externo' : 'Personal propio';
           detalleTexto = 'Antes: ' + val;
         }
+      } else if (a.tipo_evento === 'CORRECCION_COSTO') {
+        if (a.campo_modificado === 'repuestos') {
+          titulo = 'Corrección de repuestos';
+          const v = a.valor_nuevo || '';
+          const sep = v.endsWith('.') ? ' ' : '. ';
+          detalleTexto = a.motivo ? (v ? `${v}${sep}Motivo: ${a.motivo}` : `Motivo: ${a.motivo}`) : (v || null);
+        }
       }
 
       if (titulo) {

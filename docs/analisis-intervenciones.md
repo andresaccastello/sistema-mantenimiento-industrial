@@ -769,7 +769,7 @@ Las decisiones `[APROBADO]` (sección 0.3 y las marcadas en el texto) están cer
 | D-17 | **Perfiles de I+D y Dirección**. | Definir perfiles y necesidades | **Aprobada:** se crean los perfiles `I_D` y `DIRECCION` con permisos por defecto modificables (D-40). Los perfiles existentes se mantienen. El formulario del operario sigue creando solo `CORRECTIVO`. |
 | D-18 | **`codigo` de máquina**: la tesis lo incluye en la clase `Maquina`; la tabla no lo tiene. | Agregarlo (módulo de máquinas) / no | Resolver en el módulo de máquinas. |Agregalo
 | D-19 | **Autorización de compra de repuestos** (hoy la da Dirección/I+D): ¿se modela? | A) no, queda en la observación de `EN_ESPERA_REPUESTOS` · B) paso de aprobación | **A** en la primera versión. |
-| D-20 | **Stock al cancelar, reabrir o corregir** una intervención con repuestos. | Definir en la etapa de repuestos | Diferir. |
+| D-20 | **Stock al cancelar, reabrir o corregir** una intervención con repuestos. | Definir en la etapa de repuestos | Resuelta por D-018. |
 | D-21 | **Actualización de la tesis**: corregir los puntos de 0.4 (necesidad unificada, estados fijos, login, infraestructura, interno/externo, transiciones). | Aprobar la lista | Aprobar. |
 | D-22 | **Pruebas**: todas las migraciones se prueban solo en rama temporal de Neon. | Aprobar | **Aprobar**. |
 | D-23 | **Quién puede iniciar una intervención asignada a otro usuario**. | Solo el responsable asignado o un usuario con `INTERVENCIONES_ASIGNAR`. La misma regla aplica a pasar a espera de repuestos y a reanudar. | **Aprobada**. |

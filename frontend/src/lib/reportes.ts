@@ -1,7 +1,7 @@
 import { parsearId } from './formato';
 
 export type PeriodoOpcion = '7d' | '30d' | '90d' | 'mes' | 'mes-anterior' | 'personalizado';
-export type VistaReporte = 'indicadores' | 'inactividad' | 'tiempos';
+export type VistaReporte = 'indicadores' | 'inactividad' | 'tiempos' | 'repuestos';
 export type AgrupacionTiempos = 'ejecucion' | 'tipo' | 'sector';
 
 export interface FiltrosReportes {
@@ -25,7 +25,7 @@ export const FILTROS_REPORTES_POR_DEFECTO: FiltrosReportes = {
 };
 
 const PERIODOS_VALIDOS: Set<string> = new Set(['7d', '30d', '90d', 'mes', 'mes-anterior', 'personalizado']);
-const VISTAS_VALIDAS: Set<string> = new Set(['indicadores', 'inactividad', 'tiempos']);
+const VISTAS_VALIDAS: Set<string> = new Set(['indicadores', 'inactividad', 'tiempos', 'repuestos']);
 const AGRUPACIONES_VALIDAS: Set<string> = new Set(['ejecucion', 'tipo', 'sector']);
 
 const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -426,4 +426,43 @@ export function formatFechaCorta(fecha?: string | Date | null): string {
   const year = d.getFullYear();
   return `${day}/${month}/${year}`;
 }
+
+export interface DatosReporteRepuestos {
+  ve_costos?: boolean;
+  por_repuesto?: Array<{
+    repuesto: { id?: number; codigo?: string | null; nombre: string; unidad: string };
+    cantidad: number;
+    consumos: number;
+    intervenciones: number;
+    importe?: number | null;
+  }>;
+}
+
+/**
+ * Devuelve { columnas, filas } para la tabla y el CSV de repuestos más usados.
+ * Si ve_costos es false, la columna Importe no se incluye.
+ */
+export function filasReporteRepuestos(datos?: DatosReporteRepuestos | null): {
+  columnas: string[];
+  filas: any[][];
+} {
+  const veCostos = Boolean(datos?.ve_costos);
+  const columnas = veCostos
+    ? ['Repuesto', 'Cantidad', 'Unidad', 'Consumos', 'Intervenciones', 'Importe']
+    : ['Repuesto', 'Cantidad', 'Unidad', 'Consumos', 'Intervenciones'];
+
+  const items = datos?.por_repuesto || [];
+  const filas = items.map((item) => {
+    const r = item.repuesto;
+    const nombre = r.codigo ? `${r.codigo} · ${r.nombre}` : r.nombre;
+    const base: any[] = [nombre, item.cantidad, r.unidad, item.consumos, item.intervenciones];
+    if (veCostos) {
+      base.push(item.importe ?? null);
+    }
+    return base;
+  });
+
+  return { columnas, filas };
+}
+
 

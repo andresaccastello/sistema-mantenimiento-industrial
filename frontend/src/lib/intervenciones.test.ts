@@ -345,4 +345,39 @@ describe('FE-25: eventosHistorial', () => {
     assert.equal(eventos[0].mostrarRegistrado, false);
     assert.equal(eventos[2].mostrarRegistrado, true);
   });
+
+  it('FE-54: eventosHistorial con auditoría CORRECCION_COSTO de repuestos', () => {
+    const persona = { id: 1, nombre: 'Admin', apellido: 'Sistema', legajo: 'ADM' };
+    const detalle = {
+      id: 99,
+      descripcion: 'Falla test',
+      estado: 'FINALIZADA',
+      fecha_creacion: '2026-11-06T10:00:00Z',
+      creado_por: persona,
+      responsable: persona,
+      historial_estados: [],
+      auditoria: [
+        {
+          id: 50,
+          tipo_evento: 'CORRECCION_COSTO',
+          campo_modificado: 'repuestos',
+          valor_anterior: null,
+          valor_nuevo: 'Se agregó: Rodamiento 6204 × 2 unidad',
+          motivo: 'Ajuste de pañol',
+          creado_en: '2026-11-06T15:00:00Z',
+          realizado_por: persona,
+          responsable_anterior: null,
+          responsable_nuevo: null,
+        },
+      ],
+    };
+
+    const eventos = eventosHistorial(detalle);
+    assert.equal(eventos.length, 1);
+    assert.equal(eventos[0].titulo, 'Corrección de repuestos');
+    assert.equal(
+      eventos[0].detalle,
+      'Se agregó: Rodamiento 6204 × 2 unidad. Motivo: Ajuste de pañol'
+    );
+  });
 });
