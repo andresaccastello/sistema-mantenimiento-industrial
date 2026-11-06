@@ -15,6 +15,7 @@ import {
   aCsv,
   descargarCsv,
   nombreArchivoReporte,
+  filaTiempos,
 } from '../../lib/reportes';
 
 interface Props {
@@ -24,16 +25,9 @@ interface Props {
   rango: { desde: string; hasta: string };
 }
 
-function formatoGrupo(grupo: string | null | undefined, agrupar: AgrupacionTiempos): string {
-  if (agrupar === 'ejecucion') {
-    if (grupo === 'INTERNA') return 'Interna';
-    if (grupo === 'EXTERNA') return 'Externa';
-    return 'Sin definir';
-  }
-  return grupo || 'Sin definir';
-}
-
 export function TabTiempos({ data, agrupar, onAgruparChange, rango }: Props) {
+  const filasVisuales = data.map((t) => filaTiempos(t, agrupar));
+
   const handleDescargarCsv = () => {
     const columnas = [
       'Grupo',
@@ -43,13 +37,13 @@ export function TabTiempos({ data, agrupar, onAgruparChange, rango }: Props) {
       'Duración bruta promedio (minutos)',
       'Duración neta total (minutos)',
     ];
-    const filas = data.map((t) => [
-      formatoGrupo(t.grupo, agrupar),
-      t.cantidad,
-      t.respuesta_promedio_minutos ?? '',
-      t.duracion_neta_promedio_minutos ?? '',
-      t.duracion_bruta_promedio_minutos ?? '',
-      t.duracion_neta_total_minutos ?? '',
+    const filas = filasVisuales.map((ft) => [
+      ft.grupo,
+      ft.cantidad,
+      ft.espera_promedio_minutos ?? '',
+      ft.duracion_neta_promedio_minutos ?? '',
+      ft.duracion_bruta_promedio_minutos ?? '',
+      ft.duracion_neta_total_minutos ?? '',
     ]);
     const csv = aCsv(columnas, filas);
     descargarCsv(nombreArchivoReporte('tiempos', rango.desde, rango.hasta), csv);
@@ -77,7 +71,7 @@ export function TabTiempos({ data, agrupar, onAgruparChange, rango }: Props) {
         </Button>
       </Group>
 
-      {data.length === 0 ? (
+      {filasVisuales.length === 0 ? (
         <Text c="dimmed" my="md">
           No hay datos para este período y estos filtros.
         </Text>
@@ -95,21 +89,21 @@ export function TabTiempos({ data, agrupar, onAgruparChange, rango }: Props) {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {data.map((t, idx) => (
-                <Table.Tr key={`${t.grupo}-${idx}`}>
-                  <Table.Td fw={500}>{formatoGrupo(t.grupo, agrupar)}</Table.Td>
-                  <Table.Td style={{ textAlign: 'right' }}>{t.cantidad}</Table.Td>
+              {filasVisuales.map((ft, idx) => (
+                <Table.Tr key={`${ft.grupo}-${idx}`}>
+                  <Table.Td fw={500}>{ft.grupo}</Table.Td>
+                  <Table.Td style={{ textAlign: 'right' }}>{ft.cantidad}</Table.Td>
                   <Table.Td style={{ textAlign: 'right' }}>
-                    {formatDuracion(t.respuesta_promedio_minutos)}
+                    {formatDuracion(ft.espera_promedio_minutos)}
                   </Table.Td>
                   <Table.Td style={{ textAlign: 'right' }}>
-                    {formatDuracion(t.duracion_neta_promedio_minutos)}
+                    {formatDuracion(ft.duracion_neta_promedio_minutos)}
                   </Table.Td>
                   <Table.Td style={{ textAlign: 'right' }}>
-                    {formatDuracion(t.duracion_bruta_promedio_minutos)}
+                    {formatDuracion(ft.duracion_bruta_promedio_minutos)}
                   </Table.Td>
                   <Table.Td style={{ textAlign: 'right' }}>
-                    {formatDuracion(t.duracion_neta_total_minutos)}
+                    {formatDuracion(ft.duracion_neta_total_minutos)}
                   </Table.Td>
                 </Table.Tr>
               ))}
@@ -125,3 +119,4 @@ export function TabTiempos({ data, agrupar, onAgruparChange, rango }: Props) {
     </Stack>
   );
 }
+

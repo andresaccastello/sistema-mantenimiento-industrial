@@ -324,14 +324,79 @@ export function aCsv(columnas: string[], filas: any[][]): string {
   return '\uFEFF' + cuerpo;
 }
 
+function fechaLocalYMD(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 /**
  * Genera el nombre del archivo de descarga:
  * Ejemplo: reporte-inactividad-2026-10-06-a-2026-11-05.csv
+ * Usa fechas locales con el último día incluido (restando 1 segundo si cae a medianoche).
  */
 export function nombreArchivoReporte(vista: string, desde: string, hasta: string): string {
-  const d = desde.slice(0, 10);
-  const h = hasta.slice(0, 10);
+  const dDate = new Date(desde);
+  const hDate = new Date(hasta);
+  const hDateInclusive = (() => {
+    if (hDate.getHours() === 0 && hDate.getMinutes() === 0 && hDate.getSeconds() === 0) {
+      return new Date(hDate.getTime() - 1000);
+    }
+    return hDate;
+  })();
+  const d = fechaLocalYMD(dDate);
+  const h = fechaLocalYMD(hDateInclusive);
   return `reporte-${vista}-${d}-a-${h}.csv`;
+}
+
+export interface FilaTiemposVisual {
+  grupo: string;
+  cantidad: number;
+  espera_promedio_minutos: number | null;
+  duracion_neta_promedio_minutos: number | null;
+  duracion_bruta_promedio_minutos: number | null;
+  duracion_neta_total_minutos: number | null;
+}
+
+/**
+ * Transforma una fila de tiempos de la API a su representación visual/CSV.
+ */
+export function filaTiempos(fila: any, agrupar: AgrupacionTiempos): FilaTiemposVisual {
+  let grupo = 'Sin definir';
+  if (agrupar === 'ejecucion') {
+    const val = fila.ejecucion ?? fila.grupo;
+    if (val === 'INTERNA') grupo = 'Interna';
+    else if (val === 'EXTERNA') grupo = 'Externa';
+    else grupo = 'Sin definir';
+  } else if (agrupar === 'tipo') {
+    grupo = fila.tipo?.nombre ?? fila.grupo ?? 'Sin definir';
+  } else if (agrupar === 'sector') {
+    grupo = fila.sector?.nombre ?? fila.grupo ?? 'Sin definir';
+  }
+
+  return {
+    grupo,
+    cantidad: Number(fila.cantidad ?? 0),
+    espera_promedio_minutos:
+      fila.espera_promedio_minutos !== undefined && fila.espera_promedio_minutos !== null
+        ? Number(fila.espera_promedio_minutos)
+        : fila.respuesta_promedio_minutos !== undefined && fila.respuesta_promedio_minutos !== null
+          ? Number(fila.respuesta_promedio_minutos)
+          : null,
+    duracion_neta_promedio_minutos:
+      fila.duracion_neta_promedio_minutos !== undefined && fila.duracion_neta_promedio_minutos !== null
+        ? Number(fila.duracion_neta_promedio_minutos)
+        : null,
+    duracion_bruta_promedio_minutos:
+      fila.duracion_bruta_promedio_minutos !== undefined && fila.duracion_bruta_promedio_minutos !== null
+        ? Number(fila.duracion_bruta_promedio_minutos)
+        : null,
+    duracion_neta_total_minutos:
+      fila.duracion_neta_total_minutos !== undefined && fila.duracion_neta_total_minutos !== null
+        ? Number(fila.duracion_neta_total_minutos)
+        : null,
+  };
 }
 
 /**

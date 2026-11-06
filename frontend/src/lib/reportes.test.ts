@@ -9,6 +9,7 @@ import {
   barrasInactividad,
   aCsv,
   nombreArchivoReporte,
+  filaTiempos,
   FILTROS_REPORTES_POR_DEFECTO,
   FiltrosReportes,
 } from './reportes';
@@ -161,8 +162,87 @@ describe('FE-44: aCsv y nombreArchivoReporte', () => {
   });
 
   it('nombreArchivoReporte incluye la vista y el rango de fechas', () => {
-    const nombre = nombreArchivoReporte('inactividad', '2026-10-06T00:00:00.000Z', '2026-11-05T23:59:59.000Z');
+    const rango = rangoDePeriodo({
+      ...FILTROS_REPORTES_POR_DEFECTO,
+      periodo: 'personalizado',
+      desde: '2026-10-06',
+      hasta: '2026-11-05',
+    });
+    const nombre = nombreArchivoReporte('inactividad', rango.desde, rango.hasta);
     assert.equal(nombre, 'reporte-inactividad-2026-10-06-a-2026-11-05.csv');
+  });
+
+  it('nombreArchivoReporte con Mes anterior descuenta el fin de período y usa fecha local a la noche', () => {
+    const ahora = new Date(2026, 10, 5, 22, 30, 0); // 5 de noviembre a las 22:30 (noche)
+    const rangoMesAnt = rangoDePeriodo({ ...FILTROS_REPORTES_POR_DEFECTO, periodo: 'mes-anterior' }, ahora);
+    const nombre = nombreArchivoReporte('tiempos', rangoMesAnt.desde, rangoMesAnt.hasta);
+    assert.equal(nombre, 'reporte-tiempos-2026-10-01-a-2026-10-31.csv');
+
+    // A una hora de la noche (22:30), no se corre de día
+    const rango30d = rangoDePeriodo({ ...FILTROS_REPORTES_POR_DEFECTO, periodo: '30d' }, ahora);
+    const nombre30d = nombreArchivoReporte('tiempos', rango30d.desde, rango30d.hasta);
+    assert.equal(nombre30d, 'reporte-tiempos-2026-10-06-a-2026-11-05.csv');
+  });
+});
+
+describe('FE-46: filaTiempos', () => {
+  it('transforma filas de la API correctamente para cada agrupación', () => {
+    // Ejecución interna
+    const filaEjecucion = {
+      ejecucion: 'INTERNA',
+      cantidad: 5,
+      espera_promedio_minutos: 15.5,
+      duracion_neta_promedio_minutos: 45,
+      duracion_bruta_promedio_minutos: 60,
+      duracion_neta_total_minutos: 225,
+    };
+    const resEjec = filaTiempos(filaEjecucion, 'ejecucion');
+    assert.equal(resEjec.grupo, 'Interna');
+    assert.equal(resEjec.cantidad, 5);
+    assert.equal(resEjec.espera_promedio_minutos, 15.5);
+    assert.equal(resEjec.duracion_neta_promedio_minutos, 45);
+
+    // Tipo
+    const filaTipo = {
+      tipo: { id: 1, codigo: 'CORRECTIVO', nombre: 'Mantenimiento correctivo' },
+      cantidad: 3,
+      espera_promedio_minutos: 20,
+      duracion_neta_promedio_minutos: 30,
+      duracion_bruta_promedio_minutos: 40,
+      duracion_neta_total_minutos: 90,
+    };
+    const resTipo = filaTiempos(filaTipo, 'tipo');
+    assert.equal(resTipo.grupo, 'Mantenimiento correctivo');
+    assert.equal(resTipo.cantidad, 3);
+    assert.equal(resTipo.espera_promedio_minutos, 20);
+
+    // Sector
+    const filaSector = {
+      sector: { id: 2, nombre: 'Mecanizado' },
+      cantidad: 8,
+      espera_promedio_minutos: 10,
+      duracion_neta_promedio_minutos: 50,
+      duracion_bruta_promedio_minutos: 70,
+      duracion_neta_total_minutos: 400,
+    };
+    const resSector = filaTiempos(filaSector, 'sector');
+    assert.equal(resSector.grupo, 'Mecanizado');
+    assert.equal(resSector.cantidad, 8);
+    assert.equal(resSector.espera_promedio_minutos, 10);
+
+    // ejecucion: null da "Sin definir"
+    const filaNula = {
+      ejecucion: null,
+      cantidad: 1,
+      espera_promedio_minutos: null,
+      duracion_neta_promedio_minutos: null,
+      duracion_bruta_promedio_minutos: null,
+      duracion_neta_total_minutos: null,
+    };
+    const resNula = filaTiempos(filaNula, 'ejecucion');
+    assert.equal(resNula.grupo, 'Sin definir');
+    assert.equal(resNula.cantidad, 1);
+    assert.equal(resNula.espera_promedio_minutos, null);
   });
 });
 
@@ -196,3 +276,4 @@ describe('FE-45: barrasInactividad', () => {
     ]);
   });
 });
+

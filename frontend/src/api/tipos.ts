@@ -569,9 +569,13 @@ export interface InactividadMaquinaFila {
 export interface TiemposAgrupadosFila {
   grupo: string;
   cantidad: number;
-  respuesta_promedio_minutos: number | null;
+  espera_promedio_minutos: number | null;
   duracion_neta_promedio_minutos: number | null;
   duracion_bruta_promedio_minutos: number | null;
   duracion_neta_total_minutos: number | null;
+  duracion_bruta_total_minutos?: number | null;
+  ejecucion?: string | null;
+  tipo?: { id: number; codigo: string; nombre: string } | null;
+  sector?: { id: number; nombre: string } | null;
 }
 
