@@ -103,6 +103,23 @@ export const requirePermission = (
   });
 };
 
+export const requireAlgunPermiso = (permisos: string[]) => {
+  return createMiddleware(async (c, next) => {
+    const permissionsMap = (c.get as any)('userPermissionsMap') as Record<string, AlcancePermiso> | undefined;
+
+    if (!permissionsMap) {
+      return c.json({ error: 'Permisos insuficientes o revocados', codigo: 'PERMISO_INSUFICIENTE' }, 403);
+    }
+
+    const tieneAlguno = permisos.some((p) => p in permissionsMap);
+    if (!tieneAlguno) {
+      return c.json({ error: 'Permisos insuficientes o revocados', codigo: 'PERMISO_INSUFICIENTE' }, 403);
+    }
+
+    await next();
+  });
+};
+
 export const getUserScope = (c: any, permissionCode: string): AlcancePermiso | null => {
   const permissionsMap = (c.get as any)('userPermissionsMap') as Record<string, AlcancePermiso> | undefined;
   return permissionsMap ? permissionsMap[permissionCode] || null : null;

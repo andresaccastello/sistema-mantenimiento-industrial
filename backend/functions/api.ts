@@ -13,6 +13,8 @@ import tableroApp from './tablero.ts';
 import tiposIntervencionApp from './tipos_intervencion.ts';
 import { criticidadesApp, tiposEquipoApp, plantasApp } from './catalogos.ts';
 import { avisosTriggerApp, configuracionAvisosApp } from './avisos/api.ts';
+import proveedoresApp from './proveedores.ts';
+import repuestosApp from './repuestos.ts';
 
 import { JWT_SECRET } from './config.ts';
 
@@ -43,6 +45,8 @@ app.route('/api/tipos-intervencion', tiposIntervencionApp);
 app.route('/api/criticidades', criticidadesApp);
 app.route('/api/tipos-equipo', tiposEquipoApp);
 app.route('/api/plantas', plantasApp);
+app.route('/api/proveedores', proveedoresApp);
+app.route('/api/repuestos', repuestosApp);
 
 app.get('/health', (c) => {
   return c.json({
