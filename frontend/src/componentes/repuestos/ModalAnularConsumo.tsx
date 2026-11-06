@@ -9,11 +9,12 @@ import {
   Group,
   Button,
 } from '@mantine/core';
-import { IconInfoCircle } from '@tabler/icons-react';
+import { IconInfoCircle, IconAlertCircle } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { clienteApi } from '../../api/cliente';
 import { ApiError, mensajeError } from '../../lib/errores';
 import { formatCantidad } from '../../lib/formato';
+import { textoTotalNegativo } from '../../lib/costos';
 
 export interface ConsumoParaAnular {
   id: number;
@@ -40,12 +41,14 @@ export function ModalAnularConsumo({
   const queryClient = useQueryClient();
   const [motivo, setMotivo] = useState('');
   const [errorMotivo, setErrorMotivo] = useState<string | null>(null);
+  const [errorTotal, setErrorTotal] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
     if (abierto) {
       setMotivo('');
       setErrorMotivo(null);
+      setErrorTotal(null);
     }
   }, [abierto]);
 
@@ -54,6 +57,7 @@ export function ModalAnularConsumo({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMotivo(null);
+    setErrorTotal(null);
 
     const m = motivo.trim();
     if (!m || m.length < 5) {
@@ -77,6 +81,10 @@ export function ModalAnularConsumo({
       onCerrar();
       if (onExito) onExito();
     } catch (err: unknown) {
+      if (err instanceof ApiError && err.codigo === 'TOTAL_NEGATIVO') {
+        setErrorTotal(textoTotalNegativo(err.datos?.total_resultante));
+        return;
+      }
       notifications.show({ message: mensajeError(err), color: 'red' });
     } finally {
       setGuardando(false);
@@ -98,6 +106,12 @@ export function ModalAnularConsumo({
           {consumo.movio_stock && (
             <Alert color="blue" icon={<IconInfoCircle size={16} />}>
               Vuelven {formatCantidad(consumo.cantidad)} al stock.
+            </Alert>
+          )}
+
+          {errorTotal && (
+            <Alert color="red" icon={<IconAlertCircle size={16} />}>
+              {errorTotal} No se anuló el consumo.
             </Alert>
           )}
 

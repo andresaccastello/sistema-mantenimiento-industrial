@@ -1,7 +1,7 @@
 import { parsearId } from './formato';
 
 export type PeriodoOpcion = '7d' | '30d' | '90d' | 'mes' | 'mes-anterior' | 'personalizado';
-export type VistaReporte = 'indicadores' | 'inactividad' | 'tiempos' | 'repuestos';
+export type VistaReporte = 'indicadores' | 'inactividad' | 'tiempos' | 'repuestos' | 'costos';
 export type AgrupacionTiempos = 'ejecucion' | 'tipo' | 'sector';
 
 export interface FiltrosReportes {
@@ -25,7 +25,7 @@ export const FILTROS_REPORTES_POR_DEFECTO: FiltrosReportes = {
 };
 
 const PERIODOS_VALIDOS: Set<string> = new Set(['7d', '30d', '90d', 'mes', 'mes-anterior', 'personalizado']);
-const VISTAS_VALIDAS: Set<string> = new Set(['indicadores', 'inactividad', 'tiempos', 'repuestos']);
+const VISTAS_VALIDAS: Set<string> = new Set(['indicadores', 'inactividad', 'tiempos', 'repuestos', 'costos']);
 const AGRUPACIONES_VALIDAS: Set<string> = new Set(['ejecucion', 'tipo', 'sector']);
 
 const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -466,3 +466,37 @@ export function filasReporteRepuestos(datos?: DatosReporteRepuestos | null): {
 }
 
 
+
+/**
+ * La pestaña Costos solo se muestra con COSTOS_VER. Sin ese permiso,
+ * vista=costos vuelve a Indicadores.
+ */
+export function vistaReporteVisible(vista: VistaReporte, veCostos: boolean): VistaReporte {
+  return vista === 'costos' && !veCostos ? 'indicadores' : vista;
+}
+
+export interface DatosReporteCostos {
+  por_maquina?: Array<{
+    maquina: { id?: number; codigo?: string | null; nombre: string };
+    sector?: { id?: number; nombre: string } | null;
+    repuestos: number;
+    mano_obra: number;
+    otros: number;
+    total: number;
+  }>;
+}
+
+/**
+ * Devuelve { columnas, filas } para la tabla y el CSV de costos por máquina.
+ */
+export function filasReporteCostos(datos?: DatosReporteCostos | null): {
+  columnas: string[];
+  filas: Array<Array<string | number>>;
+} {
+  const columnas = ['Máquina', 'Sector', 'Repuestos', 'Mano de obra', 'Otros', 'Total'];
+  const filas = (datos?.por_maquina || []).map((m) => {
+    const nombre = m.maquina.codigo ? `${m.maquina.codigo} · ${m.maquina.nombre}` : m.maquina.nombre;
+    return [nombre, m.sector?.nombre || '—', m.repuestos, m.mano_obra, m.otros, m.total];
+  });
+  return { columnas, filas };
+}

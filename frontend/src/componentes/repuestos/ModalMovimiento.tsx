@@ -22,7 +22,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { ApiError, mensajeError } from '../../lib/errores';
 import { formatCantidad, formatMoneda } from '../../lib/formato';
 import { validarCantidad, validarCosto, cuerpoMovimiento } from '../../lib/repuestos';
-import { CampoNumero } from './CampoNumero';
+import { CampoNumero } from '../CampoNumero';
 
 export type TipoMovimientoModal = 'ingreso' | 'egreso' | 'ajuste';
 

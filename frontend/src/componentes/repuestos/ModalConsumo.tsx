@@ -16,7 +16,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { ApiError, mensajeError } from '../../lib/errores';
 import { formatCantidad } from '../../lib/formato';
 import { validarCantidad, validarCosto } from '../../lib/repuestos';
-import { CampoNumero } from './CampoNumero';
+import { CampoNumero } from '../CampoNumero';
 
 export interface ModalConsumoProps {
   abierto: boolean;

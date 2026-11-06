@@ -1,7 +1,7 @@
 import { NumberInput, NumberInputProps } from '@mantine/core';
 
 /**
- * Campo numérico de los diálogos de repuestos.
+ * Campo numérico de los diálogos (repuestos y costos).
  *
  * Nunca cambia lo que escribe el usuario: sin `min` ni `max`, y con
  * `clampBehavior="none"`, el valor no se lleva a ningún límite al salir del

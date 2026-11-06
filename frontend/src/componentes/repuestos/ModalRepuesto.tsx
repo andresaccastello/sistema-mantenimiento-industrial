@@ -21,7 +21,7 @@ import {
 } from '../../api/tipos';
 import { ApiError, mensajeError } from '../../lib/errores';
 import { validarCosto } from '../../lib/repuestos';
-import { CampoNumero } from './CampoNumero';
+import { CampoNumero } from '../CampoNumero';
 
 /** Stock inicial y mínimo: vacíos o desde 0. */
 function errorDesdeCero(valor: number | string): string | null {

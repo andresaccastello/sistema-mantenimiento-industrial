@@ -35,6 +35,7 @@ import { eventosHistorial } from '../lib/intervenciones';
 import { ordenarAcciones, etiquetaAccion, CodigoAccion } from '../lib/acciones';
 import { BloqueRepuestosIntervencion } from '../componentes/repuestos/BloqueRepuestosIntervencion';
 import { BloquePedidosIntervencion } from '../componentes/repuestos/BloquePedidosIntervencion';
+import { BloqueCostosIntervencion } from '../componentes/costos/BloqueCostosIntervencion';
 import { minutosEntre } from '../lib/fechas';
 import { obtenerInfoEstado } from '../lib/estados';
 import { mensajeError, requiereRecargar, ApiError } from '../lib/errores';
@@ -274,6 +275,7 @@ export function DetalleIntervencion() {
               intervencionId={reporte.id}
               estadoIntervencion={reporte.estado}
             />
+            <BloqueCostosIntervencion intervencionId={reporte.id} estadoIntervencion={reporte.estado} />
 
             {/* 3. Historial */}
             <Card withBorder radius="md" p="md">

@@ -11,6 +11,7 @@ import {
   nombreArchivoReporte,
   filaTiempos,
   filasReporteRepuestos,
+  vistaReporteVisible,
   FILTROS_REPORTES_POR_DEFECTO,
   FiltrosReportes,
 } from './reportes';
@@ -74,6 +75,19 @@ describe('FE-41: leerFiltrosReportes y escribirFiltrosReportes', () => {
 
     const params = escribirFiltrosReportes(f);
     assert.equal(params.get('vista'), 'repuestos');
+  });
+
+  it('vista=costos es válida y se conserva; sin COSTOS_VER se muestra Indicadores', () => {
+    const p = new URLSearchParams('vista=costos');
+    const f = leerFiltrosReportes(p);
+    assert.equal(f.vista, 'costos');
+
+    const params = escribirFiltrosReportes(f);
+    assert.equal(params.get('vista'), 'costos');
+
+    assert.equal(vistaReporteVisible('costos', true), 'costos');
+    assert.equal(vistaReporteVisible('costos', false), 'indicadores');
+    assert.equal(vistaReporteVisible('repuestos', false), 'repuestos');
   });
 });
 

@@ -9,6 +9,7 @@ import {
   IndicadoresReporte,
   InactividadMaquinaFila,
   TiemposAgrupadosFila,
+  ReporteCostosRespuesta,
 } from '../api/tipos';
 import {
   leerFiltrosReportes,
@@ -17,6 +18,7 @@ import {
   FiltrosReportes,
   VistaReporte,
   AgrupacionTiempos,
+  vistaReporteVisible,
 } from '../lib/reportes';
 import { FiltrosReportesBarra } from '../componentes/reportes/FiltrosReportes';
 import { TabIndicadores } from '../componentes/reportes/TabIndicadores';
@@ -26,12 +28,19 @@ import {
   TabReporteRepuestos,
   ReporteRepuestosData,
 } from '../componentes/reportes/TabReporteRepuestos';
+import { TabReporteCostos } from '../componentes/reportes/TabReporteCostos';
+import { useAuth } from '../auth/AuthContext';
 
 export function Reportes() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // 1. Filtros actuales desde la URL
   const filtros = useMemo(() => leerFiltrosReportes(searchParams), [searchParams]);
+
+  // La pestaña Costos solo se muestra con COSTOS_VER; sin ese permiso, vuelve a Indicadores
+  const { tienePermiso } = useAuth();
+  const veCostos = tienePermiso('COSTOS_VER');
+  const vista = vistaReporteVisible(filtros.vista, veCostos);
 
   // 2. Rango de fechas ISO calculado a partir del período
   const rango = useMemo(() => rangoDePeriodo(filtros), [filtros]);
@@ -64,13 +73,13 @@ export function Reportes() {
   const queryIndicadores = useQuery<IndicadoresReporte>({
     queryKey: ['reportes', 'indicadores', queryParams],
     queryFn: () => clienteApi.get<IndicadoresReporte>('/api/reportes/indicadores', { params: queryParams }),
-    enabled: filtros.vista === 'indicadores',
+    enabled: vista === 'indicadores',
   });
 
   const queryInactividad = useQuery<InactividadMaquinaFila[]>({
     queryKey: ['reportes', 'inactividad', queryParams],
     queryFn: () => clienteApi.get<InactividadMaquinaFila[]>('/api/reportes/inactividad', { params: queryParams }),
-    enabled: filtros.vista === 'inactividad',
+    enabled: vista === 'inactividad',
   });
 
   const queryTiemposParams = useMemo(() => {
@@ -83,13 +92,19 @@ export function Reportes() {
   const queryTiempos = useQuery<TiemposAgrupadosFila[]>({
     queryKey: ['reportes', 'tiempos', queryTiemposParams],
     queryFn: () => clienteApi.get<TiemposAgrupadosFila[]>('/api/reportes/tiempos', { params: queryTiemposParams }),
-    enabled: filtros.vista === 'tiempos',
+    enabled: vista === 'tiempos',
   });
 
   const queryRepuestos = useQuery<ReporteRepuestosData>({
     queryKey: ['reportes', 'repuestos', queryParams],
     queryFn: () => clienteApi.get<ReporteRepuestosData>('/api/reportes/repuestos', { params: queryParams }),
-    enabled: filtros.vista === 'repuestos',
+    enabled: vista === 'repuestos',
+  });
+
+  const queryCostos = useQuery<ReporteCostosRespuesta>({
+    queryKey: ['reportes', 'costos', queryParams],
+    queryFn: () => clienteApi.get<ReporteCostosRespuesta>('/api/reportes/costos', { params: queryParams }),
+    enabled: vista === 'costos',
   });
 
   // 6. Actualización de filtros sincronizada con la URL
@@ -125,13 +140,14 @@ export function Reportes() {
         rango={rango}
       />
 
-      {/* Pestañas: Indicadores · Inactividad · Tiempos · Repuestos */}
-      <Tabs value={filtros.vista} onChange={handleTabChange}>
+      {/* Pestañas: Indicadores · Inactividad · Tiempos · Repuestos · Costos */}
+      <Tabs value={vista} onChange={handleTabChange}>
         <Tabs.List>
           <Tabs.Tab value="indicadores">Indicadores</Tabs.Tab>
           <Tabs.Tab value="inactividad">Inactividad</Tabs.Tab>
           <Tabs.Tab value="tiempos">Tiempos</Tabs.Tab>
           <Tabs.Tab value="repuestos">Repuestos</Tabs.Tab>
+          {veCostos && <Tabs.Tab value="costos">Costos</Tabs.Tab>}
         </Tabs.List>
 
         <Tabs.Panel value="indicadores">
@@ -186,6 +202,18 @@ export function Reportes() {
             <TabReporteRepuestos datos={queryRepuestos.data} />
           )}
         </Tabs.Panel>
+
+        {veCostos && (
+          <Tabs.Panel value="costos">
+            {queryCostos.isLoading && <Skeleton height={260} mt="md" radius="sm" />}
+            {queryCostos.isError && (
+              <Alert color="red" my="md">
+                <Text size="sm">No se pudo cargar el reporte de costos.</Text>
+              </Alert>
+            )}
+            {queryCostos.data && <TabReporteCostos datos={queryCostos.data} />}
+          </Tabs.Panel>
+        )}
       </Tabs>
     </Stack>
   );

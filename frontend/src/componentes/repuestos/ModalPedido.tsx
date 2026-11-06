@@ -20,7 +20,7 @@ import {
 } from '../../api/tipos';
 import { mensajeError } from '../../lib/errores';
 import { hoyLocal, validarCantidad } from '../../lib/repuestos';
-import { CampoNumero } from './CampoNumero';
+import { CampoNumero } from '../CampoNumero';
 
 export interface ModalPedidoProps {
   abierto: boolean;

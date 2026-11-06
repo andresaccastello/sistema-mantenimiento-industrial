@@ -16,7 +16,7 @@ import { mensajeError } from '../../lib/errores';
 import { Momento, momentoAIso } from '../../lib/fechas';
 import { validarCosto } from '../../lib/repuestos';
 import { SelectorMomento } from '../SelectorMomento';
-import { CampoNumero } from './CampoNumero';
+import { CampoNumero } from '../CampoNumero';
 
 export interface ModalRecibirPedidoProps {
   abierto: boolean;

@@ -24,7 +24,7 @@ La meta inicial es un MVP que demuestre de extremo a extremo el flujo de manteni
 - [ ] Operario registra falla.
 - [ ] Responsable asigna y gestiona intervención.
 - [ ] Cambios de estado y trazabilidad.
-- [ ] Finalización con fechas, tiempo y costos.
+- [x] Finalización con fechas, tiempo y costos.
 - [ ] Historial por máquina.
 
 ## Etapa 3 — Módulos complementarios
