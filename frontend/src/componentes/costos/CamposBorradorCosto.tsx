@@ -113,7 +113,7 @@ export function CamposBorradorCosto({
             prefix="$ "
             decimalScale={2}
             value={b.valorHora}
-            onChange={(v) => onCambio({ valorHora: v }, ['valorHora'])}
+            onChange={(v) => onCambio({ valorHora: v }, ['valorHora', 'importe'])}
             error={error('valorHora')}
           />
         </Group>

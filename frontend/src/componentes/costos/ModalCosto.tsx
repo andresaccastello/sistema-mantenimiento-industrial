@@ -31,6 +31,7 @@ import {
   borradorVacio,
   cuerposLote,
   etiquetaTipoCosto,
+  conValorHora,
   llevaProveedor,
   textoBotonAgregar,
   textoCostosAgregados,
@@ -66,6 +67,33 @@ function erroresVacios(): Errores {
 
 function conErrores(e: ErroresBorradorCosto): boolean {
   return Object.values(e).some((m) => m);
+}
+
+/**
+ * Los errores de los campos que la pestaña muestra (C1.2.1, sección 2): un error
+ * guardado en un campo oculto no marca la pestaña.
+ */
+function erroresVisibles(
+  tipo: TipoCosto,
+  b: BorradorCosto,
+  e: ErroresBorradorCosto,
+  finalizada: boolean
+): ErroresBorradorCosto {
+  const esManoObra = tipo === 'MANO_OBRA';
+  const visible: Record<CampoBorradorCosto, boolean> = {
+    persona: esManoObra && !b.externa,
+    proveedor: llevaProveedor(tipo, b),
+    horas: esManoObra,
+    valorHora: esManoObra,
+    importe: !conValorHora(tipo, b),
+    descripcion: true,
+    motivo: tipo === 'AJUSTE' && !finalizada,
+  };
+  const r: ErroresBorradorCosto = {};
+  for (const campo of Object.keys(e) as CampoBorradorCosto[]) {
+    if (visible[campo] && e[campo]) r[campo] = e[campo];
+  }
+  return r;
 }
 
 /** Etiqueta de la pestaña, con su marca: punto rojo con errores, de la marca con datos. */
@@ -113,6 +141,12 @@ export function ModalCosto({ abierto, onCerrar, intervencionId, estadoIntervenci
   const borrador = borradores[tipo];
   const empezadas = TIPOS_COSTO.filter((t) => borradorEmpezado(borradores[t]));
   const hayDatos = empezadas.length > 0 || (finalizada && motivoCorreccion.trim() !== '');
+
+  // La confirmación se ve solo mientras haya datos sin guardar: si se van
+  // (por ejemplo, con "Vaciar pestaña"), vuelven Cancelar y Agregar
+  useEffect(() => {
+    if (!hayDatos) setConfirmandoCierre(false);
+  }, [hayDatos]);
 
   const { data: personas } = useQuery<PersonaCostoOpcion[]>({
     queryKey: ['costos', 'personas'],
@@ -219,7 +253,7 @@ export function ModalCosto({ abierto, onCerrar, intervencionId, estadoIntervenci
     setErrores(nuevos);
     setErrorMotivoCorreccion(errMotivo);
 
-    const conProblemas = aValidar.filter((t) => conErrores(nuevos[t]));
+    const conProblemas = aValidar.filter((t) => conErrores(erroresVisibles(t, borradores[t], nuevos[t], finalizada)));
     if (conProblemas.length > 0 || errMotivo) {
       if (conProblemas.length > 0 && !conProblemas.includes(tipo)) setTipo(conProblemas[0]);
       return;
@@ -264,7 +298,7 @@ export function ModalCosto({ abierto, onCerrar, intervencionId, estadoIntervenci
                 <EtiquetaPestana
                   tipo={t}
                   empezada={empezadas.includes(t)}
-                  errores={conErrores(errores[t])}
+                  errores={conErrores(erroresVisibles(t, borradores[t], errores[t], finalizada))}
                 />
               ),
             }))}
@@ -307,7 +341,7 @@ export function ModalCosto({ abierto, onCerrar, intervencionId, estadoIntervenci
             />
           )}
 
-          {confirmandoCierre ? (
+          {confirmandoCierre && hayDatos ? (
             <Stack gap="xs" mt="md">
               <Text size="sm" fw={500}>
                 Hay costos sin guardar. ¿Descartarlos?
