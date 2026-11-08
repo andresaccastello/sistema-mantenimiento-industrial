@@ -12,6 +12,7 @@ import type {
   RenglonCosto,
   PersonaCostoOpcion,
   ReporteCostosRespuesta,
+  LoteCostosRespuesta,
 } from './tipos';
 
 /** `GET /api/intervenciones/:id/costos`, con un renglón de cada tipo y uno anulado. */
@@ -152,6 +153,66 @@ export const renglonCreadoEjemplo: RenglonCosto = {
   anulado_por: null,
   anulado_en: null,
   motivo_anulacion: null,
+};
+
+/**
+ * `POST /api/intervenciones/:id/costos/lote` (Etapa C1.2): mano de obra interna con
+ * valor hora, transporte con proveedor y ajuste, en el orden del pedido.
+ */
+export const loteCreadoEjemplo: LoteCostosRespuesta = {
+  renglones: [
+    {
+      id: 108,
+      tipo: 'MANO_OBRA',
+      descripcion: 'Mano de obra',
+      importe: 3000,
+      valor_hora: 1200,
+      horas: 2.5,
+      persona: { id: 41, nombre: 'Laura', apellido: 'Gómez' },
+      proveedor: null,
+      motivo: null,
+      registrado_por: { id: 12, nombre: 'Responsable', apellido: 'Ejemplo' },
+      registrado_en: '2026-11-08T10:00:00.000Z',
+      anulado: false,
+      anulado_por: null,
+      anulado_en: null,
+      motivo_anulacion: null,
+    },
+    {
+      id: 109,
+      tipo: 'TRANSPORTE',
+      descripcion: 'Flete del motor',
+      importe: 500,
+      valor_hora: null,
+      horas: null,
+      persona: null,
+      proveedor: { id: 7, nombre: 'Taller Ejemplo' },
+      motivo: null,
+      registrado_por: { id: 12, nombre: 'Responsable', apellido: 'Ejemplo' },
+      registrado_en: '2026-11-08T10:00:00.000Z',
+      anulado: false,
+      anulado_por: null,
+      anulado_en: null,
+      motivo_anulacion: null,
+    },
+    {
+      id: 110,
+      tipo: 'AJUSTE',
+      descripcion: 'Descuento acordado',
+      importe: -100,
+      valor_hora: null,
+      horas: null,
+      persona: null,
+      proveedor: null,
+      motivo: 'Descuento por pronto pago',
+      registrado_por: { id: 12, nombre: 'Responsable', apellido: 'Ejemplo' },
+      registrado_en: '2026-11-08T10:00:00.000Z',
+      anulado: false,
+      anulado_por: null,
+      anulado_en: null,
+      motivo_anulacion: null,
+    },
+  ],
 };
 
 /** `GET /api/costos/personas`. */

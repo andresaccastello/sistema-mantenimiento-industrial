@@ -11,6 +11,7 @@ import {
   renglonCreadoEjemplo,
   personasCostosEjemplo,
   reporteCostosEjemplo,
+  loteCreadoEjemplo,
 } from '../../frontend/src/api/contrato-costos.ts';
 
 // Timeout de bloqueo para las pruebas de concurrencia
@@ -58,7 +59,7 @@ async function postJson(path: string, body?: any, token?: string) {
   });
 }
 
-test('Etapa C1 — Costos de la intervención y reporte de costos (CO-01 a CO-15)', async (t) => {
+test('Etapa C1 — Costos de la intervención y reporte de costos (CO-01 a CO-22)', async (t) => {
   const client = await pool.connect();
 
   const createdPlantaIds: number[] = [];
@@ -918,6 +919,235 @@ test('Etapa C1 — Costos de la intervención y reporte de costos (CO-01 a CO-15
           assert.ok(!texto.includes(numero), `La auditoría no muestra ${numero}: ${texto}`);
         }
       }
+    });
+
+    // =========================================================================
+    // C1.2: POST /api/intervenciones/:id/costos/lote
+    // =========================================================================
+    const lote = (id: number, body: any, token = tokenR) =>
+      postJson(`/api/intervenciones/${id}/costos/lote`, body, token);
+    async function auditoriasCostos(id: number) {
+      return (
+        await client.query(
+          `SELECT valor_nuevo, motivo FROM intervencion_auditoria
+           WHERE intervencion_id = $1 AND tipo_evento = 'CORRECCION_COSTO' AND campo_modificado = 'costos'
+           ORDER BY id`,
+          [id]
+        )
+      ).rows;
+    }
+    /** El lote falla con status, codigo e indice, y la intervención queda como estaba. */
+    async function loteFalla(
+      id: number,
+      body: any,
+      esperado: { status: number; codigo: string; indice?: number },
+      token = tokenR
+    ) {
+      const antes = await costosDb(id);
+      const renglonesAntes = await cantidadRenglones(id);
+      const auditoriasAntes = (await auditoriasCostos(id)).length;
+      const r = await lote(id, body, token);
+      const d = await r.json();
+      assert.strictEqual(r.status, esperado.status, JSON.stringify(d));
+      assert.strictEqual(d.codigo, esperado.codigo, JSON.stringify(d));
+      if (esperado.indice === undefined) {
+        assert.ok(!('indice' in d), `Sin indice: ${JSON.stringify(d)}`);
+      } else {
+        assert.strictEqual(d.indice, esperado.indice, JSON.stringify(d));
+      }
+      assert.strictEqual(await cantidadRenglones(id), renglonesAntes, 'No se guarda ningún renglón');
+      assert.deepStrictEqual(await costosDb(id), antes, 'Los costos de la intervención no cambian');
+      assert.strictEqual((await auditoriasCostos(id)).length, auditoriasAntes, 'No se guarda ninguna auditoría');
+      return d;
+    }
+
+    // =========================================================================
+    // CO-18: Lote en EN_PROCESO
+    // =========================================================================
+    await t.test('CO-18: Lote en EN_PROCESO', async () => {
+      const id = await enProceso();
+      const r = await lote(id, {
+        renglones: [
+          { tipo: 'MANO_OBRA', usuario_id: P.id, horas: 2.5, valor_hora: 1200 },
+          { tipo: 'TRANSPORTE', proveedor_id: provId, descripcion: 'Flete del motor', importe: 500 },
+          { tipo: 'AJUSTE', descripcion: 'Descuento acordado', importe: -100, motivo: 'Descuento por pronto pago' },
+        ],
+      });
+      const d = await r.json();
+      assert.strictEqual(r.status, 201, JSON.stringify(d));
+
+      assert.strictEqual(d.renglones.length, 3);
+      assert.deepStrictEqual(
+        d.renglones.map((x: any) => [x.tipo, x.importe]),
+        [
+          ['MANO_OBRA', 3000],
+          ['TRANSPORTE', 500],
+          ['AJUSTE', -100],
+        ]
+      );
+      assert.deepStrictEqual(d.renglones[0].persona, { id: P.id, nombre: 'Persona', apellido: 'CO' });
+      assert.strictEqual(d.renglones[0].valor_hora, 1200);
+      assert.strictEqual(d.renglones[0].horas, 2.5);
+      assert.strictEqual(d.renglones[1].proveedor.id, provId);
+      assert.strictEqual(d.renglones[2].motivo, 'Descuento por pronto pago');
+      assert.ok(d.renglones[0].id < d.renglones[1].id && d.renglones[1].id < d.renglones[2].id, 'Insertados en orden');
+
+      assert.deepStrictEqual(await costosDb(id), { repuestos: 0, manoObra: 3000, total: 3400 });
+      assert.strictEqual(await cantidadRenglones(id), 3);
+      assert.strictEqual((await auditoriasCostos(id)).length, 0, 'Sin auditoría fuera de FINALIZADA');
+
+      const diferencias = mismaForma(d, loteCreadoEjemplo);
+      assert.deepStrictEqual(diferencias, [], `POST /api/intervenciones/:id/costos/lote:\n${diferencias.join('\n')}`);
+    });
+
+    // =========================================================================
+    // CO-19: Todo o nada, con indice
+    // =========================================================================
+    await t.test('CO-19: Todo o nada, con indice', async () => {
+      const id = await enProceso();
+
+      // (a) OTRO válido y TRANSPORTE sin descripción
+      await loteFalla(
+        id,
+        { renglones: [otro(100), { tipo: 'TRANSPORTE', importe: 50 }] },
+        { status: 422, codigo: 'DATOS_INVALIDOS', indice: 1 }
+      );
+
+      // (b) primero una mano de obra con una persona inactiva
+      await loteFalla(
+        id,
+        { renglones: [{ tipo: 'MANO_OBRA', usuario_id: Pi.id, horas: 1, importe: 100 }, otro(100)] },
+        { status: 422, codigo: 'PERSONA_INVALIDA', indice: 0 }
+      );
+
+      // (c) OTRO válido y una mano de obra de 100,01 h × 10.000.000
+      await loteFalla(
+        id,
+        { renglones: [otro(100), { tipo: 'MANO_OBRA', usuario_id: P.id, horas: 100.01, valor_hora: 10000000 }] },
+        { status: 422, codigo: 'DATOS_INVALIDOS', indice: 1 }
+      );
+
+      assert.strictEqual(await cantidadRenglones(id), 0);
+      assert.strictEqual((await costosDb(id)).total, 0);
+    });
+
+    // =========================================================================
+    // CO-20: El total se controla una vez
+    // =========================================================================
+    await t.test('CO-20: El total se controla una vez', async () => {
+      const id = await enProceso();
+      assert.strictEqual((await costosDb(id)).total, 0);
+
+      const r = await lote(id, {
+        renglones: [
+          { tipo: 'TRANSPORTE', descripcion: 'Flete', importe: 1000 },
+          { tipo: 'AJUSTE', descripcion: 'Descuento', importe: -500, motivo: 'Descuento acordado' },
+        ],
+      });
+      assert.strictEqual(r.status, 201, JSON.stringify(await r.clone().json()));
+      assert.strictEqual((await costosDb(id)).total, 500);
+
+      const d = await loteFalla(
+        id,
+        {
+          renglones: [
+            otro(100),
+            { tipo: 'AJUSTE', descripcion: 'Descuento grande', importe: -1000, motivo: 'Descuento acordado' },
+          ],
+        },
+        { status: 409, codigo: 'TOTAL_NEGATIVO' }
+      );
+      assert.strictEqual(d.total_resultante, -400);
+      assert.strictEqual(await cantidadRenglones(id), 2);
+      assert.strictEqual((await costosDb(id)).total, 500);
+    });
+
+    // =========================================================================
+    // CO-21: Cuerpo, estado y permisos
+    // =========================================================================
+    await t.test('CO-21: Cuerpo, estado y permisos', async () => {
+      const id = await enProceso();
+      const invalido = { status: 422, codigo: 'DATOS_INVALIDOS' };
+
+      await loteFalla(id, {}, invalido);
+      await loteFalla(id, { renglones: otro(100) }, invalido);
+      await loteFalla(id, { renglones: 'renglones' }, invalido);
+      await loteFalla(id, { renglones: [] }, invalido);
+      const seis = await loteFalla(id, { renglones: [1, 2, 3, 4, 5, 6].map((n) => otro(n)) }, invalido);
+      assert.strictEqual(seis.error, 'Debe mandar entre 1 y 5 renglones');
+      await loteFalla(id, { renglones: [null] }, { ...invalido, indice: 0 });
+      await loteFalla(id, { renglones: [otro(100), 'texto'] }, { ...invalido, indice: 1 });
+
+      // Estado: PENDIENTE y CANCELADA
+      const idPend = await crearIntervencion(m1Id);
+      await loteFalla(idPend, { renglones: [otro(100)] }, { status: 409, codigo: 'ESTADO_NO_PERMITE_COSTOS' });
+      const idCanc = await enProceso();
+      await cancelar(idCanc);
+      await loteFalla(idCanc, { renglones: [otro(100)] }, { status: 409, codigo: 'ESTADO_NO_PERMITE_COSTOS' });
+
+      // Sin COSTOS_REGISTRAR
+      await loteFalla(id, { renglones: [otro(100)] }, { status: 403, codigo: 'PERMISO_INSUFICIENTE' }, tokenT);
+
+      // FINALIZADA sin INTERVENCIONES_CORREGIR
+      const idFin = await enProceso();
+      await finalizar(idFin);
+      await loteFalla(
+        idFin,
+        { renglones: [{ ...otro(100), motivo: 'Faltaron insumos' }] },
+        { status: 403, codigo: 'PERMISO_INSUFICIENTE' },
+        tokenR
+      );
+
+      // Intervención no visible
+      await loteFalla(id, { renglones: [otro(100)] }, { status: 404, codigo: 'INTERVENCION_NO_ENCONTRADA' }, tokenO2);
+
+      for (const x of [id, idPend, idCanc, idFin]) {
+        assert.strictEqual(await cantidadRenglones(x), 0, `Sin renglones en ${x}`);
+      }
+    });
+
+    // =========================================================================
+    // CO-22: FINALIZADA
+    // =========================================================================
+    await t.test('CO-22: FINALIZADA', async () => {
+      const id = await enProceso();
+      await finalizar(id);
+
+      const r = await lote(
+        id,
+        {
+          renglones: [
+            { ...otro(150), motivo: 'Faltaron insumos' },
+            { tipo: 'TRANSPORTE', descripcion: 'Flete', importe: 300, motivo: 'Flete sin cargar' },
+          ],
+        },
+        tokenA
+      );
+      const d = await r.json();
+      assert.strictEqual(r.status, 201, JSON.stringify(d));
+      assert.strictEqual(d.renglones.length, 2);
+      assert.deepStrictEqual(await auditoriasCostos(id), [
+        { valor_nuevo: 'Se agregó: Otro — Insumos varios', motivo: 'Faltaron insumos' },
+        { valor_nuevo: 'Se agregó: Transporte — Flete', motivo: 'Flete sin cargar' },
+      ]);
+      assert.strictEqual((await costosDb(id)).total, 450);
+
+      // El segundo sin motivo: nada
+      const id2 = await enProceso();
+      await finalizar(id2);
+      await loteFalla(
+        id2,
+        {
+          renglones: [
+            { ...otro(150), motivo: 'Faltaron insumos' },
+            { tipo: 'TRANSPORTE', descripcion: 'Flete', importe: 300 },
+          ],
+        },
+        { status: 422, codigo: 'MOTIVO_REQUERIDO', indice: 1 },
+        tokenA
+      );
+      assert.strictEqual(await cantidadRenglones(id2), 0);
+      assert.strictEqual((await auditoriasCostos(id2)).length, 0);
     });
   } finally {
     // Limpieza: solo lo que creó esta prueba

@@ -1004,3 +1004,13 @@ export type CuerpoCosto =
       importe: number;
       motivo: string;
     };
+
+/** `POST /api/intervenciones/:id/costos/lote` (Etapa C1.2): de 1 a 5 renglones. */
+export interface CuerpoLoteCostos {
+  renglones: CuerpoCosto[];
+}
+
+/** Respuesta 201 del lote: cada renglón como el `POST` de uno, en el orden del pedido. */
+export interface LoteCostosRespuesta {
+  renglones: RenglonCosto[];
+}

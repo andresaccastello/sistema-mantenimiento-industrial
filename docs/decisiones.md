@@ -254,3 +254,13 @@ Sobre las máquinas activas de la selección y el período elegido:
 6. **Importes visibles:** con `COSTOS_VER`. Las horas de mano de obra las ve cualquiera que ve la intervención.
 7. **Valor hora:** no se guarda por persona. Se carga en cada renglón y queda como histórico. Una tarifa por persona es una mejora futura.
 8. **Reporte de costos:** gasto registrado en el período, por la fecha de cada consumo y de cada renglón, no anulado, de las máquinas visibles de la selección, activas o no. Es el mismo criterio que D-018, punto 9.
+
+## D-020 — Varios costos en un guardado
+
+**Estado:** Aceptada
+
+1. **Una pestaña por tipo.** Cada una recuerda lo escrito mientras el diálogo está abierto.
+2. **Todas o ninguna.** Agregar graba las pestañas con datos en un solo pedido y una sola transacción. Si una falla, no se graba ninguna.
+3. **Nada se descarta en silencio.** Una pestaña empezada e incompleta frena el guardado hasta que se complete o se vacíe. Cerrar el diálogo con datos pide confirmación.
+4. **El total se controla una vez,** con todos los renglones juntos: un ajuste negativo puede ir con los costos que lo cubren.
+5. **Un renglón por pestaña** en cada guardado. Dos personas de mano de obra son dos guardados (D-019, punto 3).

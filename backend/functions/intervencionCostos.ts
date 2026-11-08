@@ -409,6 +409,117 @@ function validarRenglon(body: any, finalizada: boolean): RenglonValidado {
   };
 }
 
+// -------------------------------------------------------------
+// Lo que comparten el POST de uno y el lote (C1.2, sección 2.3).
+// Todo corre dentro de la transacción abierta por quien llama.
+// -------------------------------------------------------------
+
+/**
+ * Bloquea máquina e intervención, controla la visibilidad, el estado (409) y los
+ * permisos de la tabla 4.1 (403).
+ */
+async function abrirCargaCostos(
+  client: pg.PoolClient,
+  id: number,
+  usuario: UsuarioVisibilidad
+): Promise<{ finalizada: boolean }> {
+  const { intervencion } = await bloquearIntervencion(client, id, usuario);
+
+  if (intervencion.estado === 'PENDIENTE' || intervencion.estado === 'CANCELADA') {
+    throw new ErrorNegocio(409, 'ESTADO_NO_PERMITE_COSTOS', 'El estado de la intervención no permite cargar costos');
+  }
+  const { puede_registrar } = permisosCostos(usuario, intervencion);
+  if (!puede_registrar) {
+    throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No tiene permiso para cargar costos en esta intervención');
+  }
+  return { finalizada: intervencion.estado === 'FINALIZADA' };
+}
+
+/**
+ * Valida un renglón: los datos, el tope del importe calculado, y la persona y el
+ * proveedor (FOR SHARE). Lanza el primer error que encuentra.
+ */
+async function prepararRenglon(client: pg.PoolClient, body: any, finalizada: boolean): Promise<RenglonValidado> {
+  const r = validarRenglon(body, finalizada);
+
+  // El importe calculado tiene el mismo máximo que el cargado a mano,
+  // comparado en SQL con el mismo ROUND del INSERT
+  if (r.valorHora !== null) {
+    const resTope = await client.query(
+      'SELECT ROUND($1::numeric * $2::numeric, 2) > 1000000000 AS excede',
+      [r.horas, r.valorHora]
+    );
+    if (resTope.rows[0].excede) {
+      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El importe de la mano de obra supera el máximo permitido');
+    }
+  }
+
+  if (r.usuarioId !== null) {
+    const resU = await client.query('SELECT id, activo FROM usuarios WHERE id = $1 FOR SHARE', [r.usuarioId]);
+    if (resU.rows.length === 0 || !resU.rows[0].activo) {
+      throw new ErrorNegocio(422, 'PERSONA_INVALIDA', 'La persona no existe o está inactiva');
+    }
+  }
+  if (r.proveedorId !== null) {
+    const resP = await client.query('SELECT id, activo FROM proveedores WHERE id = $1 FOR SHARE', [r.proveedorId]);
+    if (resP.rows.length === 0 || !resP.rows[0].activo) {
+      throw new ErrorNegocio(422, 'PROVEEDOR_INVALIDO', 'El proveedor no existe o está inactivo');
+    }
+  }
+  return r;
+}
+
+/** Inserta un renglón ya validado. Con valor hora, el importe se calcula en SQL. */
+async function insertarRenglon(
+  client: pg.PoolClient,
+  intervencionId: number,
+  r: RenglonValidado,
+  usuarioId: number
+): Promise<number> {
+  const resIns = await client.query(
+    `INSERT INTO intervencion_costos (
+       intervencion_id, tipo, descripcion, importe, motivo,
+       usuario_id, proveedor_id, horas, valor_hora, registrado_por_usuario_id
+     ) VALUES (
+       $1, $2, $3,
+       CASE WHEN $8::numeric IS NULL THEN $4::numeric ELSE ROUND($7::numeric * $8::numeric, 2) END,
+       $5, $6, $9, $7::numeric, $8::numeric, $10
+     )
+     RETURNING id`,
+    [
+      intervencionId,
+      r.tipo,
+      r.descripcion,
+      r.importe,
+      r.motivo,
+      r.usuarioId,
+      r.horas,
+      r.valorHora,
+      r.proveedorId,
+      usuarioId,
+    ]
+  );
+  return Number(resIns.rows[0].id);
+}
+
+/** Auditoría del alta con la intervención finalizada, sin importes. */
+async function auditarAlta(
+  client: pg.PoolClient,
+  intervencionId: number,
+  renglonId: number,
+  motivo: string | null,
+  usuarioId: number
+): Promise<void> {
+  await registrarAuditoria(client, {
+    intervencionId,
+    tipoEvento: 'CORRECCION_COSTO',
+    campo: 'costos',
+    valorNuevo: `Se agregó: ${await textoRenglonAuditoria(client, renglonId)}`,
+    motivo,
+    usuarioId,
+  });
+}
+
 intervencionCostosApp.post('/:id/costos', async (c) => {
   const client: pg.PoolClient = await pool.connect();
   try {
@@ -421,91 +532,109 @@ intervencionCostosApp.post('/:id/costos', async (c) => {
 
     await client.query('BEGIN');
 
-    // 1. Bloqueo de máquina e intervención, y visibilidad
-    const { intervencion } = await bloquearIntervencion(client, id, usuario);
-
-    // 2. Estado y permisos (tabla 4.1)
-    if (intervencion.estado === 'PENDIENTE' || intervencion.estado === 'CANCELADA') {
-      throw new ErrorNegocio(409, 'ESTADO_NO_PERMITE_COSTOS', 'El estado de la intervención no permite cargar costos');
-    }
-    const { puede_registrar } = permisosCostos(usuario, intervencion);
-    if (!puede_registrar) {
-      throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No tiene permiso para cargar costos en esta intervención');
-    }
+    // 1 y 2. Bloqueo, visibilidad, estado y permisos
+    const { finalizada } = await abrirCargaCostos(client, id, usuario);
 
     // 3. Datos
-    const finalizada = intervencion.estado === 'FINALIZADA';
-    const r = validarRenglon(body, finalizada);
+    const r = await prepararRenglon(client, body, finalizada);
 
-    // El importe calculado tiene el mismo máximo que el cargado a mano,
-    // comparado en SQL con el mismo ROUND del INSERT
-    if (r.valorHora !== null) {
-      const resTope = await client.query(
-        'SELECT ROUND($1::numeric * $2::numeric, 2) > 1000000000 AS excede',
-        [r.horas, r.valorHora]
-      );
-      if (resTope.rows[0].excede) {
-        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El importe de la mano de obra supera el máximo permitido');
-      }
-    }
-
-    if (r.usuarioId !== null) {
-      const resU = await client.query('SELECT id, activo FROM usuarios WHERE id = $1 FOR SHARE', [r.usuarioId]);
-      if (resU.rows.length === 0 || !resU.rows[0].activo) {
-        throw new ErrorNegocio(422, 'PERSONA_INVALIDA', 'La persona no existe o está inactiva');
-      }
-    }
-    if (r.proveedorId !== null) {
-      const resP = await client.query('SELECT id, activo FROM proveedores WHERE id = $1 FOR SHARE', [r.proveedorId]);
-      if (resP.rows.length === 0 || !resP.rows[0].activo) {
-        throw new ErrorNegocio(422, 'PROVEEDOR_INVALIDO', 'El proveedor no existe o está inactivo');
-      }
-    }
-
-    // 4. Inserta el renglón. Con valor hora, el importe se calcula en SQL.
-    const resIns = await client.query(
-      `INSERT INTO intervencion_costos (
-         intervencion_id, tipo, descripcion, importe, motivo,
-         usuario_id, proveedor_id, horas, valor_hora, registrado_por_usuario_id
-       ) VALUES (
-         $1, $2, $3,
-         CASE WHEN $8::numeric IS NULL THEN $4::numeric ELSE ROUND($7::numeric * $8::numeric, 2) END,
-         $5, $6, $9, $7::numeric, $8::numeric, $10
-       )
-       RETURNING id`,
-      [
-        id,
-        r.tipo,
-        r.descripcion,
-        r.importe,
-        r.motivo,
-        r.usuarioId,
-        r.horas,
-        r.valorHora,
-        r.proveedorId,
-        usuario.id,
-      ]
-    );
-    const renglonId = Number(resIns.rows[0].id);
+    // 4. Inserta el renglón
+    const renglonId = await insertarRenglon(client, id, r, usuario.id);
 
     // 5. Recalcula (puede dar TOTAL_NEGATIVO y revertir todo)
     await recalcularCostosIntervencion(client, id);
 
     // 6. Auditoría, sin importes
     if (finalizada) {
-      await registrarAuditoria(client, {
-        intervencionId: id,
-        tipoEvento: 'CORRECCION_COSTO',
-        campo: 'costos',
-        valorNuevo: `Se agregó: ${await textoRenglonAuditoria(client, renglonId)}`,
-        motivo: r.motivo,
-        usuarioId: usuario.id,
-      });
+      await auditarAlta(client, id, renglonId, r.motivo, usuario.id);
     }
 
     await client.query('COMMIT');
 
     return c.json(await leerRenglon(renglonId, veCostosC1(usuario)), 201);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    return responderError(c, err);
+  } finally {
+    client.release();
+  }
+});
+
+// -------------------------------------------------------------
+// C1.2: POST /:id/costos/lote (varios renglones en una transacción)
+// -------------------------------------------------------------
+
+const MAXIMO_LOTE = 5;
+
+/** Un error de un renglón del lote, con su posición en el arreglo. */
+function conIndice(err: unknown, indice: number): unknown {
+  if (err instanceof ErrorNegocio) {
+    return new ErrorNegocio(err.status, err.codigo, err.mensaje, { ...(err.detalles || {}), indice });
+  }
+  return err;
+}
+
+intervencionCostosApp.post('/:id/costos/lote', async (c) => {
+  const client: pg.PoolClient = await pool.connect();
+  try {
+    // 1. Id de la ruta
+    const id = parseIdRuta(c.req.param('id'));
+    if (!id) {
+      throw new ErrorNegocio(404, 'INTERVENCION_NO_ENCONTRADA', 'Intervención no encontrada');
+    }
+    const usuario = getUsuarioContext(c);
+
+    // 2. Forma del cuerpo, antes de abrir la transacción
+    const body = await leerJson(c);
+    const cuerpos: unknown = body.renglones;
+    if (!Array.isArray(cuerpos) || cuerpos.length < 1 || cuerpos.length > MAXIMO_LOTE) {
+      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', `Debe mandar entre 1 y ${MAXIMO_LOTE} renglones`);
+    }
+    cuerpos.forEach((cuerpo, indice) => {
+      if (cuerpo === null || typeof cuerpo !== 'object' || Array.isArray(cuerpo)) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'Cada renglón debe ser un objeto', { indice });
+      }
+    });
+
+    await client.query('BEGIN');
+
+    // 3. Bloqueo, visibilidad, estado y permisos, como el POST de uno
+    const { finalizada } = await abrirCargaCostos(client, id, usuario);
+
+    // 4. Cada renglón, en orden: el primer error corta, con su indice
+    const renglones: RenglonValidado[] = [];
+    for (let indice = 0; indice < cuerpos.length; indice++) {
+      try {
+        renglones.push(await prepararRenglon(client, cuerpos[indice], finalizada));
+      } catch (err) {
+        throw conIndice(err, indice);
+      }
+    }
+
+    // 5. Inserta todos, en orden
+    const ids: number[] = [];
+    for (const r of renglones) {
+      ids.push(await insertarRenglon(client, id, r, usuario.id));
+    }
+
+    // 6. Recalcula una sola vez (TOTAL_NEGATIVO y TOTAL_FUERA_DE_RANGO, sin indice)
+    await recalcularCostosIntervencion(client, id);
+
+    // 7. Auditoría, una por renglón y en orden
+    if (finalizada) {
+      for (let i = 0; i < ids.length; i++) {
+        await auditarAlta(client, id, ids[i], renglones[i].motivo, usuario.id);
+      }
+    }
+
+    await client.query('COMMIT');
+
+    const veCostos = veCostosC1(usuario);
+    const respuesta = [];
+    for (const renglonId of ids) {
+      respuesta.push(await leerRenglon(renglonId, veCostos));
+    }
+    return c.json({ renglones: respuesta }, 201);
   } catch (err) {
     await client.query('ROLLBACK');
     return responderError(c, err);
