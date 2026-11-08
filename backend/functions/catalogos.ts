@@ -240,7 +240,7 @@ function crearRouterCatalogo(config: CatalogoConfig) {
       const parsedIds: number[] = [];
       for (const rawId of ids) {
         const idNum = typeof rawId === 'number'
-          ? (Number.isInteger(rawId) && rawId > 0 ? rawId : null)
+          ? parseId(String(rawId))
           : (typeof rawId === 'string' && /^\d+$/.test(rawId.trim()) ? parseId(rawId) : null);
         if (!idNum) {
           await client.query('ROLLBACK');

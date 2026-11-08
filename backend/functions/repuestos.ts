@@ -456,7 +456,7 @@ repuestosApp.put('/:id', requirePermission('REPUESTOS_GESTIONAR'), async (c) => 
       if (body.proveedor_id === null) {
         proveedorId = null;
       } else {
-        const pId = Number(body.proveedor_id);
+        const pId = validarIdCuerpo(body.proveedor_id, 'PROVEEDOR_INVALIDO', 'proveedor_id');
         const provRes = await client.query('SELECT id, activo FROM proveedores WHERE id = $1 FOR SHARE', [pId]);
         if (provRes.rows.length === 0 || !provRes.rows[0].activo) {
           throw new ErrorNegocio(422, 'PROVEEDOR_INVALIDO', 'El proveedor no existe o está inactivo');

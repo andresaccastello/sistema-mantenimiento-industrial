@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { pool } from './db.ts';
 import { jwtVerify, dbVerify } from './middleware.ts';
+import { parseId } from './validations.ts';
 
 const notificacionesApp = new Hono();
 
@@ -79,9 +80,9 @@ notificacionesApp.post('/leer-todas', async (c) => {
 notificacionesApp.post('/:id/leer', async (c) => {
   const userId = (c.get as any)('userId');
   const idRaw = c.req.param('id');
-  const id = Number(idRaw);
+  const id = parseId(idRaw);
 
-  if (!Number.isInteger(id) || id <= 0) {
+  if (id === null) {
     return c.json(
       { error: 'Identificador de notificación inválido', codigo: 'DATOS_INVALIDOS' },
       422
@@ -159,8 +160,8 @@ notificacionesApp.get('/', async (c) => {
 
   let antesDe: number | null = null;
   if (antesDeRaw !== undefined) {
-    const ad = Number(antesDeRaw);
-    if (!Number.isInteger(ad) || ad <= 0) {
+    const ad = parseId(antesDeRaw);
+    if (ad === null) {
       return c.json(
         { error: 'Parámetro antes_de debe ser un entero positivo', codigo: 'DATOS_INVALIDOS' },
         422

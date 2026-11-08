@@ -74,11 +74,11 @@ export function parseIdRuta(val: unknown): number | null {
     return null;
   }
   const n = parseInt(val, 10);
-  return n > 0 ? n : null;
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
 
 export function validarIdCuerpo(val: unknown, codigoError = 'DATOS_INVALIDOS', campo = 'id'): number {
-  if (typeof val !== 'number' || !Number.isInteger(val) || val <= 0) {
+  if (typeof val !== 'number' || !Number.isSafeInteger(val) || val <= 0) {
     throw new ErrorNegocio(422, codigoError, `El campo ${campo} debe ser un entero positivo`);
   }
   return val;

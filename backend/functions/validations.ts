@@ -2,7 +2,8 @@ import { Context } from 'hono';
 
 export const parseId = (idStr: string): number | null => {
   const num = Number(idStr);
-  return (!isNaN(num) && num > 0 && Number.isInteger(num)) ? num : null;
+  // Solo enteros seguros: uno más grande no entra en bigint y la base lo rechazaría
+  return Number.isSafeInteger(num) && num > 0 ? num : null;
 };
 
 export const parseString = (val: any): string | null => {

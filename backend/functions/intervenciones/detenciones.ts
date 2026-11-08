@@ -5,6 +5,7 @@ import { validarFechaISO } from './fechas.ts';
 import { recalcularEstadoMaquina } from './recalculoMaquina.ts';
 import { registrarNotificaciones } from './auditoria.ts';
 import { bloquearIntervencion } from './bloqueos.ts';
+import { parseId } from '../validations.ts';
 
 /**
  * 7.1 GET /api/maquinas/:id/detenciones-abiertas
@@ -109,8 +110,8 @@ export async function confirmarRecuperacionMaquina(
   const periodoIds: number[] = [];
   const setIds = new Set<number>();
   for (const item of periodoIdsRaw) {
-    const num = Number(item);
-    if (isNaN(num) || num <= 0 || setIds.has(num)) {
+    const num = parseId(String(item));
+    if (num === null || setIds.has(num)) {
       throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'La lista de periodo_ids contiene valores inválidos o repetidos');
     }
     setIds.add(num);
