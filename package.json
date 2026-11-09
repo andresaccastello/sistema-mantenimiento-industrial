@@ -45,6 +45,7 @@
     "test:repuestos": "tsx --env-file=.env --test backend/tests/repuestos.test.ts",
     "test:repuestos-intervenciones": "tsx --env-file=.env --test backend/tests/repuestos_intervenciones.test.ts",
     "test:costos": "tsx --env-file=.env --test backend/tests/costos.test.ts",
+    "test:preventivos": "tsx --env-file=.env --test backend/tests/preventivos.test.ts",
     "test:ids": "tsx --env-file=.env --test backend/tests/ids.test.ts",
     "test:administracion": "tsx --env-file=.env --test backend/tests/administracion.test.ts",
     "test:avisos": "tsx --env-file=.env --test backend/tests/avisos.test.ts",

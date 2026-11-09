@@ -17,6 +17,7 @@ import proveedoresApp from './proveedores.ts';
 import repuestosApp from './repuestos.ts';
 import pedidosRepuestoApp from './pedidosRepuesto.ts';
 import costosApp from './costos.ts';
+import planesApp from './planes.ts';
 
 import { JWT_SECRET } from './config.ts';
 
@@ -51,6 +52,7 @@ app.route('/api/proveedores', proveedoresApp);
 app.route('/api/repuestos', repuestosApp);
 app.route('/api/pedidos-repuesto', pedidosRepuestoApp);
 app.route('/api/costos', costosApp);
+app.route('/api/planes', planesApp);
 
 app.get('/health', (c) => {
   return c.json({
