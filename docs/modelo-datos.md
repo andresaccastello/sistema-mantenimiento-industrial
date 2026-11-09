@@ -104,7 +104,21 @@ Seguimiento de pedidos de repuestos asociados a una intervención, con estados d
 Trazabilidad de ingresos, egresos, ajustes y devoluciones de stock, historizando el delta y el stock resultante.
 
 ### planes_mantenimiento
-Planificación preventiva configurable por tiempo, horas de uso, kilómetros u otros criterios.
+Planes preventivos de una máquina, armados con tareas (D-021). Una máquina puede tener varios.
+
+- `maquina_id`: no cambia una vez creado el plan; la FK compuesta de las intervenciones (`fk_intervenciones_plan_maquina`) obliga a que el plan sea de la misma máquina.
+- `responsable_usuario_id` (nulo): quien queda asignado a las intervenciones que se generan desde el plan.
+- `nombre`, único en la máquina sin importar mayúsculas; `descripcion`, `activo`.
+- `anticipacion_dias` (`integer`, de 0 a 90, por omisión 7): cuántos días antes una tarea pasa a "próxima".
+- `creado_por_usuario_id`, `creado_en` y `actualizado_en`.
+
+### plan_tareas
+Las tareas de un plan, en su `orden` (único en el plan). Cada una tiene su `accion`, su `detalle` y su frecuencia: `frecuencia_valor` y `frecuencia_unidad` (`DIAS`, `SEMANAS`, `MESES` o `ANIOS`), hasta 10 años. `primera_fecha` es cuándo vence por primera vez. Pueden llevar un repuesto sugerido con su `cantidad` (van juntos) y un proveedor sugerido. No se borran: se desactivan.
+
+El estado de cada tarea no se guarda: lo calcula la vista `v_plan_tareas_estado` (última ejecución, próxima fecha, días que faltan, intervención en curso y estado: `INACTIVA`, `EN_CURSO`, `VENCIDA`, `PROXIMA` o `AL_DIA`), con el "hoy" de la zona horaria de la instalación (`configuracion_sistema.zona_horaria`).
+
+### intervencion_tareas
+Las tareas de una intervención preventiva, copiadas del plan al generarla (`orden`, `accion`, `detalle` y `fecha_programada`, la próxima fecha de la tarea en ese momento), para que cambiar el plan después no cambie lo que se hizo. Una tarea del plan va una sola vez por intervención. `hecha` lleva quién (`hecha_por_usuario_id`) y cuándo (`hecha_en`); sin `hecha`, ninguno de los dos. `observacion`, hasta 500 caracteres.
 
 ### documentos
 Metadatos de documentación asociada a máquinas o intervenciones.

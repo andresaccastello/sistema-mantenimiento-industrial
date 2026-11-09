@@ -264,3 +264,16 @@ Sobre las máquinas activas de la selección y el período elegido:
 3. **Nada se descarta en silencio.** Una pestaña empezada e incompleta frena el guardado hasta que se complete o se vacíe. Cerrar el diálogo con datos pide confirmación.
 4. **El total se controla una vez,** con todos los renglones juntos: un ajuste negativo puede ir con los costos que lo cubren.
 5. **Un renglón por pestaña** en cada guardado. Dos personas de mano de obra son dos guardados (D-019, punto 3).
+
+## D-021 — Preventivos por calendario
+
+**Estado:** Aceptada
+
+1. **Un plan es de una máquina** y tiene tareas. Cada tarea tiene su frecuencia: cada N días, semanas, meses o años. Una máquina puede tener varios planes, por ejemplo uno mecánico y uno eléctrico, cada uno con su responsable.
+2. **La próxima fecha se calcula, no se guarda.** Es la última ejecución más la frecuencia; sin ejecuciones, la primera fecha que se cargó. La última ejecución es la fecha de finalización de la última intervención finalizada, no eliminada, con esa tarea marcada como hecha. Así, reabrir, cancelar, eliminar o corregir la fecha de una intervención mueve la próxima fecha sin ningún paso extra.
+3. **Se cuenta desde la última ejecución,** no desde la fecha que tocaba. Si un cambio de aceite cada 6 meses se hizo con un mes de atraso, el próximo es 6 meses después de cuando se hizo.
+4. **La intervención se genera a pedido.** Un usuario con `PLANES_GESTIONAR` genera, desde el plan, una intervención `PREVENTIVO` con las tareas que vencen. Sigue el mismo circuito que una correctiva: estados, tiempos, repuestos, costos y detenciones. La generación automática y los avisos de vencimiento quedan para la PV5, porque necesitan un disparador programado y un autor que no es una persona.
+5. **Una tarea está en una sola intervención abierta a la vez.** Mientras está en una, no se vuelve a generar.
+6. **"Hoy" es el de la instalación,** según su zona horaria (`configuracion_sistema.zona_horaria`), no el del servidor.
+
+**Motivo:** cumplir los requisitos 5 y 8 con lo mínimo que funciona de punta a punta, y dejar el modelo listo para los medidores (PV3).

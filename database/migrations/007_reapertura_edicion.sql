@@ -2,6 +2,8 @@
 BEGIN;
 
 -- 1. Ampliar el CHECK de intervencion_auditoria agregando 'EDICION'
+-- CORRECCION_TAREA es de la 018 (PV1): va también acá para que reaplicar esta
+-- migración no la saque.
 ALTER TABLE intervencion_auditoria
     DROP CONSTRAINT IF EXISTS ck_intervencion_auditoria_evento;
 
@@ -12,6 +14,7 @@ ALTER TABLE intervencion_auditoria
         'DESASIGNACION',
         'CORRECCION_FECHA',
         'CORRECCION_COSTO',
+        'CORRECCION_TAREA',
         'ELIMINACION_LOGICA',
         'REAPERTURA',
         'EDICION',
