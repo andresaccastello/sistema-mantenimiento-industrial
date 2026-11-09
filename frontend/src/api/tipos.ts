@@ -148,6 +148,8 @@ export interface IntervencionLista {
   id: number;
   descripcion: string;
   estado: string;
+  tipo: TipoIntervencion;
+  plan: PlanResumen | null;
   ejecucion: string | null;
   fecha_creacion: string;
   fecha_inicio: string | null;
@@ -219,6 +221,8 @@ export interface IntervencionDetalle {
   id: number;
   descripcion: string;
   estado: string;
+  tipo: TipoIntervencion;
+  plan: PlanResumen | null;
   ejecucion: string | null;
   observaciones: string | null;
   trabajo_realizado: string | null;
@@ -1013,4 +1017,190 @@ export interface CuerpoLoteCostos {
 /** Respuesta 201 del lote: cada renglón como el `POST` de uno, en el orden del pedido. */
 export interface LoteCostosRespuesta {
   renglones: RenglonCosto[];
+}
+
+// ---------------------------------------------------------------------------
+// Preventivos por calendario (Etapa PV1, D-021)
+// ---------------------------------------------------------------------------
+
+/** El tipo de una intervención, de `tipos_intervencion`. */
+export type TipoIntervencion = 'CORRECTIVO' | 'PREVENTIVO';
+
+/** El plan de una intervención preventiva, en la lista y el detalle. */
+export interface PlanResumen {
+  id: number;
+  nombre: string;
+}
+
+export type FrecuenciaUnidad = 'DIAS' | 'SEMANAS' | 'MESES' | 'ANIOS';
+
+/** El estado de una tarea, calculado por la vista `v_plan_tareas_estado`. */
+export type EstadoTareaPlan = 'INACTIVA' | 'EN_CURSO' | 'VENCIDA' | 'PROXIMA' | 'AL_DIA';
+
+/** Los estados que se piden en `GET /api/planes/vencimientos`. */
+export type EstadoVencimiento = Exclude<EstadoTareaPlan, 'INACTIVA'>;
+
+export interface RepuestoSugerido {
+  id: number;
+  codigo: string | null;
+  nombre: string;
+  unidad: string;
+}
+
+export interface ProveedorSugerido {
+  id: number;
+  nombre: string;
+}
+
+export interface IntervencionEnCurso {
+  id: number;
+  estado: string;
+}
+
+export interface PlanMaquina {
+  id: number;
+  codigo: string | null;
+  nombre: string;
+  activo: boolean;
+  sector: SectorSimple;
+}
+
+/** Una tarea del plan con su estado (sección 4.3). Las fechas, `YYYY-MM-DD`. */
+export interface TareaPlan {
+  id: number;
+  orden: number;
+  accion: string;
+  detalle: string | null;
+  frecuencia_valor: number;
+  frecuencia_unidad: FrecuenciaUnidad;
+  primera_fecha: string;
+  repuesto: RepuestoSugerido | null;
+  cantidad: number | null;
+  proveedor: ProveedorSugerido | null;
+  activo: boolean;
+  ultima_ejecucion: string | null;
+  proxima_fecha: string;
+  /** Negativo si está vencida. */
+  dias: number;
+  estado: EstadoTareaPlan;
+  intervencion_en_curso: IntervencionEnCurso | null;
+}
+
+/** Las últimas 20 intervenciones del plan, no eliminadas. */
+export interface PlanIntervencion {
+  id: number;
+  estado: string;
+  fecha_creacion: string;
+  fecha_finalizacion: string | null;
+  responsable: Persona | null;
+}
+
+/** `GET /api/planes/:id`, y la respuesta de los cambios del plan y de sus tareas. */
+export interface PlanDetalle {
+  id: number;
+  nombre: string;
+  descripcion: string | null;
+  activo: boolean;
+  anticipacion_dias: number;
+  hoy: string;
+  maquina: PlanMaquina;
+  responsable: Persona | null;
+  creado_por: Persona;
+  creado_en: string;
+  actualizado_en: string;
+  tareas: TareaPlan[];
+  intervenciones: PlanIntervencion[];
+}
+
+/** Un elemento de `GET /api/planes`. */
+export interface PlanLista {
+  id: number;
+  nombre: string;
+  activo: boolean;
+  anticipacion_dias: number;
+  maquina: PlanMaquina;
+  responsable: Persona | null;
+  tareas_activas: number;
+  vencidas: number;
+  proximas: number;
+  en_curso: number;
+  /** La menor de sus tareas activas que no están en curso. */
+  proxima_fecha: string | null;
+}
+
+/** Una tarea de `GET /api/planes/vencimientos`. */
+export interface VencimientoTarea {
+  tarea_id: number;
+  accion: string;
+  frecuencia_valor: number;
+  frecuencia_unidad: FrecuenciaUnidad;
+  ultima_ejecucion: string | null;
+  proxima_fecha: string;
+  dias: number;
+  estado: EstadoVencimiento;
+  intervencion_en_curso: IntervencionEnCurso | null;
+  plan: PlanResumen;
+  maquina: {
+    id: number;
+    codigo: string | null;
+    nombre: string;
+    criticidad: { nombre: string; prioridad_alta: boolean };
+  };
+  sector: SectorSimple;
+  /** El responsable del plan. */
+  responsable: Persona | null;
+}
+
+/** `GET /api/planes/vencimientos`, con `X-Total-Count`. */
+export interface VencimientosRespuesta {
+  hoy: string;
+  /** Con los mismos filtros, salvo `estado`. */
+  resumen: { vencidas: number; proximas: number; en_curso: number; al_dia: number };
+  tareas: VencimientoTarea[];
+}
+
+/** `POST /api/planes/:id/generar` (201). */
+export interface GeneracionRespuesta {
+  intervencion: { id: number; estado: string; responsable: Persona | null };
+  /** El plan tenía un responsable que ya no está habilitado: quedó sin asignar. */
+  responsable_omitido: boolean;
+  tareas: Array<{
+    id: number;
+    plan_tarea_id: number;
+    orden: number;
+    accion: string;
+    fecha_programada: string;
+  }>;
+}
+
+/**
+ * Una tarea de una intervención preventiva. El repuesto, la cantidad y el proveedor
+ * son la sugerencia de la tarea del plan de hoy, no lo que se usó.
+ */
+export interface TareaIntervencion {
+  id: number;
+  plan_tarea_id: number;
+  orden: number;
+  accion: string;
+  detalle: string | null;
+  fecha_programada: string;
+  repuesto: RepuestoSugerido | null;
+  cantidad: number | null;
+  proveedor: ProveedorSugerido | null;
+  hecha: boolean;
+  hecha_por: Persona | null;
+  hecha_en: string | null;
+  observacion: string | null;
+}
+
+/** `GET /api/intervenciones/:id/tareas`. Sin plan: sin tareas y `puede_marcar` en false. */
+export interface IntervencionTareasRespuesta {
+  tareas: TareaIntervencion[];
+  resumen: { total: number; hechas: number };
+  puede_marcar: boolean;
+}
+
+/** `PATCH /api/intervenciones/:id/tareas/:tareaId`: la tarea, con la próxima fecha de la del plan. */
+export interface TareaIntervencionMarcada extends TareaIntervencion {
+  proxima_fecha: string;
 }

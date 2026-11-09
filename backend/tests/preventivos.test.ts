@@ -5,6 +5,14 @@ import { sign } from 'hono/jwt';
 import { pool } from '../functions/db.ts';
 import app from '../functions/api.ts';
 import { JWT_SECRET } from '../functions/config.ts';
+import { mismaForma } from './contrato.ts';
+import {
+  planDetalleEjemplo,
+  planListaEjemplo,
+  vencimientosEjemplo,
+  generacionEjemplo,
+  tareasIntervencionEjemplo,
+} from '../../frontend/src/api/contrato-preventivos.ts';
 
 // Timeout de bloqueo para las pruebas de concurrencia
 process.env.LOCK_TIMEOUT = '5s';
@@ -71,7 +79,7 @@ function sumarAnios(fecha: string, anios: number): string {
   return `${Number(fecha.slice(0, 4)) + anios}${fecha.slice(4)}`;
 }
 
-test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-05)', async (t) => {
+test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-12)', async (t) => {
   const client = await pool.connect();
 
   const createdPlantaIds: number[] = [];
@@ -262,6 +270,7 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-05)', async (t) => {
         ['PATCH', `/api/planes/${p1.id}/tareas/${t1}`, { accion: 'Cambio de O' }],
         ['POST', `/api/planes/${p1.id}/tareas/${t1}/desactivar`, {}],
         ['POST', `/api/planes/${p1.id}/tareas/${t1}/reactivar`, {}],
+        ['POST', `/api/planes/${p1.id}/generar`, {}],
       ];
       for (const [metodo, ruta, cuerpo] of rutasO) {
         const r = await pedir(metodo, ruta, O.token, cuerpo);
@@ -603,6 +612,471 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-05)', async (t) => {
       for (const malo of ['limit=0', 'limit=501', 'limit=1.5', 'offset=-1']) {
         assert.strictEqual((await venc(malo)).status, 422, malo);
       }
+    });
+
+    // -------------------------------------------------------------------------
+    // Helpers de las intervenciones preventivas (PV-06 a PV-12)
+    // -------------------------------------------------------------------------
+    const generar = (planId: number, body?: unknown, token = A.token) =>
+      pedir('POST', `/api/planes/${planId}/generar`, token, body);
+    async function generarOk(planId: number, body?: unknown, token = A.token) {
+      const r = await generar(planId, body, token);
+      assert.strictEqual(r.status, 201, JSON.stringify(r.cuerpo));
+      return r.cuerpo;
+    }
+    const accion = (id: number, nombre: string, body: unknown, token = R.token) =>
+      pedir('POST', `/api/intervenciones/${id}/${nombre}`, token, body);
+    async function accionOk(id: number, nombre: string, body: unknown, token = R.token) {
+      const r = await accion(id, nombre, body, token);
+      assert.strictEqual(r.status, 200, `${nombre}: ${JSON.stringify(r.cuerpo)}`);
+    }
+    const iniciar = (id: number) => accionOk(id, 'iniciar', { estado_esperado: 'PENDIENTE' });
+    const finalizar = (id: number) =>
+      accionOk(id, 'finalizar', { estado_esperado: 'EN_PROCESO', trabajo_realizado: 'Preventivo hecho', ejecucion: 'INTERNA' });
+    const marcar = (intId: number, tareaId: number, body: unknown, token = R.token) =>
+      pedir('PATCH', `/api/intervenciones/${intId}/tareas/${tareaId}`, token, body);
+    const tareasDe = (intId: number, token = A.token) => pedir('GET', `/api/intervenciones/${intId}/tareas`, token);
+    const detallePlan = async (planId: number) => (await pedir('GET', `/api/planes/${planId}`, A.token)).cuerpo;
+    const tareaDelPlan = async (planId: number, tareaId: number) =>
+      (await detallePlan(planId)).tareas.find((x: any) => x.id === tareaId);
+    const intervencionesDelPlan = async (planId: number) =>
+      Number((await client.query('SELECT count(*)::int AS n FROM intervenciones WHERE plan_mantenimiento_id = $1', [planId])).rows[0].n);
+    /** hoy más un intervalo de PostgreSQL, como YYYY-MM-DD. */
+    const hoyMas = async (intervalo: string) =>
+      (await client.query(`SELECT to_char(($1::date + $2::interval)::date, 'YYYY-MM-DD') AS f`, [hoy, intervalo])).rows[0].f as string;
+
+    // =========================================================================
+    // PV-06: Generar
+    // =========================================================================
+    await t.test('PV-06: Generar', async () => {
+      const p = await crearPlan(m1, [
+        tarea(sumarDias(hoy, -3), { accion: 'Vencida' }),
+        tarea(hoy, { accion: 'Próxima hoy' }),
+        tarea(sumarDias(hoy, 5), { accion: 'Próxima en 5', detalle: 'Con cuidado' }),
+        tarea(sumarDias(hoy, 30), { accion: 'Al día' }),
+      ], { responsable_usuario_id: R.id, anticipacion_dias: 7 });
+      const [tv, tp0, tp5, tad] = p.tareas.map((x: any) => x.id);
+
+      // Sin cuerpo: la vencida y las próximas, no la AL_DIA
+      const g = await generarOk(p.id);
+      const intId = g.intervencion.id;
+      assert.deepStrictEqual(g.intervencion, {
+        id: intId,
+        estado: 'PENDIENTE',
+        responsable: { id: R.id, legajo: `PV_R_${suf}`, nombre: 'Resp', apellido: 'PV' },
+      });
+      assert.strictEqual(g.responsable_omitido, false);
+      assert.deepStrictEqual(
+        g.tareas.map((x: any) => ({ ...x, id: 0 })),
+        [
+          { id: 0, plan_tarea_id: tv, orden: 1, accion: 'Vencida', fecha_programada: sumarDias(hoy, -3) },
+          { id: 0, plan_tarea_id: tp0, orden: 2, accion: 'Próxima hoy', fecha_programada: hoy },
+          { id: 0, plan_tarea_id: tp5, orden: 3, accion: 'Próxima en 5', fecha_programada: sumarDias(hoy, 5) },
+        ]
+      );
+
+      // La intervención: PREVENTIVO, PENDIENTE, con el plan, la descripción y el historial
+      const resI = await client.query(
+        `SELECT i.estado, ti.codigo AS tipo, i.plan_mantenimiento_id, i.descripcion, i.creado_por_usuario_id,
+                i.responsable_usuario_id
+         FROM intervenciones i JOIN tipos_intervencion ti ON ti.id = i.tipo_intervencion_id WHERE i.id = $1`,
+        [intId]
+      );
+      assert.deepStrictEqual(resI.rows[0], {
+        estado: 'PENDIENTE',
+        tipo: 'PREVENTIVO',
+        plan_mantenimiento_id: String(p.id),
+        descripcion: `Preventivo: ${p.nombre}. Tareas: Vencida; Próxima hoy; Próxima en 5.`,
+        creado_por_usuario_id: String(A.id),
+        responsable_usuario_id: String(R.id),
+      });
+      const resH = await client.query(
+        'SELECT estado_anterior, estado_nuevo, observacion, cambiado_por_usuario_id FROM historial_estados_intervencion WHERE intervencion_id = $1',
+        [intId]
+      );
+      assert.deepStrictEqual(resH.rows, [{
+        estado_anterior: null,
+        estado_nuevo: 'PENDIENTE',
+        observacion: `Generada desde el plan «${p.nombre}»`,
+        cambiado_por_usuario_id: String(A.id),
+      }]);
+      const resT = await client.query(
+        `SELECT plan_tarea_id, orden, accion, detalle, to_char(fecha_programada, 'YYYY-MM-DD') AS fp, hecha
+         FROM intervencion_tareas WHERE intervencion_id = $1 ORDER BY orden`,
+        [intId]
+      );
+      assert.deepStrictEqual(resT.rows[2], {
+        plan_tarea_id: String(tp5), orden: 3, accion: 'Próxima en 5', detalle: 'Con cuidado', fp: sumarDias(hoy, 5), hecha: false,
+      });
+
+      // El responsable: auditoría ASIGNACION y una notificación para él, ninguna para quien genera
+      const resA = await client.query(
+        'SELECT tipo_evento, valor_anterior, valor_nuevo, motivo, realizado_por_usuario_id FROM intervencion_auditoria WHERE intervencion_id = $1',
+        [intId]
+      );
+      assert.deepStrictEqual(resA.rows, [{
+        tipo_evento: 'ASIGNACION',
+        valor_anterior: null,
+        valor_nuevo: String(R.id),
+        motivo: 'Responsable del plan preventivo',
+        realizado_por_usuario_id: String(A.id),
+      }]);
+      const resN = await client.query(
+        'SELECT usuario_id, tipo_evento FROM notificaciones WHERE intervencion_id = $1 ORDER BY id',
+        [intId]
+      );
+      assert.deepStrictEqual(resN.rows, [{ usuario_id: String(R.id), tipo_evento: 'INTERVENCION_ASIGNADA' }]);
+
+      // Esas tareas pasan a EN_CURSO; generar otra vez: 409
+      const d = await detallePlan(p.id);
+      assert.deepStrictEqual(
+        d.tareas.map((x: any) => [x.estado, x.intervencion_en_curso]),
+        [
+          ['EN_CURSO', { id: intId, estado: 'PENDIENTE' }],
+          ['EN_CURSO', { id: intId, estado: 'PENDIENTE' }],
+          ['EN_CURSO', { id: intId, estado: 'PENDIENTE' }],
+          ['AL_DIA', null],
+        ]
+      );
+      assert.deepStrictEqual(d.intervenciones.map((x: any) => x.id), [intId]);
+      const otra = await generar(p.id);
+      assert.deepStrictEqual([otra.status, otra.cuerpo.codigo], [409, 'SIN_TAREAS_PARA_GENERAR']);
+
+      // Con tarea_ids de una AL_DIA: 201
+      const g2 = await generarOk(p.id, { tarea_ids: [tad] });
+      assert.deepStrictEqual(g2.tareas.map((x: any) => x.plan_tarea_id), [tad]);
+
+      // Una en curso: 409 con sus detalles
+      const enCurso = await generar(p.id, { tarea_ids: [tv] });
+      assert.deepStrictEqual(
+        [enCurso.status, enCurso.cuerpo.codigo, enCurso.cuerpo.tarea_id, enCurso.cuerpo.intervencion_id],
+        [409, 'TAREA_EN_CURSO', tv, intId]
+      );
+
+      // Una de otro plan, o inactiva: 422 TAREA_INVALIDA
+      const otroPlan = await crearPlan(m1, [tarea(hoy)]);
+      const ajena = otroPlan.tareas[0].id;
+      const rAjena = await generar(p.id, { tarea_ids: [ajena] });
+      assert.deepStrictEqual([rAjena.status, rAjena.cuerpo.codigo, rAjena.cuerpo.tarea_id], [422, 'TAREA_INVALIDA', ajena]);
+      const conNueva = await pedir('POST', `/api/planes/${p.id}/tareas`, A.token, tarea(hoy, { accion: 'Se desactiva' }));
+      const inactiva = conNueva.cuerpo.tareas[conNueva.cuerpo.tareas.length - 1].id;
+      assert.strictEqual((await pedir('POST', `/api/planes/${p.id}/tareas/${inactiva}/desactivar`, A.token, {})).status, 200);
+      const rInactiva = await generar(p.id, { tarea_ids: [inactiva] });
+      assert.deepStrictEqual([rInactiva.status, rInactiva.cuerpo.codigo, rInactiva.cuerpo.tarea_id], [422, 'TAREA_INVALIDA', inactiva]);
+
+      // tarea_ids con repetidos, con un id como texto, vacío o que no es un arreglo: 422
+      for (const tareaIds of [[ajena, ajena], [String(ajena)], [], ajena, [true]]) {
+        const rr = await generar(otroPlan.id, { tarea_ids: tareaIds });
+        assert.deepStrictEqual([rr.status, rr.cuerpo.codigo], [422, 'DATOS_INVALIDOS'], JSON.stringify(tareaIds));
+      }
+      assert.strictEqual(await intervencionesDelPlan(otroPlan.id), 0, 'Nada se generó con los errores');
+
+      // Plan inactivo: 409. Máquina inactiva: 422.
+      assert.strictEqual((await pedir('POST', `/api/planes/${otroPlan.id}/desactivar`, A.token, {})).status, 200);
+      const rPlanInactivo = await generar(otroPlan.id);
+      assert.deepStrictEqual([rPlanInactivo.status, rPlanInactivo.cuerpo.codigo], [409, 'PLAN_INACTIVO']);
+      const m6 = await crearMaquina('M6', s1);
+      const pM6 = await crearPlan(m6, [tarea(hoy)]);
+      await client.query('UPDATE maquinas SET activo = FALSE WHERE id = $1', [m6]);
+      const rMaqInactiva = await generar(pM6.id);
+      assert.deepStrictEqual([rMaqInactiva.status, rMaqInactiva.cuerpo.codigo], [422, 'MAQUINA_INACTIVA']);
+      assert.strictEqual(await intervencionesDelPlan(otroPlan.id), 0);
+      assert.strictEqual(await intervencionesDelPlan(pM6.id), 0);
+
+      // Un responsable del plan desactivado después: 201, sin responsable
+      const Rx = await crearUsuario('Rx', 'RespTemporal', 'RESPONSABLE_MANTENIMIENTO', [s1, s2]);
+      const pRx = await crearPlan(m1, [tarea(hoy)], { responsable_usuario_id: Rx.id });
+      await client.query('UPDATE usuarios SET activo = FALSE WHERE id = $1', [Rx.id]);
+      const gRx = await generarOk(pRx.id);
+      assert.deepStrictEqual([gRx.intervencion.responsable, gRx.responsable_omitido], [null, true]);
+      const resRx = await client.query(
+        'SELECT responsable_usuario_id FROM intervenciones WHERE id = $1', [gRx.intervencion.id]
+      );
+      assert.strictEqual(resRx.rows[0].responsable_usuario_id, null);
+      const audRx = await client.query('SELECT count(*)::int AS n FROM intervencion_auditoria WHERE intervencion_id = $1', [gRx.intervencion.id]);
+      assert.strictEqual(audRx.rows[0].n, 0);
+
+      // Ninguna FALLA_REGISTRADA para las generadas
+      const fallas = await client.query(
+        `SELECT count(*)::int AS n FROM notificaciones
+         WHERE tipo_evento = 'FALLA_REGISTRADA' AND intervencion_id IN (SELECT id FROM intervenciones WHERE plan_mantenimiento_id IS NOT NULL AND maquina_id = ANY($1))`,
+        [createdMaquinaIds]
+      );
+      assert.strictEqual(fallas.rows[0].n, 0);
+    });
+
+    // =========================================================================
+    // PV-07: Marcar tareas
+    // =========================================================================
+    await t.test('PV-07: Marcar tareas', async () => {
+      const p = await crearPlan(m1, [
+        tarea(sumarDias(hoy, -1), { accion: 'Tarea X' }),
+        tarea(sumarDias(hoy, -1), { accion: 'Tarea Y' }),
+      ], { responsable_usuario_id: R.id });
+      const g = await generarOk(p.id);
+      const intId = g.intervencion.id;
+      const [x, y] = g.tareas;
+
+      // En PENDIENTE, el responsable R marca
+      const r1 = await marcar(intId, x.id, { hecha: true, observacion: 'Sin novedades' });
+      assert.strictEqual(r1.status, 200, JSON.stringify(r1.cuerpo));
+      assert.deepStrictEqual(
+        [r1.cuerpo.hecha, r1.cuerpo.hecha_por, r1.cuerpo.observacion, typeof r1.cuerpo.hecha_en, r1.cuerpo.proxima_fecha],
+        [true, { id: R.id, legajo: `PV_R_${suf}`, nombre: 'Resp', apellido: 'PV' }, 'Sin novedades', 'string', sumarDias(hoy, -1)]
+      );
+
+      // R2 y O: 403
+      for (const [quien, token] of [['R2', R2.token], ['O', O.token]]) {
+        const rr = await marcar(intId, y.id, { hecha: true }, token);
+        assert.deepStrictEqual([rr.status, rr.cuerpo.codigo], [403, 'PERMISO_INSUFICIENTE'], quien);
+      }
+
+      // hecha: "true", y una observación de 501 caracteres: 422
+      const r2 = await marcar(intId, y.id, { hecha: 'true' });
+      assert.deepStrictEqual([r2.status, r2.cuerpo.codigo], [422, 'DATOS_INVALIDOS']);
+      const r3 = await marcar(intId, y.id, { hecha: true, observacion: 'x'.repeat(501) });
+      assert.deepStrictEqual([r3.status, r3.cuerpo.codigo], [422, 'DATOS_INVALIDOS']);
+
+      // Repetir el mismo valor: 200, sin cambios
+      const fila = async (id: number) =>
+        (await client.query('SELECT hecha, hecha_por_usuario_id, hecha_en, observacion FROM intervencion_tareas WHERE id = $1', [id])).rows[0];
+      const antes = await fila(x.id);
+      const r4 = await marcar(intId, x.id, { hecha: true }, A.token);
+      assert.strictEqual(r4.status, 200);
+      assert.deepStrictEqual(await fila(x.id), antes, 'Nada cambió');
+      assert.strictEqual((await fila(y.id)).hecha, false, 'Los rechazos no cambiaron Y');
+
+      // Una tarea de otra intervención: 404
+      const pOtro = await crearPlan(m1, [tarea(hoy)]);
+      const gOtro = await generarOk(pOtro.id);
+      const r5 = await marcar(intId, gOtro.tareas[0].id, { hecha: true });
+      assert.deepStrictEqual([r5.status, r5.cuerpo.codigo], [404, 'TAREA_NO_ENCONTRADA']);
+
+      // Cancelada: 409
+      await accionOk(gOtro.intervencion.id, 'cancelar', { estado_esperado: 'PENDIENTE', motivo: 'Cancelada prueba PV' }, A.token);
+      const r6 = await marcar(gOtro.intervencion.id, gOtro.tareas[0].id, { hecha: true }, A.token);
+      assert.deepStrictEqual([r6.status, r6.cuerpo.codigo], [409, 'ESTADO_NO_PERMITE_TAREAS']);
+
+      // Finalizada
+      await iniciar(intId);
+      await finalizar(intId);
+      const auditorias = async () =>
+        (await client.query(
+          `SELECT valor_nuevo, motivo, realizado_por_usuario_id FROM intervencion_auditoria
+           WHERE intervencion_id = $1 AND tipo_evento = 'CORRECCION_TAREA' ORDER BY id`,
+          [intId]
+        )).rows;
+
+      const r7 = await marcar(intId, y.id, { hecha: true, motivo: 'Se hizo y no se marcó' }, R.token);
+      assert.deepStrictEqual([r7.status, r7.cuerpo.codigo], [403, 'PERMISO_INSUFICIENTE'], 'R sin INTERVENCIONES_CORREGIR');
+      const r8 = await marcar(intId, y.id, { hecha: true }, A.token);
+      assert.deepStrictEqual([r8.status, r8.cuerpo.codigo], [422, 'MOTIVO_REQUERIDO']);
+      assert.deepStrictEqual(await auditorias(), []);
+
+      const antesY = await tareaDelPlan(p.id, y.plan_tarea_id);
+      assert.deepStrictEqual([antesY.ultima_ejecucion, antesY.estado], [null, 'VENCIDA']);
+      const r9 = await marcar(intId, y.id, { hecha: true, motivo: 'Se hizo y no se marcó' }, A.token);
+      assert.strictEqual(r9.status, 200, JSON.stringify(r9.cuerpo));
+      const proxima = await hoyMas('1 month');
+      assert.deepStrictEqual([r9.cuerpo.hecha, r9.cuerpo.hecha_por.id, r9.cuerpo.proxima_fecha], [true, A.id, proxima]);
+      const despuesY = await tareaDelPlan(p.id, y.plan_tarea_id);
+      assert.deepStrictEqual([despuesY.ultima_ejecucion, despuesY.proxima_fecha, despuesY.estado], [hoy, proxima, 'AL_DIA']);
+
+      // La observación con la intervención finalizada también queda en la auditoría
+      const r10 = await marcar(intId, y.id, { hecha: true, observacion: 'Faltó el filtro', motivo: 'Dato del técnico' }, A.token);
+      assert.strictEqual(r10.status, 200);
+      assert.deepStrictEqual(await auditorias(), [
+        { valor_nuevo: 'Se marcó como hecha: Tarea Y', motivo: 'Se hizo y no se marcó', realizado_por_usuario_id: String(A.id) },
+        { valor_nuevo: 'Se cambió la observación: Tarea Y', motivo: 'Dato del técnico', realizado_por_usuario_id: String(A.id) },
+      ]);
+
+      // Desmarcar: vuelve a VENCIDA
+      const r11 = await marcar(intId, y.id, { hecha: false, motivo: 'Se marcó por error' }, A.token);
+      assert.deepStrictEqual([r11.status, r11.cuerpo.hecha, r11.cuerpo.hecha_por, r11.cuerpo.hecha_en], [200, false, null, null]);
+      assert.strictEqual((await auditorias())[2].valor_nuevo, 'Se desmarcó: Tarea Y');
+      assert.strictEqual((await tareaDelPlan(p.id, y.plan_tarea_id)).estado, 'VENCIDA');
+    });
+
+    // =========================================================================
+    // PV-08: La próxima fecha se mueve sola
+    // =========================================================================
+    await t.test('PV-08: La próxima fecha se mueve sola', async () => {
+      const p = await crearPlan(m1, [
+        tarea(sumarDias(hoy, -10), { accion: 'Tarea X', frecuencia_valor: 2 }),
+        tarea(sumarDias(hoy, -10), { accion: 'Tarea Y' }),
+      ], { responsable_usuario_id: R.id });
+      const g = await generarOk(p.id);
+      const intId = g.intervencion.id;
+      const [x, y] = g.tareas;
+
+      // Finalizar con X hecha e Y sin marcar
+      await iniciar(intId);
+      assert.strictEqual((await marcar(intId, x.id, { hecha: true })).status, 200);
+      await finalizar(intId);
+      const enDos = await hoyMas('2 months');
+      const fx = await tareaDelPlan(p.id, x.plan_tarea_id);
+      assert.deepStrictEqual([fx.ultima_ejecucion, fx.proxima_fecha, fx.estado], [hoy, enDos, 'AL_DIA']);
+      const fy = await tareaDelPlan(p.id, y.plan_tarea_id);
+      assert.deepStrictEqual([fy.ultima_ejecucion, fy.estado, fy.intervencion_en_curso], [null, 'VENCIDA', null]);
+
+      // Reabrir: X vuelve a su próxima fecha anterior y a EN_CURSO
+      await accionOk(intId, 'reabrir', { estado_esperado: 'FINALIZADA', motivo: 'Sigue perdiendo aceite', maquina_detenida: false });
+      const rx = await tareaDelPlan(p.id, x.plan_tarea_id);
+      assert.deepStrictEqual(
+        [rx.ultima_ejecucion, rx.proxima_fecha, rx.estado, rx.intervencion_en_curso?.id],
+        [null, sumarDias(hoy, -10), 'EN_CURSO', intId]
+      );
+
+      // Cancelar otra intervención preventiva: sus tareas vuelven a estar disponibles
+      const p2 = await crearPlan(m1, [tarea(sumarDias(hoy, -2), { accion: 'Tarea Z' })], { responsable_usuario_id: R.id });
+      const z = p2.tareas[0].id;
+      const g2 = await generarOk(p2.id);
+      assert.strictEqual((await tareaDelPlan(p2.id, z)).estado, 'EN_CURSO');
+      await accionOk(g2.intervencion.id, 'cancelar', { estado_esperado: 'PENDIENTE', motivo: 'Se reprograma' });
+      assert.strictEqual((await tareaDelPlan(p2.id, z)).estado, 'VENCIDA');
+      const g3 = await generarOk(p2.id);
+      assert.deepStrictEqual(g3.tareas.map((t3: any) => t3.plan_tarea_id), [z]);
+
+      // Eliminar una: lo mismo
+      await accionOk(g3.intervencion.id, 'eliminar', { motivo: 'Generada de más' });
+      assert.strictEqual((await tareaDelPlan(p2.id, z)).estado, 'VENCIDA');
+      const g4 = await generarOk(p2.id);
+      assert.deepStrictEqual(g4.tareas.map((t4: any) => t4.plan_tarea_id), [z]);
+      // La eliminada no aparece en las del plan
+      const ids = (await detallePlan(p2.id)).intervenciones.map((i: any) => i.id);
+      assert.deepStrictEqual(ids, [g4.intervencion.id, g2.intervencion.id]);
+    });
+
+    // =========================================================================
+    // PV-09: Concurrencia
+    // =========================================================================
+    await t.test('PV-09: Concurrencia', async () => {
+      for (let vuelta = 1; vuelta <= 10; vuelta++) {
+        // Dos generar a la vez del mismo plan
+        const p = await crearPlan(m1, [tarea(sumarDias(hoy, -1)), tarea(hoy)]);
+        const [a, b] = await Promise.all([generar(p.id), generar(p.id)]);
+        const estados = [a.status, b.status].sort();
+        assert.deepStrictEqual(estados, [201, 409], `Vuelta ${vuelta}: ${JSON.stringify([a.cuerpo, b.cuerpo])}`);
+        const perdedor = a.status === 409 ? a : b;
+        assert.strictEqual(perdedor.cuerpo.codigo, 'SIN_TAREAS_PARA_GENERAR');
+        const resUna = await client.query(
+          `SELECT plan_tarea_id, count(*)::int AS n FROM intervencion_tareas
+           WHERE plan_tarea_id = ANY($1) GROUP BY plan_tarea_id`,
+          [p.tareas.map((x: any) => x.id)]
+        );
+        assert.deepStrictEqual(resUna.rows.map((r) => r.n), [1, 1], `Vuelta ${vuelta}: cada tarea en una sola intervención`);
+
+        // Generar y desactivar el plan a la vez
+        const q = await crearPlan(m1, [tarea(sumarDias(hoy, -1))]);
+        const [gen, des] = await Promise.all([generar(q.id), pedir('POST', `/api/planes/${q.id}/desactivar`, A.token, {})]);
+        assert.strictEqual(des.status, 200, `Vuelta ${vuelta}: ${JSON.stringify(des.cuerpo)}`);
+        const generadas = await intervencionesDelPlan(q.id);
+        if (gen.status === 201) {
+          assert.strictEqual(generadas, 1, `Vuelta ${vuelta}`);
+        } else {
+          assert.deepStrictEqual([gen.status, gen.cuerpo.codigo, generadas], [409, 'PLAN_INACTIVO', 0], `Vuelta ${vuelta}`);
+        }
+        assert.strictEqual((await detallePlan(q.id)).activo, false);
+
+        // Dos altas a la vez con el mismo nombre en la misma máquina
+        const cuerpo = { maquina_id: m1, nombre: `Plan simultáneo ${vuelta}`, tareas: [tarea(hoy)] };
+        const [c1, c2] = await Promise.all([
+          pedir('POST', '/api/planes', A.token, cuerpo),
+          pedir('POST', '/api/planes', A.token, { ...cuerpo, nombre: `plan simultáneo ${vuelta}` }),
+        ]);
+        assert.deepStrictEqual([c1.status, c2.status].sort(), [201, 409], `Vuelta ${vuelta}: ${JSON.stringify([c1.cuerpo, c2.cuerpo])}`);
+        assert.strictEqual((c1.status === 409 ? c1 : c2).cuerpo.codigo, 'PLAN_DUPLICADO');
+      }
+    });
+
+    // =========================================================================
+    // PV-10: tipo y plan
+    // =========================================================================
+    await t.test('PV-10: tipo y plan', async () => {
+      const m7 = await crearMaquina('M7', s1);
+      const rFalla = await pedir('POST', '/api/intervenciones', O.token, { maquina_id: m7, descripcion: 'Falla prueba PV' });
+      assert.strictEqual(rFalla.status, 201, JSON.stringify(rFalla.cuerpo));
+      const correctiva = rFalla.cuerpo.id;
+      const p = await crearPlan(m7, [tarea(hoy)]);
+      const preventiva = (await generarOk(p.id)).intervencion.id;
+
+      const lista = (await pedir('GET', `/api/intervenciones?maquina_id=${m7}`, A.token)).cuerpo;
+      const enLista = (id: number) => lista.find((i: any) => i.id === id);
+      assert.deepStrictEqual([enLista(correctiva).tipo, enLista(correctiva).plan], ['CORRECTIVO', null]);
+      assert.deepStrictEqual([enLista(preventiva).tipo, enLista(preventiva).plan], ['PREVENTIVO', { id: p.id, nombre: p.nombre }]);
+
+      const detC = (await pedir('GET', `/api/intervenciones/${correctiva}`, A.token)).cuerpo;
+      assert.deepStrictEqual([detC.tipo, detC.plan], ['CORRECTIVO', null]);
+      const detP = (await pedir('GET', `/api/intervenciones/${preventiva}`, A.token)).cuerpo;
+      assert.deepStrictEqual([detP.tipo, detP.plan], ['PREVENTIVO', { id: p.id, nombre: p.nombre }]);
+
+      const soloPrev = (await pedir('GET', `/api/intervenciones?maquina_id=${m7}&tipo=PREVENTIVO`, A.token)).cuerpo;
+      assert.deepStrictEqual(soloPrev.map((i: any) => i.id), [preventiva]);
+    });
+
+    // =========================================================================
+    // PV-11: puede_marcar
+    // =========================================================================
+    await t.test('PV-11: puede_marcar', async () => {
+      const p = await crearPlan(m1, [tarea(sumarDias(hoy, -1), { accion: 'Tarea PV-11' })], { responsable_usuario_id: R.id });
+      const g = await generarOk(p.id);
+      const intId = g.intervencion.id;
+      const tareaId = g.tareas[0].id;
+      await iniciar(intId);
+
+      const usuarios: Array<[string, string]> = [['A', A.token], ['R', R.token], ['R2', R2.token], ['O', O.token]];
+      const comparar = async (estado: string, esperado: Record<string, boolean>) => {
+        for (const [quien, token] of usuarios) {
+          const get = await tareasDe(intId, token);
+          // El mismo valor que ya tiene: si puede, responde 200 sin cambiar nada
+          const patch = await marcar(intId, tareaId, { hecha: false, motivo: 'Control de PV-11' }, token);
+          if (quien === 'O') {
+            // O no ve la intervención: 404 en el GET y 403 en el PATCH
+            assert.strictEqual(get.status, 404, `${estado} ${quien}`);
+            assert.strictEqual(patch.status, 403, `${estado} ${quien}`);
+            continue;
+          }
+          assert.strictEqual(get.status, 200, `${estado} ${quien}`);
+          assert.strictEqual(get.cuerpo.puede_marcar, esperado[quien], `${estado} ${quien}: puede_marcar`);
+          assert.strictEqual(patch.status === 200, get.cuerpo.puede_marcar, `${estado} ${quien}: el PATCH dio ${patch.status}`);
+        }
+      };
+
+      await comparar('EN_PROCESO', { A: true, R: true, R2: false });
+      await finalizar(intId);
+      await comparar('FINALIZADA', { A: true, R: false, R2: false });
+
+      // Una intervención sin plan: sin tareas y sin marcar
+      const rFalla = await pedir('POST', '/api/intervenciones', O.token, { maquina_id: m1, descripcion: 'Falla prueba PV-11' });
+      const sinPlan = await tareasDe(rFalla.cuerpo.id);
+      assert.deepStrictEqual(sinPlan.cuerpo, { tareas: [], resumen: { total: 0, hechas: 0 }, puede_marcar: false });
+    });
+
+    // =========================================================================
+    // PV-12: Contrato
+    // =========================================================================
+    await t.test('PV-12: Contrato', async () => {
+      const p = await crearPlan(m1, [
+        tarea(sumarDias(hoy, -3), { accion: 'Cambiar el aceite', detalle: 'Con el equipo frío', repuesto_id: repId, cantidad: 2.5, proveedor_id: provId }),
+      ], { responsable_usuario_id: R.id, descripcion: 'Plan del contrato' });
+      const g = await generarOk(p.id);
+      assert.strictEqual((await marcar(g.intervencion.id, g.tareas[0].id, { hecha: true, observacion: 'Sin novedades' })).status, 200);
+
+      const detalle = await detallePlan(p.id);
+      const lista = (await pedir('GET', `/api/planes?maquina_id=${m1}`, A.token)).cuerpo.find((x: any) => x.id === p.id);
+      const vencimientos = (await pedir('GET', `/api/planes/vencimientos?maquina_id=${m1}&estado=EN_CURSO`, A.token)).cuerpo;
+      vencimientos.tareas = vencimientos.tareas.filter((x: any) => x.plan.id === p.id);
+      const tareas = (await tareasDe(g.intervencion.id)).cuerpo;
+
+      const verificar = (ruta: string, real: unknown, ejemplo: unknown) => {
+        const diferencias = mismaForma(real, ejemplo);
+        assert.deepStrictEqual(diferencias, [], `${ruta}:\n${diferencias.join('\n')}`);
+      };
+      verificar('GET /api/planes/:id', detalle, planDetalleEjemplo);
+      verificar('GET /api/planes (un elemento)', lista, planListaEjemplo);
+      verificar('GET /api/planes/vencimientos', vencimientos, vencimientosEjemplo);
+      verificar('POST /api/planes/:id/generar', g, generacionEjemplo);
+      verificar('GET /api/intervenciones/:id/tareas', tareas, tareasIntervencionEjemplo);
     });
   } finally {
     // Limpieza: solo lo que creó esta prueba

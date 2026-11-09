@@ -186,6 +186,12 @@ test('Ids fuera de rango (ID-01 a ID-05)', async (t) => {
     // ID-01: En la ruta
     // =========================================================================
     await t.test('ID-01: En la ruta', async () => {
+      // Un plan de la prueba, para las rutas de preventivos con dos ids (PV1). Se borra al final de ID-01.
+      const tareaPlan = { accion: 'Revisar el equipo', frecuencia_valor: 1, frecuencia_unidad: 'MESES', primera_fecha: '2026-01-01' };
+      const rPlan = await pedir('POST', '/api/planes', A.token, { maquina_id: mId, nombre: `Plan ID ${suf}`, tareas: [tareaPlan] });
+      assert.strictEqual(rPlan.status, 201, JSON.stringify(rPlan.cuerpo));
+      const planId = Number((rPlan.cuerpo as any).id);
+      try {
       // [método, ruta con X en lugar del id, cuerpo]
       const rutas: Array<[string, string, unknown?]> = [
         // Las de la sección 1
@@ -260,6 +266,22 @@ test('Ids fuera de rango (ID-01 a ID-05)', async (t) => {
         ['POST', '/api/repuestos/X/movimientos', {}],
         ['GET', '/api/repuestos/X/usos'],
         ['GET', '/api/repuestos/X/costos'],
+        // Planes preventivos (PV1, secciones 4 y 6)
+        ['GET', '/api/planes/X'],
+        ['PATCH', '/api/planes/X', { nombre: 'Plan ID cambiado' }],
+        ['POST', '/api/planes/X/desactivar', {}],
+        ['POST', '/api/planes/X/reactivar', {}],
+        ['POST', '/api/planes/X/tareas', tareaPlan],
+        ['PATCH', '/api/planes/X/tareas/1', { accion: 'Tarea ID cambiada' }],
+        ['PATCH', `/api/planes/${planId}/tareas/X`, { accion: 'Tarea ID cambiada' }],
+        ['POST', '/api/planes/X/tareas/1/desactivar', {}],
+        ['POST', `/api/planes/${planId}/tareas/X/desactivar`, {}],
+        ['POST', '/api/planes/X/tareas/1/reactivar', {}],
+        ['POST', `/api/planes/${planId}/tareas/X/reactivar`, {}],
+        ['POST', '/api/planes/X/generar', {}],
+        ['GET', '/api/intervenciones/X/tareas'],
+        ['PATCH', '/api/intervenciones/X/tareas/1', { hecha: true }],
+        ['PATCH', `/api/intervenciones/${intId}/tareas/X`, { hecha: true }],
       ];
 
       for (const [metodo, ruta, cuerpo] of rutas) {
@@ -269,6 +291,13 @@ test('Ids fuera de rango (ID-01 a ID-05)', async (t) => {
       // Nada cambió en la intervención de la prueba
       const resI = await client.query('SELECT estado FROM intervenciones WHERE id = $1', [intId]);
       assert.strictEqual(resI.rows[0].estado, 'EN_PROCESO');
+      // Ni en el plan
+      const resPlan = await client.query('SELECT nombre, activo FROM planes_mantenimiento WHERE id = $1', [planId]);
+      assert.deepStrictEqual(resPlan.rows[0], { nombre: `Plan ID ${suf}`, activo: true });
+      } finally {
+        await client.query('DELETE FROM plan_tareas WHERE plan_id = $1', [planId]);
+        await client.query('DELETE FROM planes_mantenimiento WHERE id = $1', [planId]);
+      }
     });
 
     // =========================================================================

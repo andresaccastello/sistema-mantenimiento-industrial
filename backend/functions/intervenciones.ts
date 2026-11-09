@@ -443,6 +443,9 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
         i.tiempo_inactividad_minutos,
         i.eliminado_en,
         i.motivo_eliminacion,
+        ti.codigo AS tipo_codigo,
+        pm.id AS plan_id,
+        pm.nombre AS plan_nombre,
         uel.id AS eliminador_id,
         uel.legajo AS eliminador_legajo,
         uel.nombre AS eliminador_nombre,
@@ -477,6 +480,7 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
       JOIN usuarios uc ON i.creado_por_usuario_id = uc.id
       LEFT JOIN usuarios ur ON i.responsable_usuario_id = ur.id
       LEFT JOIN usuarios uel ON i.eliminado_por_usuario_id = uel.id
+      LEFT JOIN planes_mantenimiento pm ON pm.id = i.plan_mantenimiento_id
       LEFT JOIN intervencion_periodos_detencion pd 
         ON pd.intervencion_id = i.id AND pd.hasta IS NULL
       LEFT JOIN v_intervencion_tiempos vit
@@ -495,6 +499,8 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
       id: Number(r.id),
       descripcion: r.descripcion,
       estado: r.estado,
+      tipo: r.tipo_codigo,
+      plan: r.plan_id ? { id: Number(r.plan_id), nombre: r.plan_nombre } : null,
       ejecucion: r.ejecucion,
       fecha_creacion: r.fecha_creacion,
       fecha_inicio: r.fecha_inicio,
@@ -573,6 +579,7 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
          i.fecha_creacion, i.fecha_inicio, i.fecha_finalizacion,
          i.tiempo_inactividad_minutos, i.costo_mano_obra, i.costo_repuestos, i.costo_total_estimado,
          i.eliminado_en, i.creado_por_usuario_id, i.responsable_usuario_id,
+         ti.codigo AS tipo_codigo, pm.id AS plan_id, pm.nombre AS plan_nombre,
          m.id AS maquina_id, m.nombre AS maquina_nombre, m.codigo AS maquina_codigo, m.estado AS maquina_estado,
          m.sector_id, s.nombre AS sector_nombre,
          uc.legajo AS creador_legajo, uc.nombre AS creador_nombre, uc.apellido AS creador_apellido,
@@ -585,6 +592,8 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
        JOIN sectores s ON m.sector_id = s.id
        JOIN usuarios uc ON i.creado_por_usuario_id = uc.id
        LEFT JOIN usuarios ur ON i.responsable_usuario_id = ur.id
+       JOIN tipos_intervencion ti ON ti.id = i.tipo_intervencion_id
+       LEFT JOIN planes_mantenimiento pm ON pm.id = i.plan_mantenimiento_id
        LEFT JOIN v_intervencion_tiempos vit ON vit.intervencion_id = i.id
        WHERE i.id = $1`,
       [id]
@@ -689,6 +698,8 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
       id: Number(r.id),
       descripcion: r.descripcion,
       estado: r.estado,
+      tipo: r.tipo_codigo,
+      plan: r.plan_id ? { id: Number(r.plan_id), nombre: r.plan_nombre } : null,
       ejecucion: r.ejecucion,
       observaciones: r.observaciones,
       trabajo_realizado: r.trabajo_realizado,
@@ -1321,5 +1332,7 @@ import intervencionRepuestosApp from './intervencionRepuestos.ts';
 intervencionesApp.route('/', intervencionRepuestosApp);
 import intervencionCostosApp from './intervencionCostos.ts';
 intervencionesApp.route('/', intervencionCostosApp);
+import intervencionTareasApp from './intervencionTareas.ts';
+intervencionesApp.route('/', intervencionTareasApp);
 
 export default intervencionesApp;

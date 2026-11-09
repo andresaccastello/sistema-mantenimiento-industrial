@@ -59,6 +59,9 @@ const TABLAS_CONTROL = [
   'plantas',
   'criticidades',
   'tipos_equipo',
+  'planes_mantenimiento',
+  'plan_tareas',
+  'intervencion_tareas',
 ];
 
 async function contarFilas() {

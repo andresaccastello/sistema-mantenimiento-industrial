@@ -32,9 +32,11 @@ import {
   listarVencimientos,
   obtenerDetallePlan,
 } from './preventivos/consultas.ts';
+import { generarDesdePlan, validarTareaIds } from './preventivos/generar.ts';
 
 /**
- * Etapa PV1, secciones 4 y 5: planes preventivos, sus tareas y los vencimientos (D-021).
+ * Etapa PV1, secciones 4, 5 y 6.1: planes preventivos, sus tareas, los vencimientos
+ * y la generación de intervenciones preventivas (D-021).
  * Todas las rutas piden PLANES_GESTIONAR; con un alcance que no es TODAS, solo las
  * máquinas de los sectores del usuario.
  */
@@ -433,5 +435,39 @@ function cambiarActivoTarea(activo: boolean) {
 
 planesApp.post('/:id/tareas/:tareaId/desactivar', cambiarActivoTarea(false));
 planesApp.post('/:id/tareas/:tareaId/reactivar', cambiarActivoTarea(true));
+
+// -------------------------------------------------------------
+// 6.1 Generar una intervención preventiva desde el plan
+// -------------------------------------------------------------
+
+planesApp.post('/:id/generar', async (c) => {
+  try {
+    const id = parseIdRuta(c.req.param('id'));
+
+    // El cuerpo es opcional: sin cuerpo, las tareas vencidas y próximas
+    const texto = await c.req.text();
+    let body: Record<string, unknown> = {};
+    if (texto.trim() !== '') {
+      let raw: unknown;
+      try {
+        raw = JSON.parse(texto);
+      } catch {
+        throw new ErrorNegocio(400, 'DATOS_INVALIDOS', 'El cuerpo de la solicitud debe ser un objeto JSON');
+      }
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+        throw new ErrorNegocio(400, 'DATOS_INVALIDOS', 'El cuerpo de la solicitud debe ser un objeto JSON');
+      }
+      body = raw as Record<string, unknown>;
+    }
+    const tareaIds = validarTareaIds(body.tarea_ids);
+
+    const usuario = getUsuarioContext(c);
+    const sectores = sectoresDelAlcance(c);
+    const generada = await conTransaccion((client) => generarDesdePlan(client, id, usuario, sectores, tareaIds));
+    return c.json(generada, 201);
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
 
 export default planesApp;
