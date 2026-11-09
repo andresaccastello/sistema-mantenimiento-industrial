@@ -79,7 +79,7 @@ function sumarAnios(fecha: string, anios: number): string {
   return `${Number(fecha.slice(0, 4)) + anios}${fecha.slice(4)}`;
 }
 
-test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-12)', async (t) => {
+test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-14)', async (t) => {
   const client = await pool.connect();
 
   const createdPlantaIds: number[] = [];
@@ -405,6 +405,12 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-12)', async (t) => {
       assert.deepStrictEqual([dup.status, dup.cuerpo.codigo], [409, 'PLAN_DUPLICADO']);
       const otra = await pedir('POST', '/api/planes', A.token, { maquina_id: m2, nombre: 'lubricación PV', tareas: [tarea(hoy)] });
       assert.strictEqual(otra.status, 201, JSON.stringify(otra.cuerpo));
+
+      // El nombre repetido con tildes (PV2, 1.4)
+      const electrico = await pedir('POST', '/api/planes', A.token, { maquina_id: m1, nombre: 'Eléctrico', tareas: [tarea(hoy)] });
+      assert.strictEqual(electrico.status, 201, JSON.stringify(electrico.cuerpo));
+      const mayusculas = await pedir('POST', '/api/planes', A.token, { maquina_id: m1, nombre: 'ELÉCTRICO', tareas: [tarea(hoy)] });
+      assert.deepStrictEqual([mayusculas.status, mayusculas.cuerpo.codigo], [409, 'PLAN_DUPLICADO']);
     });
 
     // =========================================================================
@@ -1077,6 +1083,82 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-12)', async (t) => {
       verificar('GET /api/planes/vencimientos', vencimientos, vencimientosEjemplo);
       verificar('POST /api/planes/:id/generar', g, generacionEjemplo);
       verificar('GET /api/intervenciones/:id/tareas', tareas, tareasIntervencionEjemplo);
+    });
+
+    // =========================================================================
+    // PV-13: Responsables para un plan (PV2, 1.1)
+    // =========================================================================
+    await t.test('PV-13: Responsables para un plan', async () => {
+      // Un responsable con INTERVENCIONES_VER en alcance SECTORES, solo del sector 2
+      const Rs = await crearUsuario('Rs', 'RespSector', 'RESPONSABLE_MANTENIMIENTO', [s2]);
+      await client.query(
+        `INSERT INTO usuario_permiso (usuario_id, permiso_id, efecto, alcance, motivo, otorgado_por_usuario_id)
+         VALUES ($1, $2, 'CONCEDER', 'SECTORES', 'Solo su sector', $3)`,
+        [Rs.id, permMap['INTERVENCIONES_VER'], A.id]
+      );
+
+      const r = await pedir('GET', `/api/planes/responsables-habilitados?maquina_id=${m1}`, A.token);
+      assert.strictEqual(r.status, 200, JSON.stringify(r.cuerpo));
+      const ids = r.cuerpo.map((u: any) => u.id);
+
+      // Los mismos usuarios que el endpoint de intervenciones, para una intervención de esa máquina
+      const rFalla = await pedir('POST', '/api/intervenciones', O.token, { maquina_id: m1, descripcion: 'Falla prueba PV-13' });
+      assert.strictEqual(rFalla.status, 201, JSON.stringify(rFalla.cuerpo));
+      const deIntervencion = await pedir('GET', `/api/intervenciones/${rFalla.cuerpo.id}/responsables-habilitados`, A.token);
+      assert.strictEqual(deIntervencion.status, 200);
+      assert.deepStrictEqual(
+        [...ids].sort((a, b) => a - b),
+        deIntervencion.cuerpo.map((u: any) => u.id).sort((a: number, b: number) => a - b)
+      );
+
+      // Con R y R2, sin O, sin el inactivo y sin el de otro sector
+      const rr = r.cuerpo.find((u: any) => u.id === R.id);
+      assert.deepStrictEqual(rr, { id: R.id, legajo: `PV_R_${suf}`, nombre: 'Resp', apellido: 'PV' });
+      assert.ok(ids.includes(R2.id));
+      for (const [quien, id] of [['O', O.id], ['Ri', Ri.id], ['Rs', Rs.id]] as Array<[string, number]>) {
+        assert.ok(!ids.includes(id), `${quien} no está`);
+      }
+      // Rs sí está para una máquina de su sector
+      const r2 = await pedir('GET', `/api/planes/responsables-habilitados?maquina_id=${m2}`, A.token);
+      assert.ok(r2.cuerpo.some((u: any) => u.id === Rs.id), 'Rs está para la máquina 2');
+
+      // Por apellido y nombre: "PV, Resp" antes que "PV, RespDos"
+      assert.ok(ids.indexOf(R.id) < ids.indexOf(R2.id), 'Ordenados por apellido y nombre');
+
+      // Los errores de la 1.1
+      for (const consulta of ['', '?maquina_id=', '?maquina_id=abc', '?maquina_id=0']) {
+        const e = await pedir('GET', `/api/planes/responsables-habilitados${consulta}`, A.token);
+        assert.deepStrictEqual([e.status, e.cuerpo.codigo], [422, 'DATOS_INVALIDOS'], consulta);
+      }
+      const e404 = await pedir('GET', '/api/planes/responsables-habilitados?maquina_id=999999999', A.token);
+      assert.deepStrictEqual([e404.status, e404.cuerpo.codigo], [404, 'MAQUINA_NO_ENCONTRADA']);
+      const e403 = await pedir('GET', `/api/planes/responsables-habilitados?maquina_id=${m2}`, S.token);
+      assert.deepStrictEqual([e403.status, e403.cuerpo.codigo], [403, 'PERMISO_INSUFICIENTE']);
+      assert.strictEqual((await pedir('GET', `/api/planes/responsables-habilitados?maquina_id=${m1}`, S.token)).status, 200);
+
+      // O: 403
+      const eO = await pedir('GET', `/api/planes/responsables-habilitados?maquina_id=${m1}`, O.token);
+      assert.deepStrictEqual([eO.status, eO.cuerpo.codigo], [403, 'PERMISO_INSUFICIENTE']);
+    });
+
+    // =========================================================================
+    // PV-14: Opciones de repuestos y proveedores (PV2, 1.2)
+    // =========================================================================
+    await t.test('PV-14: Opciones de repuestos y proveedores', async () => {
+      // Un operario con CONCEDER de PLANES_GESTIONAR
+      const Op = await crearUsuario('Op', 'OperarioPlanes', 'OPERARIO', [s1]);
+      await client.query(
+        `INSERT INTO usuario_permiso (usuario_id, permiso_id, efecto, alcance, motivo, otorgado_por_usuario_id)
+         VALUES ($1, $2, 'CONCEDER', 'TODAS', 'Planes', $3)`,
+        [Op.id, permMap['PLANES_GESTIONAR'], A.id]
+      );
+      for (const ruta of ['/api/repuestos/opciones', '/api/proveedores/opciones']) {
+        const conExcepcion = await pedir('GET', ruta, Op.token);
+        assert.strictEqual(conExcepcion.status, 200, `${ruta}: ${JSON.stringify(conExcepcion.cuerpo)}`);
+        assert.ok(Array.isArray(conExcepcion.cuerpo));
+        const sinExcepcion = await pedir('GET', ruta, O.token);
+        assert.deepStrictEqual([sinExcepcion.status, sinExcepcion.cuerpo.codigo], [403, 'PERMISO_INSUFICIENTE'], ruta);
+      }
     });
   } finally {
     // Limpieza: solo lo que creó esta prueba

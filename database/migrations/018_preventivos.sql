@@ -168,7 +168,17 @@ ALTER TABLE intervencion_auditoria
         'OTRO'
     ));
 
--- 6. El estado de una tarea (D-021). Es el único lugar donde se calcula:
+-- 6. "Hoy" de la instalación (D-021, punto 6), en un solo lugar: lo usan la vista y la API
+CREATE OR REPLACE FUNCTION hoy_instalacion() RETURNS DATE
+LANGUAGE sql STABLE
+AS $$
+    SELECT (now() AT TIME ZONE COALESCE(
+        (SELECT zona_horaria FROM configuracion_sistema WHERE id = 1),
+        'America/Argentina/Buenos_Aires'
+    ))::date
+$$;
+
+-- 7. El estado de una tarea (D-021). Es el único lugar donde se calcula:
 -- lo usan la API, la generación y las pruebas.
 DROP VIEW IF EXISTS v_plan_tareas_estado;
 
@@ -192,13 +202,12 @@ FROM plan_tareas t
 JOIN planes_mantenimiento pl ON pl.id = t.plan_id
 JOIN maquinas m ON m.id = pl.maquina_id
 CROSS JOIN (
-    SELECT zh.zona, (now() AT TIME ZONE zh.zona)::date AS hoy
-    FROM (
-        SELECT COALESCE(
-            (SELECT zona_horaria FROM configuracion_sistema WHERE id = 1),
-            'America/Argentina/Buenos_Aires'
-        ) AS zona
-    ) zh
+    -- La zona, para pasar la finalización a fecha local; "hoy", de hoy_instalacion()
+    SELECT COALESCE(
+        (SELECT zona_horaria FROM configuracion_sistema WHERE id = 1),
+        'America/Argentina/Buenos_Aires'
+    ) AS zona,
+    hoy_instalacion() AS hoy
 ) z
 -- La última ejecución: la fecha local de finalización de la última intervención
 -- finalizada, no eliminada, con la tarea hecha

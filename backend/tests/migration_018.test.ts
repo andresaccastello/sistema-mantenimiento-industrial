@@ -296,6 +296,16 @@ test('Migración 018 — Preventivos por calendario', async (t) => {
       // La FK compuesta de la 002 sigue
       const fk = await client.query(`SELECT 1 FROM pg_constraint WHERE conname = 'fk_intervenciones_plan_maquina'`);
       assert.strictEqual(fk.rows.length, 1);
+
+      // hoy_instalacion() existe y da lo mismo que la fecha local de la zona configurada (PV2, 1.3)
+      const hoy = await client.query(
+        `SELECT to_char(hoy_instalacion(), 'YYYY-MM-DD') AS funcion,
+                to_char((now() AT TIME ZONE zona_horaria)::date, 'YYYY-MM-DD') AS esperado,
+                pg_typeof(hoy_instalacion())::text AS tipo
+         FROM configuracion_sistema WHERE id = 1`
+      );
+      assert.strictEqual(hoy.rows[0].tipo, 'date');
+      assert.strictEqual(hoy.rows[0].funcion, hoy.rows[0].esperado);
     });
 
     // =========================================================================

@@ -12,7 +12,7 @@ Este modelo traduce los requerimientos de la tesis a una primera estructura rela
 - Los estados de una intervención se conservan también en un historial para trazabilidad.
 - Los repuestos utilizados quedan vinculados a la intervención con cantidad y costo aplicado.
 - Se registran movimientos de stock para poder reconstruir ingresos, egresos y ajustes.
-- Los planes preventivos admiten criterios por tiempo, horas de uso, kilómetros u otro criterio.
+- Los planes preventivos se arman con tareas que vencen por calendario: cada N días, semanas, meses o años (D-021). Los disparadores por uso (horas, kilómetros, ciclos) quedan para la PV3.
 - Los documentos almacenan metadatos y una clave de almacenamiento; la estrategia física de archivos se definirá por separado.
 - Los reportes no requieren tablas propias en esta etapa: se obtendrán mediante consultas sobre el modelo operacional.
 
@@ -145,9 +145,12 @@ PLANTAS ──< SECTORES ──< MAQUINAS >── CRITICIDADES
                                         ├──< INTERVENCION_REPUESTOS
                                         ├──< INTERVENCION_COSTOS
                                         ├──< PEDIDOS_REPUESTO
+                                        ├──< INTERVENCION_TAREAS
                                         └──< DOCUMENTOS
 
 MAQUINAS ──< PLANES_MANTENIMIENTO ──< INTERVENCIONES
+                    │
+                    └──< PLAN_TAREAS ──< INTERVENCION_TAREAS
 MAQUINAS ──< DOCUMENTOS
 ```
 

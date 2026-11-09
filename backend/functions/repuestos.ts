@@ -69,7 +69,7 @@ function armarFilaRepuesto(row: any, tienePermisoCostos: boolean) {
 // 1. GET /opciones (declarado antes de /:id)
 repuestosApp.get(
   '/opciones',
-  requireAlgunPermiso(['REPUESTOS_GESTIONAR', 'INTERVENCIONES_CAMBIAR_ESTADO']),
+  requireAlgunPermiso(['REPUESTOS_GESTIONAR', 'INTERVENCIONES_CAMBIAR_ESTADO', 'PLANES_GESTIONAR']),
   async (c) => {
     try {
       const tienePermisoCostos = veCostos(c);

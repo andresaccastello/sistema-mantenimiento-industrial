@@ -33,6 +33,7 @@ import {
   obtenerDetallePlan,
 } from './preventivos/consultas.ts';
 import { generarDesdePlan, validarTareaIds } from './preventivos/generar.ts';
+import { responsablesHabilitados } from './intervenciones/responsables.ts';
 
 /**
  * Etapa PV1, secciones 4, 5 y 6.1: planes preventivos, sus tareas, los vencimientos
@@ -139,6 +140,32 @@ planesApp.get('/vencimientos', async (c) => {
     const { total, cuerpo } = await listarVencimientos(pool, filtros, estados, limit, offset);
     c.header('X-Total-Count', String(total));
     return c.json(cuerpo);
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+// -------------------------------------------------------------
+// PV2, 1.1 Responsables para un plan (antes de /:id)
+// -------------------------------------------------------------
+
+planesApp.get('/responsables-habilitados', async (c) => {
+  try {
+    const raw = c.req.query('maquina_id');
+    const maquinaId = raw === undefined ? null : parseId(raw);
+    if (maquinaId === null) throw invalido('El parámetro maquina_id es obligatorio y debe ser un número entero positivo');
+
+    const resM = await pool.query('SELECT sector_id FROM maquinas WHERE id = $1', [maquinaId]);
+    if (resM.rows.length === 0) {
+      throw new ErrorNegocio(404, 'MAQUINA_NO_ENCONTRADA', 'La máquina no existe');
+    }
+    const sectorId = Number(resM.rows[0].sector_id);
+    const sectores = sectoresDelAlcance(c);
+    if (sectores !== null && !sectores.includes(sectorId)) {
+      throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No tenés alcance sobre el sector de esta máquina');
+    }
+
+    return c.json(await responsablesHabilitados(pool, sectorId, 'apellido'));
   } catch (error) {
     return responderError(c, error);
   }

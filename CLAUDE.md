@@ -48,7 +48,7 @@ Tesis de Analista en Sistemas: un sistema de mantenimiento industrial **general*
 
 ## Técnica
 
-**Stack:** Node 22, TypeScript, Hono, `pg` sin ORM, PostgreSQL 16 en Neon. React 19, React Router 7, Mantine 9 y TanStack Query 5.
+**Stack:** Node 22, TypeScript, Hono, `pg` sin ORM, PostgreSQL en Neon (la rama de pruebas es la 18). React 19, React Router 7, Mantine 9 y TanStack Query 5.
 
 **Backend:**
 

@@ -11,7 +11,7 @@ proveedoresApp.use('*', jwtVerify, dbVerify);
 // GET /opciones (declarado antes de /:id)
 proveedoresApp.get(
   '/opciones',
-  requireAlgunPermiso(['REPUESTOS_GESTIONAR', 'INTERVENCIONES_CAMBIAR_ESTADO', 'COSTOS_REGISTRAR']),
+  requireAlgunPermiso(['REPUESTOS_GESTIONAR', 'INTERVENCIONES_CAMBIAR_ESTADO', 'COSTOS_REGISTRAR', 'PLANES_GESTIONAR']),
   async (c) => {
     try {
       const res = await pool.query(

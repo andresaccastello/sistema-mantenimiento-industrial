@@ -22,7 +22,7 @@ import {
   obtenerAccionesDisponibles,
 } from './intervenciones/motor.ts';
 import { registrarDetencionIntervencion } from './intervenciones/detenciones.ts';
-import { usuariosConPermiso } from './intervenciones/notificaciones.ts';
+import { responsablesHabilitados } from './intervenciones/responsables.ts';
 import { validarFechaISO } from './intervenciones/fechas.ts';
 
 const intervencionesApp = new Hono();
@@ -838,42 +838,8 @@ intervencionesApp.get('/:id/responsables-habilitados', requirePermission('INTERV
       throw new ErrorNegocio(404, 'INTERVENCION_NO_ENCONTRADA', 'Intervención no encontrada');
     }
 
-    // 2. Obtener usuarios activos con INTERVENCIONES_RECIBIR_ASIGNACION e INTERVENCIONES_VER
-    const [usuariosRecibir, usuariosVer] = await Promise.all([
-      usuariosConPermiso(pool, 'INTERVENCIONES_RECIBIR_ASIGNACION'),
-      usuariosConPermiso(pool, 'INTERVENCIONES_VER'),
-    ]);
-
-    const setRecibir = new Set(usuariosRecibir.map((u) => u.usuario_id));
-    const sectorId = Number(rowI.sector_id);
-
-    const idsHabilitados: number[] = [];
-    for (const u of usuariosVer) {
-      if (!setRecibir.has(u.usuario_id)) {
-        continue;
-      }
-      if (u.alcance === 'TODAS' || u.alcance === 'PROPIAS') {
-        idsHabilitados.push(u.usuario_id);
-      } else if (u.alcance === 'SECTORES' && u.sectores.includes(sectorId)) {
-        idsHabilitados.push(u.usuario_id);
-      }
-    }
-
-    if (idsHabilitados.length === 0) {
-      return c.json([]);
-    }
-
-    const resUsers = await pool.query(
-      'SELECT id, legajo, nombre, apellido FROM usuarios WHERE id = ANY($1::int[]) ORDER BY nombre ASC',
-      [idsHabilitados]
-    );
-
-    const habilitados = resUsers.rows.map((u: any) => ({
-      id: Number(u.id),
-      legajo: u.legajo,
-      nombre: u.nombre,
-      apellido: u.apellido ?? null,
-    }));
+    // 2. Los usuarios habilitados para el sector de la máquina (función compartida con los planes)
+    const habilitados = await responsablesHabilitados(pool, Number(rowI.sector_id), 'nombre');
 
     return c.json(habilitados);
   } catch (error) {

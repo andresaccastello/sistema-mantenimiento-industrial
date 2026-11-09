@@ -4,13 +4,10 @@ import { UsuarioVisibilidad } from '../intervenciones/visibilidad.ts';
 import { getUserScope } from '../middleware.ts';
 
 /**
- * "Hoy" de la instalación (D-021, punto 6), con la misma expresión que la vista
- * v_plan_tareas_estado. Se usa donde no hay una tarea de la que leerlo.
+ * "Hoy" de la instalación (D-021, punto 6): la función de la 018, la misma que usa
+ * la vista v_plan_tareas_estado. Se usa donde no hay una tarea de la que leerlo.
  */
-export const SQL_HOY = `(now() AT TIME ZONE COALESCE(
-  (SELECT zona_horaria FROM configuracion_sistema WHERE id = 1),
-  'America/Argentina/Buenos_Aires'
-))::date`;
+export const SQL_HOY = 'hoy_instalacion()';
 
 export interface Hoy {
   hoy: string;
