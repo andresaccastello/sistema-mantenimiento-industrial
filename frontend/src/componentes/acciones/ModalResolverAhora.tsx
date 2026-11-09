@@ -24,6 +24,7 @@ import {
 } from '../../lib/fechas';
 import type { PeriodoDetencion } from '../../api/tipos';
 import { useAccionIntervencion } from './useAccionIntervencion';
+import { AvisoTareasSinMarcar } from '../preventivos/AvisoTareasSinMarcar';
 
 export interface ModalResolverAhoraProps {
   abierto: boolean;
@@ -33,6 +34,8 @@ export interface ModalResolverAhoraProps {
   fechaCreacion: string;
   periodoAbierto?: PeriodoDetencion | null;
   puedeConfirmarRecuperacion: boolean;
+  /** PV2: una preventiva, para avisar de las tareas sin marcar. */
+  conTareas?: boolean;
 }
 
 export function ModalResolverAhora({
@@ -43,6 +46,7 @@ export function ModalResolverAhora({
   fechaCreacion,
   periodoAbierto,
   puedeConfirmarRecuperacion,
+  conTareas = false,
 }: ModalResolverAhoraProps) {
   const isMobile = useMediaQuery('(max-width: 48em)');
 
@@ -163,6 +167,7 @@ export function ModalResolverAhora({
     >
       <form onSubmit={handleSubmit} noValidate>
         <Stack gap="md">
+          <AvisoTareasSinMarcar intervencionId={intervencionId} activo={abierto && conTareas} />
           {errorModal && (
             <Alert color="red" variant="light" icon={<IconAlertCircle size={16} />}>
               {errorModal}

@@ -17,6 +17,7 @@ import { SeccionRecuperacionMaquina } from '../SeccionRecuperacionMaquina';
 import { validarMomento, momentoAIso, Momento } from '../../lib/fechas';
 import type { PeriodoDetencion } from '../../api/tipos';
 import { useAccionIntervencion } from './useAccionIntervencion';
+import { AvisoTareasSinMarcar } from '../preventivos/AvisoTareasSinMarcar';
 
 export interface ModalFinalizarProps {
   abierto: boolean;
@@ -27,6 +28,8 @@ export interface ModalFinalizarProps {
   fechaCreacion: string;
   periodoAbierto?: PeriodoDetencion | null;
   puedeConfirmarRecuperacion: boolean;
+  /** PV2: una preventiva, para avisar de las tareas sin marcar. */
+  conTareas?: boolean;
 }
 
 export function ModalFinalizar({
@@ -38,6 +41,7 @@ export function ModalFinalizar({
   fechaCreacion,
   periodoAbierto,
   puedeConfirmarRecuperacion,
+  conTareas = false,
 }: ModalFinalizarProps) {
   const isMobile = useMediaQuery('(max-width: 48em)');
 
@@ -145,6 +149,7 @@ export function ModalFinalizar({
     >
       <form onSubmit={handleSubmit} noValidate>
         <Stack gap="md">
+          <AvisoTareasSinMarcar intervencionId={intervencionId} activo={abierto && conTareas} />
           {errorModal && (
             <Alert color="red" variant="light" icon={<IconAlertCircle size={16} />}>
               {errorModal}

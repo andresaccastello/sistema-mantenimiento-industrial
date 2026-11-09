@@ -211,6 +211,8 @@ const TEXTOS_AUTOMATICOS = [
 export function eventosHistorial(detalle: {
   historial_estados?: HistorialEstado[] | null;
   auditoria?: AuditoriaItem[] | null;
+  /** PV2: en una preventiva, el primer evento es "Intervención generada". */
+  tipo?: string | null;
 }): EventoHistorial[] {
   const eventosEstado: EventoHistorial[] = [];
   if (detalle.historial_estados && Array.isArray(detalle.historial_estados)) {
@@ -221,9 +223,11 @@ export function eventosHistorial(detalle: {
         const diffMs = Math.abs(new Date(h.fecha_efectiva).getTime() - new Date(h.cambiado_en).getTime());
         mostrarRegistrado = diffMs >= 60000;
       }
+      const generada =
+        detalle.tipo === 'PREVENTIVO' && (h.estado_anterior === null || h.estado_anterior === undefined);
       eventosEstado.push({
         clave: `estado-${h.id}`,
-        titulo: info.titulo,
+        titulo: generada ? 'Intervención generada' : info.titulo,
         fecha: info.fecha,
         registrado: h.cambiado_en,
         mostrarRegistrado,
@@ -279,6 +283,12 @@ export function eventosHistorial(detalle: {
           const val = a.valor_anterior === 'EXTERNA' ? 'Servicio externo' : 'Personal propio';
           detalleTexto = 'Antes: ' + val;
         }
+      } else if (a.tipo_evento === 'CORRECCION_TAREA') {
+        // PV2: marcar, desmarcar o cambiar la observación de una tarea, con la intervención finalizada
+        titulo = 'Corrección de tareas';
+        const v = a.valor_nuevo || '';
+        const sep = v.endsWith('.') ? ' ' : '. ';
+        detalleTexto = a.motivo ? (v ? `${v}${sep}Motivo: ${a.motivo}` : `Motivo: ${a.motivo}`) : (v || null);
       } else if (a.tipo_evento === 'CORRECCION_COSTO') {
         if (a.campo_modificado === 'repuestos' || a.campo_modificado === 'costos') {
           titulo = a.campo_modificado === 'costos' ? 'Corrección de costos' : 'Corrección de repuestos';

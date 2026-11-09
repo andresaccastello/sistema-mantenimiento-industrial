@@ -42,6 +42,10 @@ export function useAccionIntervencion(options?: UseAccionIntervencionOptions) {
         queryClient.invalidateQueries({ queryKey: ['maquina'] }),
         queryClient.invalidateQueries({ queryKey: ['tablero'] }),
         queryClient.invalidateQueries({ queryKey: ['notificaciones-contador'] }),
+        // PV2: una preventiva mueve los vencimientos y sus planes
+        queryClient.invalidateQueries({ queryKey: ['planes'] }),
+        queryClient.invalidateQueries({ queryKey: ['plan'] }),
+        queryClient.invalidateQueries({ queryKey: ['vencimientos'] }),
       ];
 
       if (!opcionesPersonalizadas?.saltarInvalidacionIntervencion) {

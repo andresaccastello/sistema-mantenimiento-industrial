@@ -5,6 +5,7 @@
 
 import { parsearId } from './formato';
 import { rangoDiasAIso } from './fechas';
+import type { TipoIntervencion } from '../api/tipos';
 
 export type VistaIntervenciones = 'sin-asignar' | 'mias' | 'abiertas' | 'cerradas';
 
@@ -18,6 +19,8 @@ export interface FiltrosIntervenciones {
   hasta: string | null;
   texto: string;
   pagina: number;             // desde 1
+  /** PV2: Correctivas o Preventivas; sin la clave, todas. */
+  tipo?: TipoIntervencion;
 }
 
 export const FILTROS_POR_DEFECTO: FiltrosIntervenciones = {
@@ -110,7 +113,7 @@ export function leerFiltros(
   const paginaParam = Number(params.get('pagina'));
   const pagina = Number.isInteger(paginaParam) && paginaParam > 0 ? paginaParam : 1;
 
-  return {
+  const filtros: FiltrosIntervenciones = {
     vista: vistaValida,
     estados,
     sectorId,
@@ -121,6 +124,14 @@ export function leerFiltros(
     texto,
     pagina,
   };
+
+  // El tipo va solo si viene en la dirección: sin él, el filtro queda como antes
+  const tipoParam = params.get('tipo');
+  if (tipoParam === 'CORRECTIVO' || tipoParam === 'PREVENTIVO') {
+    filtros.tipo = tipoParam;
+  }
+
+  return filtros;
 }
 
 /**
@@ -160,6 +171,10 @@ export function escribirFiltros(filtros: FiltrosIntervenciones): URLSearchParams
   const qTrim = filtros.texto.trim();
   if (qTrim.length > 0) {
     params.set('q', qTrim);
+  }
+
+  if (filtros.tipo) {
+    params.set('tipo', filtros.tipo);
   }
 
   if (filtros.pagina > 1) {
@@ -223,6 +238,10 @@ export function paramsListado(
     p.q = qTrim;
   }
 
+  if (filtros.tipo) {
+    p.tipo = filtros.tipo;
+  }
+
   return p;
 }
 
@@ -238,7 +257,8 @@ export function hayFiltros(filtros: FiltrosIntervenciones): boolean {
     filtros.maquinaId !== null ||
     filtros.desde !== null ||
     filtros.hasta !== null ||
-    filtros.texto.trim().length > 0
+    filtros.texto.trim().length > 0 ||
+    Boolean(filtros.tipo)
   );
 }
 

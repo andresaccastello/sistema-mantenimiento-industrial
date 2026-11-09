@@ -41,6 +41,7 @@ import {
 } from '../lib/tablero';
 import { CriticidadBadge } from '../componentes/CriticidadBadge';
 import { EstadoBadge } from '../componentes/EstadoBadge';
+import { FilaPreventivosTablero } from '../componentes/preventivos/FilaPreventivosTablero';
 
 const ICONOS_ESTADO: Record<
   string,
@@ -96,7 +97,7 @@ const INFO_CONTADORES_INTERVENCION: Record<
 };
 
 export function Tablero() {
-  const { usuario } = useAuth();
+  const { usuario, tienePermiso } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const plantaId = parsearId(searchParams.get('planta'));
 
@@ -288,6 +289,9 @@ export function Tablero() {
           })}
         </SimpleGrid>
       </Stack>
+
+      {/* Fila 3: Preventivos (PV2), con PLANES_GESTIONAR */}
+      {tienePermiso('PLANES_GESTIONAR') && <FilaPreventivosTablero plantaId={plantaId} />}
 
       {/* Bloque: Detenidas ahora */}
       <Stack gap="xs">

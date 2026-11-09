@@ -58,6 +58,7 @@ import { EstadoBadge } from '../componentes/EstadoBadge';
 import { CriticidadBadge } from '../componentes/CriticidadBadge';
 import { ModalConfirmarRecuperacion } from '../componentes/acciones/ModalConfirmarRecuperacion';
 import { ModalMaquina } from '../componentes/ModalMaquina';
+import { BloquePlanesMaquina } from '../componentes/preventivos/BloquePlanesMaquina';
 
 function parseYMD(str: string | null): Date | null {
   if (!str || !/^\d{4}-\d{2}-\d{2}$/.test(str)) return null;
@@ -536,7 +537,7 @@ export function DetalleMaquina() {
                       <Table.Tr>
                         <Table.Th>N.º</Table.Th>
                         <Table.Th>Estado</Table.Th>
-                        <Table.Th>Falla</Table.Th>
+                        <Table.Th>Descripción</Table.Th>
                         <Table.Th>Reportada</Table.Th>
                         <Table.Th>Responsable</Table.Th>
                       </Table.Tr>
@@ -560,9 +561,12 @@ export function DetalleMaquina() {
                             />
                           </Table.Td>
                           <Table.Td>
-                            <Text size="sm" lineClamp={1} maw={260}>
-                              {item.descripcion}
-                            </Text>
+                            <Group gap={6} wrap="nowrap">
+                              {item.tipo === 'PREVENTIVO' && <Badge color="teal" variant="light" size="xs">Preventivo</Badge>}
+                              <Text size="sm" lineClamp={1} maw={260}>
+                                {item.descripcion}
+                              </Text>
+                            </Group>
                           </Table.Td>
                           <Table.Td>
                             <Text size="xs" c="dimmed">
@@ -617,6 +621,9 @@ export function DetalleMaquina() {
           </Stack>
         </Paper>
       )}
+
+      {/* PV2: Planes preventivos, solo con PLANES_GESTIONAR */}
+      <BloquePlanesMaquina maquinaId={maquina.id} />
 
       {/* 6.10 Inactividad */}
       {puedeConsultarReportes && (

@@ -341,7 +341,7 @@ export function IntervencionesLista() {
 
       {/* 5.2 Filtros */}
       <SimpleGrid
-        cols={{ base: 1, sm: 2, lg: 3, xl: mostrarPlanta ? 6 : 5 }}
+        cols={{ base: 1, sm: 2, lg: 3, xl: mostrarPlanta ? 7 : 6 }}
         spacing="sm"
       >
         <TextInput
@@ -409,6 +409,22 @@ export function IntervencionesLista() {
           value={filtros.maquinaId ? String(filtros.maquinaId) : null}
           onChange={handleMaquinaChange}
           clearable
+        />
+
+        <Select
+          aria-label="Tipo"
+          data={[
+            { value: 'TODAS', label: 'Todas' },
+            { value: 'CORRECTIVO', label: 'Correctivas' },
+            { value: 'PREVENTIVO', label: 'Preventivas' },
+          ]}
+          value={filtros.tipo ?? 'TODAS'}
+          allowDeselect={false}
+          onChange={(v) => {
+            const { tipo: _anterior, ...resto } = filtros;
+            const tipo = v === 'CORRECTIVO' || v === 'PREVENTIVO' ? v : undefined;
+            setSearchParams(escribirFiltros({ ...resto, ...(tipo ? { tipo } : {}), pagina: 1 }));
+          }}
         />
 
         <DatePickerInput
@@ -524,9 +540,16 @@ export function IntervencionesLista() {
                         <Text size="xs" c="dimmed">
                           {item.maquina.sector.nombre}
                         </Text>
-                        <Text size="xs" c="dimmed" lineClamp={1}>
-                          {item.descripcion}
-                        </Text>
+                        <Group gap={6} wrap="nowrap">
+                          {item.tipo === 'PREVENTIVO' && (
+                            <Badge color="teal" variant="light" size="xs" style={{ flexShrink: 0 }}>
+                              Preventivo
+                            </Badge>
+                          )}
+                          <Text size="xs" c="dimmed" lineClamp={1}>
+                            {item.descripcion}
+                          </Text>
+                        </Group>
                       </Table.Td>
 
                       <Table.Td>

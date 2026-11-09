@@ -36,6 +36,8 @@ import { ordenarAcciones, etiquetaAccion, CodigoAccion } from '../lib/acciones';
 import { BloqueRepuestosIntervencion } from '../componentes/repuestos/BloqueRepuestosIntervencion';
 import { BloquePedidosIntervencion } from '../componentes/repuestos/BloquePedidosIntervencion';
 import { BloqueCostosIntervencion } from '../componentes/costos/BloqueCostosIntervencion';
+import { BloqueTareasIntervencion } from '../componentes/preventivos/BloqueTareasIntervencion';
+import { PlanDeIntervencion } from '../componentes/preventivos/PlanDeIntervencion';
 import { minutosEntre } from '../lib/fechas';
 import { obtenerInfoEstado } from '../lib/estados';
 import { mensajeError, requiereRecargar, ApiError } from '../lib/errores';
@@ -170,6 +172,7 @@ export function DetalleIntervencion() {
 
   const tieneDetencionAbierta = Boolean(periodoAbierto);
   const eventos = eventosHistorial(reporte);
+  const esPreventivo = reporte.tipo === 'PREVENTIVO';
 
   return (
     <Stack gap="lg">
@@ -183,7 +186,9 @@ export function DetalleIntervencion() {
           <Title order={2} c="#0f172a">Intervención N.º {reporte.id}</Title>
           <EstadoBadge entidad="intervencion" estado={reporte.estado} size="lg" />
           {tieneDetencionAbierta && <Badge color="red" variant="filled" size="md">Máquina detenida</Badge>}
+          {esPreventivo && <Badge color="teal" variant="light" size="md">Preventivo</Badge>}
         </Group>
+        <PlanDeIntervencion plan={reporte.plan} />
 
         {/* 7.1 Barra de acciones */}
         {reporte.acciones_disponibles.length > 0 && (
@@ -240,7 +245,7 @@ export function DetalleIntervencion() {
             {/* 1. Falla reportada */}
             <Card withBorder radius="md" p="md">
               <Stack gap="xs">
-                <Text fw={700} size="sm" tt="uppercase" c="#64748b">Falla reportada</Text>
+                <Text fw={700} size="sm" tt="uppercase" c="#64748b">{esPreventivo ? 'Trabajo programado' : 'Falla reportada'}</Text>
                 <Text fw={600} size="md" c="#0f172a">{reporte.descripcion}</Text>
                 {reporte.observaciones && (
                   <Text size="sm" c="#475569" style={{ whiteSpace: 'pre-wrap' }}>{reporte.observaciones}</Text>
@@ -265,6 +270,8 @@ export function DetalleIntervencion() {
                 </Stack>
               </Card>
             )}
+
+            {reporte.plan && <BloqueTareasIntervencion intervencionId={reporte.id} estadoIntervencion={reporte.estado} />}
 
             {/* Repuestos usados y Pedidos */}
             <BloqueRepuestosIntervencion
@@ -336,11 +343,11 @@ export function DetalleIntervencion() {
                   <EstadoBadge entidad="maquina" estado={reporte.maquina.estado} />
                 </Group>
                 <Group justify="space-between" align="flex-start">
-                  <Text size="sm" c="dimmed">Reportada por</Text>
+                  <Text size="sm" c="dimmed">{esPreventivo ? 'Generada por' : 'Reportada por'}</Text>
                   <Text size="sm">{nombreCompleto(reporte.creado_por)} · {reporte.creado_por.legajo || '—'}</Text>
                 </Group>
                 <Group justify="space-between" align="flex-start">
-                  <Text size="sm" c="dimmed">Reportada</Text>
+                  <Text size="sm" c="dimmed">{esPreventivo ? 'Generada' : 'Reportada'}</Text>
                   <Text size="sm">{formatFechaHora(reporte.fecha_creacion)}</Text>
                 </Group>
                 <Group justify="space-between" align="flex-start">
@@ -491,12 +498,12 @@ export function DetalleIntervencion() {
       <ModalFinalizar
         abierto={modalActivo === 'FINALIZAR'} onCerrar={cerrarModal} intervencionId={idValido}
         estadoAlAbrir={estadoAlAbrir} fechaInicio={reporte.fecha_inicio} fechaCreacion={reporte.fecha_creacion}
-        periodoAbierto={periodoAbierto} puedeConfirmarRecuperacion={puedeConfirmarRecuperacion}
+        periodoAbierto={periodoAbierto} puedeConfirmarRecuperacion={puedeConfirmarRecuperacion} conTareas={Boolean(reporte.plan)}
       />
       <ModalResolverAhora
         abierto={modalActivo === 'RESOLVER_AHORA'} onCerrar={cerrarModal} intervencionId={idValido}
         estadoAlAbrir={estadoAlAbrir} fechaCreacion={reporte.fecha_creacion}
-        periodoAbierto={periodoAbierto} puedeConfirmarRecuperacion={puedeConfirmarRecuperacion}
+        periodoAbierto={periodoAbierto} puedeConfirmarRecuperacion={puedeConfirmarRecuperacion} conTareas={Boolean(reporte.plan)}
       />
       <ModalCancelar
         abierto={modalActivo === 'CANCELAR'} onCerrar={cerrarModal} intervencionId={idValido}

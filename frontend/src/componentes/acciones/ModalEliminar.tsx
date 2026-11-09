@@ -108,6 +108,10 @@ export function ModalEliminar({
         queryClient.invalidateQueries({ queryKey: ['intervenciones'] }),
         queryClient.invalidateQueries({ queryKey: ['maquinas'] }),
         queryClient.invalidateQueries({ queryKey: ['notificaciones-contador'] }),
+        queryClient.invalidateQueries({ queryKey: ['tablero'] }),
+        queryClient.invalidateQueries({ queryKey: ['planes'] }),
+        queryClient.invalidateQueries({ queryKey: ['plan'] }),
+        queryClient.invalidateQueries({ queryKey: ['vencimientos'] }),
       ]);
     } catch (err: unknown) {
       if (requiereRecargar(err)) {

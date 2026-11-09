@@ -381,3 +381,42 @@ describe('FE-25: eventosHistorial', () => {
     );
   });
 });
+
+describe('FE-79: eventosHistorial de una preventiva (PV2)', () => {
+  const persona = { id: 1, nombre: 'Admin', apellido: 'Sistema', legajo: 'ADM' };
+  const inicial = {
+    id: 1,
+    estado_anterior: null,
+    estado_nuevo: 'PENDIENTE',
+    observacion: 'Generada desde el plan «Mecánico»',
+    cambiado_en: '2026-11-09T10:00:00Z',
+    fecha_efectiva: null,
+    cambiado_por: persona,
+  };
+  const correccion = {
+    id: 60,
+    tipo_evento: 'CORRECCION_TAREA',
+    campo_modificado: 'tareas',
+    valor_anterior: null,
+    valor_nuevo: 'Se marcó como hecha: Cambiar el aceite',
+    motivo: 'Se hizo y no se marcó',
+    creado_en: '2026-11-09T15:00:00Z',
+    realizado_por: persona,
+    responsable_anterior: null,
+    responsable_nuevo: null,
+  };
+
+  it('el primer evento es "Intervención generada" y la corrección, "Corrección de tareas"', () => {
+    const eventos = eventosHistorial({ tipo: 'PREVENTIVO', historial_estados: [inicial], auditoria: [correccion] });
+    assert.equal(eventos.length, 2);
+    assert.equal(eventos[0].titulo, 'Intervención generada');
+    assert.equal(eventos[0].detalle, 'Generada desde el plan «Mecánico»');
+    assert.equal(eventos[1].titulo, 'Corrección de tareas');
+    assert.equal(eventos[1].detalle, 'Se marcó como hecha: Cambiar el aceite. Motivo: Se hizo y no se marcó');
+  });
+
+  it('una correctiva sigue con "Reporte registrado"', () => {
+    const eventos = eventosHistorial({ tipo: 'CORRECTIVO', historial_estados: [inicial], auditoria: [] });
+    assert.equal(eventos[0].titulo, 'Reporte registrado');
+  });
+});
