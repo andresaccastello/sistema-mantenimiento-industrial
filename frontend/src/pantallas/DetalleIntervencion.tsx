@@ -417,7 +417,7 @@ export function DetalleIntervencion() {
               <Stack gap="sm">
                 <Text fw={700} size="sm" tt="uppercase" c="#64748b">Detenciones de la máquina</Text>
                 {!reporte.periodos_detencion || reporte.periodos_detencion.length === 0 ? (
-                  <Text size="sm" c="dimmed">Esta falla no detuvo la máquina.</Text>
+                  <Text size="sm" c="dimmed">{esPreventivo ? 'Esta intervención no detuvo la máquina.' : 'Esta falla no detuvo la máquina.'}</Text>
                 ) : (
                   reporte.periodos_detencion.map((p) => {
                     const estaAbierto = p.esta_abierto || p.hasta === null;
@@ -473,7 +473,7 @@ export function DetalleIntervencion() {
       {/* DIÁLOGOS DE ACCIONES */}
       <ModalEditarReporte
         abierto={modalActivo === 'EDITAR'} onCerrar={cerrarModal} intervencionId={idValido}
-        estadoEsperado={estadoAlAbrir} descripcionInicial={reporte.descripcion} observacionesIniciales={reporte.observaciones}
+        estadoEsperado={estadoAlAbrir} descripcionInicial={reporte.descripcion} observacionesIniciales={reporte.observaciones} esPreventivo={esPreventivo}
       />
       <ModalAsignar
         abierto={modalActivo === 'ASIGNAR'} onCerrar={cerrarModal} intervencionId={idValido}

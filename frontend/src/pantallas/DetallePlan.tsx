@@ -165,11 +165,11 @@ export function DetallePlan() {
             <Table verticalSpacing="sm">
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>N.º</Table.Th>
-                  <Table.Th>Estado</Table.Th>
-                  <Table.Th>Generada</Table.Th>
-                  <Table.Th>Finalizada</Table.Th>
-                  <Table.Th>Responsable</Table.Th>
+                  <Table.Th style={{ width: 80 }}>N.º</Table.Th>
+                  <Table.Th style={{ minWidth: 180 }}>Estado</Table.Th>
+                  <Table.Th style={{ minWidth: 150 }}>Generada</Table.Th>
+                  <Table.Th style={{ minWidth: 150 }}>Finalizada</Table.Th>
+                  <Table.Th style={{ minWidth: 150 }}>Responsable</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>

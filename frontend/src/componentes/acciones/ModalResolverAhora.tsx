@@ -175,7 +175,9 @@ export function ModalResolverAhora({
           )}
 
           <Text size="sm" c="dimmed">
-            Para fallas que ya se arreglaron sin pasar por 'Iniciar trabajo'.
+            {conTareas
+              ? 'Para trabajos que ya se hicieron sin pasar por «Iniciar trabajo».'
+              : "Para fallas que ya se arreglaron sin pasar por 'Iniciar trabajo'."}
           </Text>
 
           <DateTimePicker

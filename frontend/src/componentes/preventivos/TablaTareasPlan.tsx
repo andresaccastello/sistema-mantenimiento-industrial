@@ -19,12 +19,12 @@ export function TablaTareasPlan({ tareas, onEditar, onCambiarActivo }: Props) {
       <Table verticalSpacing="sm">
         <Table.Thead>
           <Table.Tr>
-            <Table.Th>Estado</Table.Th>
-            <Table.Th>Tarea</Table.Th>
-            <Table.Th>Frecuencia</Table.Th>
-            <Table.Th>Última vez</Table.Th>
-            <Table.Th>Próxima</Table.Th>
-            <Table.Th>Sugerido</Table.Th>
+            <Table.Th style={{ minWidth: 130 }}>Estado</Table.Th>
+            <Table.Th style={{ minWidth: 200 }}>Tarea</Table.Th>
+            <Table.Th style={{ minWidth: 120 }}>Frecuencia</Table.Th>
+            <Table.Th style={{ minWidth: 110 }}>Última vez</Table.Th>
+            <Table.Th style={{ minWidth: 120 }}>Próxima</Table.Th>
+            <Table.Th style={{ minWidth: 150 }}>Sugerido</Table.Th>
             <Table.Th style={{ width: 48 }} />
           </Table.Tr>
         </Table.Thead>

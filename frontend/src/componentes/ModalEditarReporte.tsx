@@ -23,6 +23,7 @@ export interface ModalEditarReporteProps {
   estadoEsperado: string;
   descripcionInicial: string;
   observacionesIniciales?: string | null;
+  esPreventivo?: boolean;
   onExito?: () => void;
 }
 
@@ -33,6 +34,7 @@ export function ModalEditarReporte({
   estadoEsperado,
   descripcionInicial,
   observacionesIniciales,
+  esPreventivo = false,
   onExito,
 }: ModalEditarReporteProps) {
   const queryClient = useQueryClient();
@@ -67,7 +69,11 @@ export function ModalEditarReporte({
 
     const descLimpia = descripcion.trim();
     if (descLimpia.length < 5) {
-      setErrorValidacionDesc('Describí la falla (al menos 5 caracteres).');
+      setErrorValidacionDesc(
+        esPreventivo
+          ? 'Describí el trabajo (al menos 5 caracteres).'
+          : 'Describí la falla (al menos 5 caracteres).'
+      );
       return;
     }
     if (descLimpia.length > 2000) {
@@ -141,7 +147,7 @@ export function ModalEditarReporte({
           <Stack gap={4}>
             <Textarea
               size="md"
-              label="¿Qué pasa?"
+              label={esPreventivo ? 'Descripción' : '¿Qué pasa?'}
               minRows={3}
               maxRows={6}
               value={descripcion}

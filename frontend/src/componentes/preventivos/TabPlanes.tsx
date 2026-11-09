@@ -64,12 +64,12 @@ export function TabPlanes({ filtros, onCambiarFiltros }: Props) {
           <Table verticalSpacing="sm" highlightOnHover>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Plan</Table.Th>
-                <Table.Th>Máquina</Table.Th>
-                <Table.Th>Responsable</Table.Th>
-                <Table.Th>Tareas</Table.Th>
-                <Table.Th>Pendientes</Table.Th>
-                <Table.Th>Próxima</Table.Th>
+                <Table.Th style={{ minWidth: 200 }}>Plan</Table.Th>
+                <Table.Th style={{ minWidth: 160 }}>Máquina</Table.Th>
+                <Table.Th style={{ minWidth: 140 }}>Responsable</Table.Th>
+                <Table.Th style={{ minWidth: 80 }}>Tareas</Table.Th>
+                <Table.Th style={{ minWidth: 140 }}>Pendientes</Table.Th>
+                <Table.Th style={{ minWidth: 110 }}>Próxima</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -81,7 +81,7 @@ export function TabPlanes({ filtros, onCambiarFiltros }: Props) {
                         {p.nombre}
                       </Anchor>
                       {!p.activo && (
-                        <Badge color="gray" variant="outline" size="sm">
+                        <Badge color="gray" variant="outline" size="sm" style={{ flexShrink: 0 }}>
                           Inactivo
                         </Badge>
                       )}

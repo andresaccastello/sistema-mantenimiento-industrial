@@ -50,10 +50,10 @@ export function BloquePlanesMaquina({ maquinaId }: { maquinaId: number }) {
             <Table verticalSpacing="xs">
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>Plan</Table.Th>
-                  <Table.Th>Responsable</Table.Th>
-                  <Table.Th>Pendientes</Table.Th>
-                  <Table.Th>Próxima</Table.Th>
+                  <Table.Th style={{ minWidth: 180 }}>Plan</Table.Th>
+                  <Table.Th style={{ minWidth: 140 }}>Responsable</Table.Th>
+                  <Table.Th style={{ minWidth: 130 }}>Pendientes</Table.Th>
+                  <Table.Th style={{ minWidth: 110 }}>Próxima</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -65,7 +65,7 @@ export function BloquePlanesMaquina({ maquinaId }: { maquinaId: number }) {
                           {p.nombre}
                         </Anchor>
                         {!p.activo && (
-                          <Badge color="gray" variant="outline" size="sm">
+                          <Badge color="gray" variant="outline" size="sm" style={{ flexShrink: 0 }}>
                             Inactivo
                           </Badge>
                         )}

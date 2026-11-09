@@ -77,13 +77,13 @@ export function TabVencimientos({ filtros, onCambiarFiltros }: Props) {
             <Table verticalSpacing="sm" highlightOnHover>
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>Estado</Table.Th>
-                  <Table.Th>Vence</Table.Th>
-                  <Table.Th>Tarea</Table.Th>
-                  <Table.Th>Máquina</Table.Th>
-                  <Table.Th>Plan</Table.Th>
-                  <Table.Th>Responsable</Table.Th>
-                  <Table.Th>Acción</Table.Th>
+                  <Table.Th style={{ minWidth: 130 }}>Estado</Table.Th>
+                  <Table.Th style={{ minWidth: 120 }}>Vence</Table.Th>
+                  <Table.Th style={{ minWidth: 200 }}>Tarea</Table.Th>
+                  <Table.Th style={{ minWidth: 160 }}>Máquina</Table.Th>
+                  <Table.Th style={{ minWidth: 150 }}>Plan</Table.Th>
+                  <Table.Th style={{ minWidth: 140 }}>Responsable</Table.Th>
+                  <Table.Th style={{ minWidth: 130 }}>Acción</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
