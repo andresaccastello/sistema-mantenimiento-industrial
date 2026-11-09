@@ -4,6 +4,7 @@ import { jwtVerify, dbVerify, requirePermission } from '../middleware.ts';
 import { estadoEmail, obtenerTransporteEmail, sanitizarError } from './transporteEmail.ts';
 import { procesarEnvios } from './procesarEnvios.ts';
 import { REGLAS_EVENTOS_NOTIFICACION } from '../intervenciones/notificaciones.ts';
+import { parseEnteroTexto } from '../validations.ts';
 
 export const avisosTriggerApp = new Hono();
 export const configuracionAvisosApp = new Hono();
@@ -334,14 +335,14 @@ configuracionAvisosApp.get('/envios', async (c) => {
   const offsetParam = c.req.query('offset') ?? '0';
   const estadoParam = c.req.query('estado');
 
-  const limitNum = Number(limitParam);
-  const offsetNum = Number(offsetParam);
+  const limitNum = parseEnteroTexto(limitParam, 1);
+  const offsetNum = parseEnteroTexto(offsetParam, 0);
 
-  if (isNaN(limitNum) || !Number.isInteger(limitNum) || limitNum < 1 || limitNum > 100) {
+  if (limitNum === null || limitNum > 100) {
     return c.json({ error: 'Parámetro limit inválido (1 a 100)', codigo: 'DATOS_INVALIDOS' }, 400);
   }
 
-  if (isNaN(offsetNum) || !Number.isInteger(offsetNum) || offsetNum < 0) {
+  if (offsetNum === null) {
     return c.json({ error: 'Parámetro offset inválido (>= 0)', codigo: 'DATOS_INVALIDOS' }, 400);
   }
 

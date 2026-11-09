@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { pool } from './db.ts';
 import { jwtVerify, dbVerify } from './middleware.ts';
-import { parseId } from './validations.ts';
+import { parseId, parseEnteroTexto } from './validations.ts';
 
 const notificacionesApp = new Hono();
 
@@ -148,8 +148,8 @@ notificacionesApp.get('/', async (c) => {
 
   let limite = 50;
   if (limiteRaw !== undefined) {
-    const lim = Number(limiteRaw);
-    if (!Number.isInteger(lim) || lim < 1 || lim > 100) {
+    const lim = parseEnteroTexto(limiteRaw, 1);
+    if (lim === null || lim > 100) {
       return c.json(
         { error: 'Parámetro limite debe ser un entero entre 1 y 100', codigo: 'DATOS_INVALIDOS' },
         422

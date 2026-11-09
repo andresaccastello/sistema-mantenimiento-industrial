@@ -1,4 +1,5 @@
 import { ErrorNegocio } from '../intervenciones/errores.ts';
+import { parseId } from '../validations.ts';
 
 const REGEX_EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -70,11 +71,8 @@ export function formatearCantidad(valor?: number | string | null): string {
 }
 
 export function parseIdRuta(val: unknown): number | null {
-  if (typeof val !== 'string' || !/^\d+$/.test(val)) {
-    return null;
-  }
-  const n = parseInt(val, 10);
-  return Number.isSafeInteger(n) && n > 0 ? n : null;
+  // La ruta siempre trae texto: mismas reglas que parseId
+  return typeof val === 'string' ? parseId(val) : null;
 }
 
 export function validarIdCuerpo(val: unknown, codigoError = 'DATOS_INVALIDOS', campo = 'id'): number {

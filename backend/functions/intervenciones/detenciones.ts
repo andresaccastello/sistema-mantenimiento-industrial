@@ -110,7 +110,7 @@ export async function confirmarRecuperacionMaquina(
   const periodoIds: number[] = [];
   const setIds = new Set<number>();
   for (const item of periodoIdsRaw) {
-    const num = parseId(String(item));
+    const num = parseId(item);
     if (num === null || setIds.has(num)) {
       throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'La lista de periodo_ids contiene valores inválidos o repetidos');
     }

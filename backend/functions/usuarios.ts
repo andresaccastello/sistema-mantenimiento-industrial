@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import pg from 'pg';
 import { pool } from './db.ts';
 import { jwtVerify, dbVerify, requirePermission } from './middleware.ts';
-import { parseId } from './validations.ts';
+import { parseId, parseEnteroTexto } from './validations.ts';
 import { resolverPermisosEfectivos, AlcancePermiso } from './intervenciones/permisos.ts';
 
 const SCOPE_HIERARCHY: Record<AlcancePermiso, number> = {
@@ -443,10 +443,11 @@ usuariosApp.get('/:id/auditoria', async (c) => {
   const limitParam = c.req.query('limit');
   let limit = 50;
   if (limitParam !== undefined) {
-    if (!/^\d+$/.test(limitParam)) {
+    const parsedLimit = parseEnteroTexto(limitParam, 0);
+    if (parsedLimit === null) {
       return c.json({ error: 'Parámetro limit inválido', codigo: 'DATOS_INVALIDOS' }, 400);
     }
-    limit = Number(limitParam);
+    limit = parsedLimit;
     if (limit < 1 || limit > 200) {
       return c.json({ error: 'limit debe estar entre 1 y 200', codigo: 'DATOS_INVALIDOS' }, 400);
     }
@@ -455,13 +456,11 @@ usuariosApp.get('/:id/auditoria', async (c) => {
   const offsetParam = c.req.query('offset');
   let offset = 0;
   if (offsetParam !== undefined) {
-    if (!/^\d+$/.test(offsetParam)) {
+    const parsedOffset = parseEnteroTexto(offsetParam, 0);
+    if (parsedOffset === null) {
       return c.json({ error: 'Parámetro offset inválido', codigo: 'DATOS_INVALIDOS' }, 400);
     }
-    offset = Number(offsetParam);
-    if (offset < 0) {
-      return c.json({ error: 'offset no puede ser negativo', codigo: 'DATOS_INVALIDOS' }, 400);
-    }
+    offset = parsedOffset;
   }
 
   try {
@@ -645,7 +644,7 @@ usuariosApp.post('/', async (c) => {
   }
 
   // Validar perfil_id
-  const perfilIdNum = parseId(String(perfil_id));
+  const perfilIdNum = parseId(perfil_id);
   if (!perfilIdNum) {
     return c.json({ error: 'El perfil_id es obligatorio y debe ser válido', codigo: 'DATOS_INVALIDOS' }, 422);
   }
@@ -657,7 +656,7 @@ usuariosApp.post('/', async (c) => {
       return c.json({ error: 'Sectores debe ser un array de ids', codigo: 'DATOS_INVALIDOS' }, 422);
     }
     for (const sec of sectores) {
-      const secNum = parseId(String(sec));
+      const secNum = parseId(sec);
       if (!secNum) {
         return c.json({ error: 'Uno o más identificadores de sector son inválidos', codigo: 'DATOS_INVALIDOS' }, 422);
       }
@@ -916,7 +915,7 @@ usuariosApp.patch('/:id', async (c) => {
 
     // 2. Validar y procesar perfil_id
     if (perfil_id !== undefined) {
-      const pidNum = parseId(String(perfil_id));
+      const pidNum = parseId(perfil_id);
       if (!pidNum) {
         await client.query('ROLLBACK');
         return c.json({ error: 'perfil_id inválido', codigo: 'DATOS_INVALIDOS' }, 422);
@@ -958,7 +957,7 @@ usuariosApp.patch('/:id', async (c) => {
 
       const parsedSecs: number[] = [];
       for (const s of sectores) {
-        const sNum = parseId(String(s));
+        const sNum = parseId(s);
         if (!sNum) {
           await client.query('ROLLBACK');
           return c.json({ error: 'Identificador de sector inválido', codigo: 'DATOS_INVALIDOS' }, 422);

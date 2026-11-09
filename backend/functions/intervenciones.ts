@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { pool } from './db.ts';
 import { jwtVerify, dbVerify, requirePermission, getUserScope } from './middleware.ts';
-import { parseId, parseString, badRequest } from './validations.ts';
+import { parseId, parseEnteroTexto, parseString, badRequest } from './validations.ts';
 import { ErrorNegocio, responderError } from './intervenciones/errores.ts';
 import { conTransaccion } from './intervenciones/transaccion.ts';
 import { puedeVerIntervencion, UsuarioVisibilidad } from './intervenciones/visibilidad.ts';
@@ -314,8 +314,8 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
     const limitParam = c.req.query('limit');
     let limitVal: number | null = null;
     if (limitParam !== undefined && limitParam !== null && limitParam.trim() !== '') {
-      const parsedLimit = Number(limitParam);
-      if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 200) {
+      const parsedLimit = parseEnteroTexto(limitParam, 1);
+      if (parsedLimit === null || parsedLimit > 200) {
         throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El parámetro limit debe ser un entero entre 1 y 200');
       }
       limitVal = parsedLimit;
@@ -324,8 +324,8 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
     const offsetParam = c.req.query('offset');
     let offsetVal = 0;
     if (offsetParam !== undefined && offsetParam !== null && offsetParam.trim() !== '') {
-      const parsedOffset = Number(offsetParam);
-      if (!Number.isInteger(parsedOffset) || parsedOffset < 0) {
+      const parsedOffset = parseEnteroTexto(offsetParam, 0);
+      if (parsedOffset === null) {
         throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El parámetro offset debe ser un entero mayor o igual a 0');
       }
       offsetVal = parsedOffset;

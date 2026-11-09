@@ -73,7 +73,36 @@ async function mismaRespuesta(
   return conGrande;
 }
 
-test('Ids fuera de rango (ID-01 a ID-03)', async (t) => {
+/** Formas raras de escribir un id que existe, como texto: para la ruta y la consulta. */
+const formasTexto = (id: number): string[] => [`+${id}`, `${id}.0`, ` ${id}`, `0x${id.toString(16)}`, 'true', `[${id}]`];
+/** En el cuerpo: las mismas, con true y [id] como valores JSON. */
+const formasCuerpo = (id: number): unknown[] => [`+${id}`, `${id}.0`, ` ${id}`, `0x${id.toString(16)}`, true, [id]];
+
+interface Esperado {
+  status: number;
+  codigo: string;
+  error: string;
+}
+
+/** Con 0 da el error esperado; con cada forma rara, exactamente lo mismo. */
+async function igualQueCero(
+  descripcion: string,
+  esperado: Esperado,
+  cero: unknown,
+  formas: unknown[],
+  hacer: (valor: any) => Promise<Respuesta>
+) {
+  const conCero = await hacer(cero);
+  assert.strictEqual(conCero.status, esperado.status, `${descripcion} con 0: ${JSON.stringify(conCero.cuerpo)}`);
+  assert.strictEqual((conCero.cuerpo as any).codigo, esperado.codigo, `${descripcion} con 0`);
+  assert.strictEqual((conCero.cuerpo as any).error, esperado.error, `${descripcion} con 0`);
+  for (const forma of formas) {
+    const r = await hacer(forma);
+    assert.deepStrictEqual(r, conCero, `${descripcion} con ${JSON.stringify(forma)}: ${r.status} ${JSON.stringify(r.cuerpo)}`);
+  }
+}
+
+test('Ids fuera de rango (ID-01 a ID-05)', async (t) => {
   const client = await pool.connect();
 
   const createdPlantaIds: number[] = [];
@@ -337,6 +366,156 @@ test('Ids fuera de rango (ID-01 a ID-03)', async (t) => {
       // No se guardó nada
       assert.deepStrictEqual(await contar(), antes);
     });
+
+    // =========================================================================
+    // ID-04: Formatos raros con el id de algo que existe
+    // =========================================================================
+    await t.test('ID-04: Formatos raros con el id de algo que existe', async () => {
+      const enc = (v: string) => encodeURIComponent(v);
+
+      // Una notificación de A, sin leer
+      const notifId = Number((await client.query(
+        `INSERT INTO notificaciones (usuario_id, tipo_evento, prioridad, titulo, mensaje, generada_por_usuario_id)
+         VALUES ($1, 'INTERVENCION_ASIGNADA', 'NORMAL', 'Notificacion prueba ID', 'Texto', $2) RETURNING id`,
+        [A.id, O.id]
+      )).rows[0].id);
+
+      // Un período de detención abierto en la intervención de la prueba
+      const rDet = await pedir('POST', `/api/intervenciones/${intId}/registrar-detencion`, R.token, {
+        estado_esperado: 'EN_PROCESO',
+        observacion: 'Detencion prueba ID',
+      });
+      assert.strictEqual(rDet.status, 200, JSON.stringify(rDet.cuerpo));
+      const periodoId = Number((await client.query(
+        'SELECT id FROM intervencion_periodos_detencion WHERE intervencion_id = $1 AND hasta IS NULL', [intId]
+      )).rows[0].id);
+
+      const ordenCriticidades = async () =>
+        (await client.query('SELECT id, orden FROM criticidades ORDER BY orden, id')).rows.map((r) => ({
+          id: Number(r.id),
+          orden: Number(r.orden),
+        }));
+
+      const estado = async () => {
+        const r = await client.query(
+          `SELECT
+             (SELECT leida_en FROM notificaciones WHERE id = $1) AS notificacion_leida,
+             (SELECT count(*)::int FROM intervenciones WHERE maquina_id = $2) AS intervenciones,
+             (SELECT count(*)::int FROM sectores WHERE nombre = $3) AS sectores,
+             (SELECT responsable_usuario_id FROM intervenciones WHERE id = $4) AS responsable,
+             (SELECT count(*)::int FROM usuarios WHERE legajo = $5) AS usuarios,
+             (SELECT hasta FROM intervencion_periodos_detencion WHERE id = $6) AS periodo_hasta`,
+          [notifId, mId, `ID_S2_${suf}`, intId, `ID_N_${suf}`, periodoId]
+        );
+        return { ...r.rows[0], criticidades: await ordenCriticidades() };
+      };
+      const antes = await estado();
+      assert.strictEqual(antes.notificacion_leida, null);
+      assert.strictEqual(antes.periodo_hasta, null);
+      assert.ok(antes.criticidades.length > 0);
+
+      // En la ruta
+      await igualQueCero('GET /api/maquinas/X', { status: 400, codigo: 'DATOS_INVALIDOS', error: 'ID inválido' },
+        '0', formasTexto(mId), (v: string) => pedir('GET', `/api/maquinas/${enc(v)}`, A.token));
+      await igualQueCero('POST /api/notificaciones/X/leer',
+        { status: 422, codigo: 'DATOS_INVALIDOS', error: 'Identificador de notificación inválido' },
+        '0', formasTexto(notifId), (v: string) => pedir('POST', `/api/notificaciones/${enc(v)}/leer`, A.token, {}));
+
+      // En la consulta
+      await igualQueCero('GET /api/intervenciones?maquina_id=',
+        { status: 422, codigo: 'DATOS_INVALIDOS', error: 'El parámetro maquina_id debe ser un número entero positivo' },
+        '0', formasTexto(mId), (v: string) => pedir('GET', `/api/intervenciones?maquina_id=${enc(v)}`, A.token));
+
+      // En el cuerpo: maquina_id al reportar una falla
+      await igualQueCero('falla maquina_id',
+        { status: 400, codigo: 'DATOS_INVALIDOS', error: 'El ID de la máquina es obligatorio y debe ser un número entero positivo' },
+        0, formasCuerpo(mId),
+        (v) => pedir('POST', '/api/intervenciones', O.token, { maquina_id: v, descripcion: 'Falla prueba ID' }));
+
+      // planta_id de un sector nuevo
+      await igualQueCero('sector nuevo planta_id',
+        { status: 400, codigo: 'DATOS_INVALIDOS', error: 'La planta indicada no existe o está inactiva' },
+        0, formasCuerpo(plId),
+        (v) => pedir('POST', '/api/sectores', A.token, { nombre: `ID_S2_${suf}`, planta_id: v }));
+
+      // usuario_id del responsable
+      await igualQueCero('responsable usuario_id',
+        { status: 400, codigo: 'DATOS_INVALIDOS', error: 'El usuario_id a asignar es requerido y debe ser un número entero' },
+        0, formasCuerpo(R.id),
+        (v) => pedir('PUT', `/api/intervenciones/${intId}/responsable`, A.token, { usuario_id: v, estado_esperado: 'EN_PROCESO' }));
+
+      // perfil_id y sectores de un usuario nuevo
+      const usuarioNuevo = (cambios: Record<string, unknown>) =>
+        pedir('POST', '/api/usuarios', A.token, {
+          legajo: `ID_N_${suf}`,
+          nombre: 'Nuevo',
+          apellido: 'ID',
+          perfil_id: perfilMap['OPERARIO'],
+          sectores: [sId],
+          password_temporal: 'Temporal123',
+          ...cambios,
+        });
+      await igualQueCero('usuario nuevo perfil_id',
+        { status: 422, codigo: 'DATOS_INVALIDOS', error: 'El perfil_id es obligatorio y debe ser válido' },
+        0, formasCuerpo(perfilMap['OPERARIO']), (v) => usuarioNuevo({ perfil_id: v }));
+      await igualQueCero('usuario nuevo sectores',
+        { status: 422, codigo: 'DATOS_INVALIDOS', error: 'Uno o más identificadores de sector son inválidos' },
+        0, formasCuerpo(sId), (v) => usuarioNuevo({ sectores: [v] }));
+
+      // periodo_ids
+      await igualQueCero('confirmar recuperación periodo_ids',
+        { status: 422, codigo: 'DATOS_INVALIDOS', error: 'La lista de periodo_ids contiene valores inválidos o repetidos' },
+        0, formasCuerpo(periodoId),
+        (v) => pedir('POST', `/api/maquinas/${mId}/confirmar-recuperacion`, A.token, { periodo_ids: [v] }));
+
+      // Los ids del orden de un catálogo: el primero, escrito de otra forma
+      const ids = antes.criticidades.map((c: { id: number }) => c.id);
+      await igualQueCero('orden de criticidades',
+        { status: 400, codigo: 'DATOS_INVALIDOS', error: 'Cada ID debe ser un entero positivo' },
+        0, formasCuerpo(ids[0]),
+        (v) => pedir('PUT', '/api/criticidades/orden', A.token, { ids: [v, ...ids.slice(1)] }));
+
+      // No se guardó nada
+      assert.deepStrictEqual(await estado(), antes);
+    });
+
+    // =========================================================================
+    // ID-05: Límites y desplazamientos
+    // =========================================================================
+    await t.test('ID-05: Límites y desplazamientos', async () => {
+      /** Cada valor da la respuesta de dato inválido del listado, la misma que la referencia, y nunca 500. */
+      const invalidos = async (
+        descripcion: string,
+        esperado: { status: number; codigo: string },
+        referencia: string,
+        valores: string[],
+        ruta: (valor: string) => string
+      ) => {
+        const conReferencia = await pedir('GET', ruta(referencia), A.token);
+        assert.strictEqual(conReferencia.status, esperado.status, `${descripcion}=${referencia}: ${JSON.stringify(conReferencia.cuerpo)}`);
+        assert.strictEqual((conReferencia.cuerpo as any).codigo, esperado.codigo, `${descripcion}=${referencia}`);
+        for (const valor of valores) {
+          const r = await pedir('GET', ruta(valor), A.token);
+          assert.notStrictEqual(r.status, 500, `${descripcion}=${valor}: 500: ${JSON.stringify(r.cuerpo)}`);
+          assert.deepStrictEqual(r, conReferencia, `${descripcion}=${valor}: ${r.status} ${JSON.stringify(r.cuerpo)}`);
+        }
+      };
+
+      await invalidos('GET /api/configuracion/avisos/envios?offset', { status: 400, codigo: 'DATOS_INVALIDOS' },
+        '-1', ['1e20', GRANDE], (v) => `/api/configuracion/avisos/envios?offset=${v}`);
+      await invalidos('GET /api/usuarios/:id/auditoria?offset', { status: 400, codigo: 'DATOS_INVALIDOS' },
+        '-1', [GRANDE, '1e20'], (v) => `/api/usuarios/${A.id}/auditoria?offset=${v}`);
+      await invalidos('GET /api/repuestos/:id/movimientos?limite', { status: 422, codigo: 'DATOS_INVALIDOS' },
+        '0', ['1.5', '0.0001', 'abc', GRANDE], (v) => `/api/repuestos/${repId}/movimientos?limite=${v}`);
+      await invalidos('GET /api/intervenciones?offset', { status: 422, codigo: 'DATOS_INVALIDOS' },
+        '-1', ['1e20', GRANDE], (v) => `/api/intervenciones?offset=${v}`);
+
+      // Los movimientos siguen andando sin limite y con más de 500
+      for (const sufijo of ['', '?limite=1', '?limite=501']) {
+        const r = await pedir('GET', `/api/repuestos/${repId}/movimientos${sufijo}`, A.token);
+        assert.strictEqual(r.status, 200, `movimientos${sufijo}: ${JSON.stringify(r.cuerpo)}`);
+      }
+    });
   } finally {
     // Limpieza: solo lo que creó esta prueba
     try {
@@ -380,6 +559,11 @@ test('Ids fuera de rango (ID-01 a ID-03)', async (t) => {
         await client.query('DELETE FROM historial_estados_maquina WHERE maquina_id = ANY($1)', [createdMaquinaIds]);
         await client.query('DELETE FROM maquinas WHERE id = ANY($1)', [createdMaquinaIds]);
       }
+      // Un usuario y un sector que no debían crearse, si se hubieran creado
+      const resUsrExtra = await client.query('SELECT id FROM usuarios WHERE legajo = $1', [`ID_N_${suf}`]);
+      for (const r of resUsrExtra.rows) createdUsuarioIds.push(Number(r.id));
+      const resSecExtra = await client.query('SELECT id FROM sectores WHERE nombre = $1', [`ID_S2_${suf}`]);
+      for (const r of resSecExtra.rows) createdSectorIds.push(Number(r.id));
       if (createdUsuarioIds.length > 0) {
         await client.query('DELETE FROM notificacion_envios WHERE notificacion_id IN (SELECT id FROM notificaciones WHERE usuario_id = ANY($1))', [createdUsuarioIds]);
         await client.query('DELETE FROM notificaciones WHERE usuario_id = ANY($1)', [createdUsuarioIds]);

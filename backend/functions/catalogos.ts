@@ -239,9 +239,7 @@ function crearRouterCatalogo(config: CatalogoConfig) {
 
       const parsedIds: number[] = [];
       for (const rawId of ids) {
-        const idNum = typeof rawId === 'number'
-          ? parseId(String(rawId))
-          : (typeof rawId === 'string' && /^\d+$/.test(rawId.trim()) ? parseId(rawId) : null);
+        const idNum = parseId(rawId);
         if (!idNum) {
           await client.query('ROLLBACK');
           return badRequest(c, 'Cada ID debe ser un entero positivo');

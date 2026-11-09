@@ -12,6 +12,7 @@ import {
   validarBooleano,
 } from './repuestos/validaciones.ts';
 import { moverStock, cambiarCosto } from './repuestos/stock.ts';
+import { parseEnteroTexto } from './validations.ts';
 
 const repuestosApp = new Hono();
 
@@ -633,8 +634,16 @@ repuestosApp.get('/:id/movimientos', requirePermission('REPUESTOS_GESTIONAR'), a
       throw new ErrorNegocio(404, 'REPUESTO_NO_ENCONTRADO', 'Repuesto no encontrado');
     }
 
-    const rawLimite = Number(c.req.query('limite'));
-    const limite = !isNaN(rawLimite) && rawLimite > 0 ? Math.min(rawLimite, 500) : 100;
+    // limite: un entero desde 1; más de 500 se toma como 500. Sin limite, 100.
+    const limiteRaw = c.req.query('limite');
+    let limite = 100;
+    if (limiteRaw !== undefined) {
+      const lim = parseEnteroTexto(limiteRaw, 1);
+      if (lim === null) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El parámetro limite debe ser un entero mayor o igual a 1');
+      }
+      limite = Math.min(lim, 500);
+    }
     const tienePermisoCostos = veCostos(c);
 
     const sql = `
