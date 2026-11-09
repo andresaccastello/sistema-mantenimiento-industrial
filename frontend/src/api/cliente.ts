@@ -144,6 +144,13 @@ export const clienteApi = {
     });
   },
 
+  /** Un GET cuyo cuerpo es un objeto, con el total de `X-Total-Count` (null si no viene). */
+  async getConTotal<T>(path: string, options?: RequestOptions): Promise<{ datos: T; total: number | null }> {
+    const { data, response } = await executeRequest<T>(path, { ...options, method: 'GET' });
+    const totalHeader = response.headers.get('X-Total-Count') || response.headers.get('x-total-count');
+    return { datos: data, total: totalHeader ? Number(totalHeader) : null };
+  },
+
   async listar<T>(path: string, options?: RequestOptions): Promise<ListaResultado<T>> {
     const { data, response } = await executeRequest<any>(path, { ...options, method: 'GET' });
     const totalHeader = response.headers.get('X-Total-Count') || response.headers.get('x-total-count');

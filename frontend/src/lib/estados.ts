@@ -3,7 +3,7 @@
  * Lógica pura sin dependencias de React ni Mantine ni Tabler.
  */
 
-export type EntidadEstado = 'intervencion' | 'maquina';
+export type EntidadEstado = 'intervencion' | 'maquina' | 'tarea_preventiva';
 
 export interface InfoEstado {
   entidad: EntidadEstado;
@@ -26,12 +26,24 @@ export const ESTADOS: readonly InfoEstado[] = [
 ] as const;
 
 /**
+ * Estados de una tarea preventiva (Etapa PV2, sección 2). Van aparte de ESTADOS, que
+ * tiene solo los de intervención y máquina (FE-03); obtenerInfoEstado busca en las dos.
+ */
+export const ESTADOS_TAREA_PREVENTIVA: readonly InfoEstado[] = [
+  { entidad: 'tarea_preventiva', estado: 'VENCIDA', texto: 'Vencida', color: 'red', icono: 'IconAlertTriangle' },
+  { entidad: 'tarea_preventiva', estado: 'PROXIMA', texto: 'Próxima', color: 'orange', icono: 'IconClock' },
+  { entidad: 'tarea_preventiva', estado: 'EN_CURSO', texto: 'En curso', color: 'blue', icono: 'IconTool' },
+  { entidad: 'tarea_preventiva', estado: 'AL_DIA', texto: 'Al día', color: 'green', icono: 'IconCircleCheck' },
+  { entidad: 'tarea_preventiva', estado: 'INACTIVA', texto: 'Inactiva', color: 'gray', icono: 'IconBan' },
+] as const;
+
+/**
  * Obtiene la información visual de un estado para una entidad.
  * Si el estado no se encuentra, devuelve una configuración por defecto
  * con el código en gris, sin romper la pantalla.
  */
 export function obtenerInfoEstado(entidad: EntidadEstado, estado: string): InfoEstado {
-  const encontrado = ESTADOS.find(
+  const encontrado = [...ESTADOS, ...ESTADOS_TAREA_PREVENTIVA].find(
     (item) => item.entidad === entidad && item.estado === estado
   );
 

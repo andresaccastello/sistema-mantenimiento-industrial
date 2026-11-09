@@ -59,24 +59,26 @@ describe('FE-04: itemsMenu con los permisos de cada perfil', () => {
     assert.deepEqual(items, ['Inicio', 'Reportar falla', 'Intervenciones', 'Máquinas']);
   });
 
-  it('RESPONSABLE_MANTENIMIENTO: Inicio, Reportar falla, Intervenciones, Máquinas, Repuestos, Reportes', () => {
+  it('RESPONSABLE_MANTENIMIENTO: Inicio, Reportar falla, Intervenciones, Preventivos, Máquinas, Repuestos, Reportes', () => {
     const items = itemsMenu(permisosResponsable).map((i) => i.etiqueta);
     assert.deepEqual(items, [
       'Inicio',
       'Reportar falla',
       'Intervenciones',
+      'Preventivos',
       'Máquinas',
       'Repuestos',
       'Reportes',
     ]);
   });
 
-  it('I_D: Inicio, Reportar falla, Intervenciones, Máquinas, Repuestos, Reportes', () => {
+  it('I_D: Inicio, Reportar falla, Intervenciones, Preventivos, Máquinas, Repuestos, Reportes', () => {
     const items = itemsMenu(permisosID).map((i) => i.etiqueta);
     assert.deepEqual(items, [
       'Inicio',
       'Reportar falla',
       'Intervenciones',
+      'Preventivos',
       'Máquinas',
       'Repuestos',
       'Reportes',
@@ -93,12 +95,13 @@ describe('FE-04: itemsMenu con los permisos de cada perfil', () => {
     assert.deepEqual(items, ['Inicio', 'Intervenciones', 'Máquinas', 'Reportes']);
   });
 
-  it('ADMINISTRADOR: los 9 ítems, incluyendo Repuestos y Configuración', () => {
+  it('ADMINISTRADOR: los 10 ítems, incluyendo Repuestos, Preventivos y Configuración', () => {
     const items = itemsMenu(permisosAdmin).map((i) => i.etiqueta);
     assert.deepEqual(items, [
       'Inicio',
       'Reportar falla',
       'Intervenciones',
+      'Preventivos',
       'Máquinas',
       'Repuestos',
       'Reportes',
@@ -114,5 +117,18 @@ describe('FE-04: itemsMenu con los permisos de cada perfil', () => {
 
     const sinPermiso = itemsMenu({ USUARIOS_GESTIONAR: 'TODAS' });
     assert.ok(!sinPermiso.some((i) => i.etiqueta === 'Configuración'));
+  });
+});
+
+describe('FE-76: Preventivos en el menú', () => {
+  it('aparece con PLANES_GESTIONAR, después de Intervenciones, y no aparece sin ese permiso', () => {
+    const con = itemsMenu({ INTERVENCIONES_VER: 'TODAS', PLANES_GESTIONAR: 'SECTORES' });
+    assert.deepEqual(
+      con.map((i) => [i.etiqueta, i.ruta, i.icono]).slice(1, 3),
+      [['Intervenciones', '/intervenciones', 'IconTool'], ['Preventivos', '/preventivos', 'IconCalendarCheck']]
+    );
+
+    const sin = itemsMenu({ INTERVENCIONES_VER: 'TODAS', REPUESTOS_GESTIONAR: 'TODAS' });
+    assert.ok(!sin.some((i) => i.etiqueta === 'Preventivos'));
   });
 });

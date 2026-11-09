@@ -28,6 +28,9 @@ import { Configuracion } from '../pantallas/Configuracion';
 import { Reportes } from '../pantallas/Reportes';
 import { Repuestos } from '../pantallas/Repuestos';
 import { DetalleRepuesto } from '../pantallas/DetalleRepuesto';
+import { Preventivos } from '../pantallas/Preventivos';
+import { DetallePlan } from '../pantallas/DetallePlan';
+import { NuevoPlan } from '../pantallas/NuevoPlan';
 import { vistaDetalle } from '../lib/intervenciones';
 
 // Componentes generales
@@ -130,6 +133,30 @@ export function RutasApp() {
           element={
             <RutaProtegida permiso="INTERVENCIONES_VER">
               <DetalleIntervencionRuta />
+            </RutaProtegida>
+          }
+        />
+        <Route
+          path="/preventivos"
+          element={
+            <RutaProtegida permiso="PLANES_GESTIONAR">
+              <Preventivos />
+            </RutaProtegida>
+          }
+        />
+        <Route
+          path="/preventivos/planes/nuevo"
+          element={
+            <RutaProtegida permiso="PLANES_GESTIONAR">
+              <NuevoPlan />
+            </RutaProtegida>
+          }
+        />
+        <Route
+          path="/preventivos/planes/:id"
+          element={
+            <RutaProtegida permiso="PLANES_GESTIONAR">
+              <DetallePlan />
             </RutaProtegida>
           }
         />

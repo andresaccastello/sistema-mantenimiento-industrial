@@ -67,6 +67,14 @@ export function itemsMenu(permisos: PermisosEntrada): ItemMenu[] {
     });
   }
 
+  if (verificarPermiso(permisos, 'PLANES_GESTIONAR')) {
+    items.push({
+      etiqueta: 'Preventivos',
+      ruta: '/preventivos',
+      icono: 'IconCalendarCheck',
+    });
+  }
+
   // Máquinas siempre visible
   items.push({
     etiqueta: 'Máquinas',
