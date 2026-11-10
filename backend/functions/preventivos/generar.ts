@@ -4,6 +4,7 @@ import { UsuarioVisibilidad } from '../intervenciones/visibilidad.ts';
 import { validarResponsableHabilitado } from '../intervenciones/motor.ts';
 import { registrarAuditoria, registrarNotificaciones } from '../intervenciones/auditoria.ts';
 import { validarIdCuerpo } from '../repuestos/validaciones.ts';
+import { MAXIMO_VALOR } from '../medidores/lecturas.ts';
 import { bloquearPlan, columnasPersona, persona, planNoEncontrado, Persona } from './comun.ts';
 
 const LARGO_DESCRIPCION = 2000;
@@ -34,7 +35,7 @@ function descripcionPreventivo(plan: string, acciones: string[]): string {
 export interface Generada {
   intervencion: { id: number; estado: string; responsable: Persona | null };
   responsable_omitido: boolean;
-  tareas: Array<{ id: number; plan_tarea_id: number; orden: number; accion: string; fecha_programada: string }>;
+  tareas: Array<{ id: number; plan_tarea_id: number; orden: number; accion: string; fecha_programada: string | null }>;
 }
 
 /**
@@ -71,7 +72,7 @@ export async function generarDesdePlan(
   // 2. Recién ahora, los estados
   const resEstados = await client.query(
     `SELECT id, orden, accion, detalle, activo, estado, intervencion_en_curso_id,
-            to_char(proxima_fecha, 'YYYY-MM-DD') AS proxima_fecha
+            to_char(proxima_fecha, 'YYYY-MM-DD') AS proxima_fecha, medidor_id, proximo_uso
      FROM v_plan_tareas_estado
      WHERE plan_id = $1
      ORDER BY orden, id`,
@@ -83,7 +84,7 @@ export async function generarDesdePlan(
   if (tareaIds !== null) {
     for (const id of tareaIds) {
       const fila = estados.find((e) => Number(e.id) === id);
-      if (!fila || !fila.activo) {
+      if (!fila || !fila.activo || fila.estado === 'INACTIVA') {
         throw new ErrorNegocio(422, 'TAREA_INVALIDA', 'La tarea no es de este plan o está inactiva', { tarea_id: id });
       }
     }
@@ -102,6 +103,14 @@ export async function generarDesdePlan(
   }
   if (elegidas.length === 0) {
     throw new ErrorNegocio(409, 'SIN_TAREAS_PARA_GENERAR', 'No hay tareas vencidas ni próximas para generar');
+  }
+  // La próxima por uso se calcula sin tope: guardada en uso_programado no puede superar numeric(14,2)
+  for (const e of elegidas) {
+    if (e.proximo_uso !== null && Number(e.proximo_uso) > MAXIMO_VALOR) {
+      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'La próxima por uso de la tarea supera el máximo que se puede registrar', {
+        tarea_id: Number(e.id),
+      });
+    }
   }
 
   // 3. La intervención, PENDIENTE, con el plan
@@ -144,10 +153,10 @@ export async function generarDesdePlan(
   const tareas: Generada['tareas'] = [];
   for (const e of elegidas) {
     const r = await client.query(
-      `INSERT INTO intervencion_tareas (intervencion_id, plan_tarea_id, orden, accion, detalle, fecha_programada)
-       VALUES ($1, $2, $3, $4, $5, $6::date)
+      `INSERT INTO intervencion_tareas (intervencion_id, plan_tarea_id, orden, accion, detalle, fecha_programada, medidor_id, uso_programado)
+       VALUES ($1, $2, $3, $4, $5, $6::date, $7, $8)
        RETURNING id`,
-      [intervencionId, e.id, e.orden, e.accion, e.detalle, e.proxima_fecha]
+      [intervencionId, e.id, e.orden, e.accion, e.detalle, e.proxima_fecha, e.medidor_id, e.proximo_uso]
     );
     await client.query(
       `INSERT INTO intervencion_tarea_repuestos (intervencion_tarea_id, repuesto_id, cantidad_prevista, orden)

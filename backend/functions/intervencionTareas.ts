@@ -19,6 +19,13 @@ import {
   bloquearRepuestosOrdenados,
   registrarConsumo,
 } from './repuestos/consumos.ts';
+import {
+  bloquearMedidor,
+  errorLecturaMenor,
+  registrarLectura,
+  ultimaLectura,
+  validarValorMedidor,
+} from './medidores/lecturas.ts';
 
 /**
  * Etapa PV1, sección 6.2: las tareas de una intervención preventiva.
@@ -60,13 +67,23 @@ export function errorAlMarcar(
 const SQL_TAREAS = `
   SELECT it.id, it.plan_tarea_id, it.orden, it.accion, it.detalle,
          to_char(it.fecha_programada, 'YYYY-MM-DD') AS fecha_programada,
-         it.hecha, it.hecha_en, it.observacion,
+         it.hecha, it.hecha_en, it.observacion, it.medidor_id, it.uso_programado, it.valor_medidor,
+         md.nombre AS medidor_nombre, md.unidad AS medidor_unidad, md.activo AS medidor_activo,
+         ul.valor AS ultima_valor, ul.registrada_en AS ultima_en,
          pr.id AS prov_id, pr.nombre AS prov_nombre,
          ${columnasPersona('uh', 'hecha_por')}
   FROM intervencion_tareas it
   JOIN plan_tareas pt ON pt.id = it.plan_tarea_id
   LEFT JOIN proveedores pr ON pr.id = pt.proveedor_id
   LEFT JOIN usuarios uh ON uh.id = it.hecha_por_usuario_id
+  LEFT JOIN medidores md ON md.id = it.medidor_id
+  LEFT JOIN LATERAL (
+    SELECT l.valor, l.registrada_en
+    FROM lecturas_medidor l
+    WHERE l.medidor_id = it.medidor_id AND l.anulada_en IS NULL
+    ORDER BY l.valor DESC, l.id DESC
+    LIMIT 1
+  ) ul ON TRUE
 `;
 
 /** Ve el stock quien puede abrir las opciones de repuestos de la intervención. */
@@ -121,6 +138,22 @@ async function previstosDeTareas(
   return porTarea;
 }
 
+/** `uso` de una tarea de la intervención (4.4), o null si la fila no tiene medidor. */
+function usoIntervencion(r: Record<string, any>) {
+  if (r.medidor_id === null) return null;
+  return {
+    medidor: {
+      id: Number(r.medidor_id),
+      nombre: r.medidor_nombre,
+      unidad: r.medidor_unidad,
+      activo: Boolean(r.medidor_activo),
+      ultima_lectura: r.ultima_valor === null ? null : { valor: Number(r.ultima_valor), registrada_en: r.ultima_en },
+    },
+    programado: Number(r.uso_programado),
+    valor: r.valor_medidor === null ? null : Number(r.valor_medidor),
+  };
+}
+
 /** Una tarea como en el GET: el proveedor sale de la tarea del plan de hoy; los previstos, de la intervención. */
 function tareaIntervencion(r: Record<string, any>, repuestosPrevistos: Array<Record<string, unknown>>) {
   return {
@@ -131,6 +164,7 @@ function tareaIntervencion(r: Record<string, any>, repuestosPrevistos: Array<Rec
     detalle: r.detalle,
     fecha_programada: r.fecha_programada,
     repuestos_previstos: repuestosPrevistos,
+    uso: usoIntervencion(r),
     proveedor: proveedorSugerido(r),
     hecha: Boolean(r.hecha),
     hecha_por: persona(r, 'hecha_por'),
@@ -144,6 +178,10 @@ async function leerTarea(db: pg.Pool | pg.PoolClient, intervencionId: number, ta
   if (r.rows.length === 0) return null;
   const previstos = await previstosDeTareas(db, r.rows, conStock);
   return tareaIntervencion(r.rows[0], previstos.get(tareaId) ?? []);
+}
+
+function lecturaRequerida(): ErrorNegocio {
+  return new ErrorNegocio(422, 'LECTURA_REQUERIDA', 'Cargá la lectura del medidor para marcar la tarea como hecha');
 }
 
 function conPrevisto(err: unknown, previstoId: number): unknown {
@@ -272,6 +310,11 @@ intervencionTareasApp.patch('/:id/tareas/:tareaId', async (c) => {
         observacion = o.length > 0 ? o : null;
       }
     }
+    let lectura: number | undefined;
+    if ('lectura' in b) {
+      if (!hecha) throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo lectura solo va al marcar la tarea como hecha');
+      lectura = validarValorMedidor(b.lectura, 'lectura');
+    }
 
     await conTransaccion(async (client) => {
       const { intervencion } = await bloquearIntervencion(client, id, usuario);
@@ -294,11 +337,15 @@ intervencionTareasApp.patch('/:id/tareas/:tareaId', async (c) => {
 
       if (tareaId === null) throw new ErrorNegocio(404, 'TAREA_NO_ENCONTRADA', 'Tarea no encontrada');
       const resT = await client.query(
-        'SELECT id, accion, hecha, observacion FROM intervencion_tareas WHERE id = $1 AND intervencion_id = $2 FOR UPDATE',
+        'SELECT id, accion, hecha, observacion, medidor_id FROM intervencion_tareas WHERE id = $1 AND intervencion_id = $2 FOR UPDATE',
         [tareaId, id]
       );
       if (resT.rows.length === 0) throw new ErrorNegocio(404, 'TAREA_NO_ENCONTRADA', 'Tarea no encontrada');
       const actual = resT.rows[0];
+      const medidorId = actual.medidor_id === null ? null : Number(actual.medidor_id);
+      if (lectura !== undefined && medidorId === null) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'Esta tarea no tiene medidor');
+      }
 
       const cambiaHecha = Boolean(actual.hecha) !== hecha;
       const cambiaObservacion = observacion !== undefined && observacion !== actual.observacion;
@@ -360,14 +407,47 @@ intervencionTareasApp.patch('/:id/tareas/:tareaId', async (c) => {
         }
       }
 
+      // Al marcar con medidor: el valor al hacerla, con el medidor bloqueado al final (4.4)
+      let valorMedidor: number | null = null;
+      let unidadMedidor = '';
+      if (cambiaHecha && hecha && medidorId !== null) {
+        const medidor = await bloquearMedidor(client, medidorId);
+        unidadMedidor = medidor.unidad;
+        const ultima = await ultimaLectura(client, medidorId);
+        if (finalizada) {
+          // Es una corrección: un valor de antes, que no registra ninguna lectura
+          if (lectura === undefined) throw lecturaRequerida();
+          if (ultima !== null && lectura > ultima.valor) {
+            throw new ErrorNegocio(422, 'LECTURA_MAYOR', 'La lectura es mayor que la última registrada', { ultima });
+          }
+          valorMedidor = lectura;
+        } else if (lectura === undefined) {
+          if (ultima === null) throw lecturaRequerida();
+          valorMedidor = ultima.valor;
+        } else {
+          if (ultima !== null && lectura < ultima.valor) throw errorLecturaMenor(ultima);
+          if (ultima === null || lectura > ultima.valor) {
+            await registrarLectura(client, {
+              medidor,
+              valor: lectura,
+              usuarioId: usuario.id,
+              origen: 'TAREA',
+              intervencionTareaId: tareaId,
+            });
+          }
+          valorMedidor = lectura;
+        }
+      }
+
       if (cambiaHecha) {
         await client.query(
           `UPDATE intervencion_tareas
            SET hecha = $1,
                hecha_por_usuario_id = CASE WHEN $1 THEN $2::bigint ELSE NULL END,
-               hecha_en = CASE WHEN $1 THEN NOW() ELSE NULL END
+               hecha_en = CASE WHEN $1 THEN NOW() ELSE NULL END,
+               valor_medidor = $4::numeric
            WHERE id = $3`,
-          [hecha, usuario.id, tareaId]
+          [hecha, usuario.id, tareaId, valorMedidor]
         );
       }
       if (cambiaObservacion) {
@@ -377,7 +457,10 @@ intervencionTareasApp.patch('/:id/tareas/:tareaId', async (c) => {
       // Con la intervención finalizada, cada corrección queda en la auditoría
       if (finalizada) {
         const textos: string[] = [];
-        if (cambiaHecha) textos.push(hecha ? `Se marcó como hecha: ${actual.accion}` : `Se desmarcó: ${actual.accion}`);
+        if (cambiaHecha) {
+          const conMedidor = valorMedidor === null ? '' : `, con el medidor en ${String(valorMedidor).replace('.', ',')} ${unidadMedidor}`;
+          textos.push(hecha ? `Se marcó como hecha: ${actual.accion}${conMedidor}` : `Se desmarcó: ${actual.accion}`);
+        }
         if (cambiaObservacion) textos.push(`Se cambió la observación: ${actual.accion}`);
         for (const texto of textos) {
           await registrarAuditoria(client, {
@@ -394,12 +477,13 @@ intervencionTareasApp.patch('/:id/tareas/:tareaId', async (c) => {
 
     const tarea = await leerTarea(pool, id, tareaId as number, veStock(usuario));
     const resP = await pool.query(
-      `SELECT to_char(v.proxima_fecha, 'YYYY-MM-DD') AS proxima_fecha
+      `SELECT to_char(v.proxima_fecha, 'YYYY-MM-DD') AS proxima_fecha, v.proximo_uso
        FROM intervencion_tareas it JOIN v_plan_tareas_estado v ON v.id = it.plan_tarea_id
        WHERE it.id = $1`,
       [tareaId]
     );
-    return c.json({ ...tarea, proxima_fecha: resP.rows[0].proxima_fecha });
+    const { proxima_fecha, proximo_uso } = resP.rows[0];
+    return c.json({ ...tarea, proxima_fecha, proximo_uso: proximo_uso === null ? null : Number(proximo_uso) });
   } catch (error) {
     return responderError(c, error);
   }

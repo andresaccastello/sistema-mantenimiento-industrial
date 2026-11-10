@@ -2,6 +2,11 @@ import pg from 'pg';
 import { SQL_HOY, columnasPersona, persona, planNoEncontrado } from './comun.ts';
 import { TareaValida, Unidad } from './validaciones.ts';
 
+/** Las columnas del criterio de uso, para usoDeTarea(); md es el medidor de la tarea. */
+const COLUMNAS_USO = `v.estado_fecha, v.medidor_id, v.uso_cada, v.uso_primera, v.uso_anticipacion,
+         v.lectura_actual, v.lectura_actual_en, v.ultimo_uso, v.proximo_uso, v.faltan_uso, v.estado_uso,
+         md.nombre AS medidor_nombre, md.unidad AS medidor_unidad, md.activo AS medidor_activo`;
+
 /** Una tarea del plan con su estado, como sale de v_plan_tareas_estado (4.3). */
 const SQL_TAREAS_PLAN = `
   SELECT v.id, v.orden, v.accion, v.detalle, v.frecuencia_valor, v.frecuencia_unidad,
@@ -9,9 +14,11 @@ const SQL_TAREAS_PLAN = `
          pr.id AS prov_id, pr.nombre AS prov_nombre, v.activo,
          to_char(v.ultima_ejecucion, 'YYYY-MM-DD') AS ultima_ejecucion,
          to_char(v.proxima_fecha, 'YYYY-MM-DD') AS proxima_fecha,
-         v.dias, v.estado, v.intervencion_en_curso_id, v.intervencion_en_curso_estado
+         v.dias, v.estado, v.intervencion_en_curso_id, v.intervencion_en_curso_estado,
+         ${COLUMNAS_USO}
   FROM v_plan_tareas_estado v
   LEFT JOIN proveedores pr ON pr.id = v.proveedor_id
+  LEFT JOIN medidores md ON md.id = v.medidor_id
 `;
 
 /** Los repuestos previstos de las tareas de un plan, por tarea y en su orden. */
@@ -47,13 +54,35 @@ function enCurso(r: Record<string, any>) {
     : { id: Number(r.intervencion_en_curso_id), estado: r.intervencion_en_curso_estado };
 }
 
+/** Number() de una columna que puede ser nula: Number(null) da 0. */
+function numeroONull(v: unknown): number | null {
+  return v === null || v === undefined ? null : Number(v);
+}
+
+/** `uso` de una tarea (4.2), o null si no vence por uso. */
+function usoDeTarea(r: Record<string, any>) {
+  if (r.medidor_id === null) return null;
+  return {
+    medidor: { id: Number(r.medidor_id), nombre: r.medidor_nombre, unidad: r.medidor_unidad, activo: Boolean(r.medidor_activo) },
+    cada: Number(r.uso_cada),
+    primera: Number(r.uso_primera),
+    anticipacion: Number(r.uso_anticipacion),
+    lectura_actual:
+      r.lectura_actual === null ? null : { valor: Number(r.lectura_actual), registrada_en: r.lectura_actual_en },
+    ultimo: numeroONull(r.ultimo_uso),
+    proximo: Number(r.proximo_uso),
+    faltan: numeroONull(r.faltan_uso),
+    estado: r.estado_uso,
+  };
+}
+
 function tareaPlan(r: Record<string, any>, repuestos: Array<{ repuesto: Record<string, unknown>; cantidad: number }>) {
   return {
     id: Number(r.id),
     orden: Number(r.orden),
     accion: r.accion,
     detalle: r.detalle,
-    frecuencia_valor: Number(r.frecuencia_valor),
+    frecuencia_valor: numeroONull(r.frecuencia_valor),
     frecuencia_unidad: r.frecuencia_unidad,
     primera_fecha: r.primera_fecha,
     repuestos,
@@ -61,7 +90,9 @@ function tareaPlan(r: Record<string, any>, repuestos: Array<{ repuesto: Record<s
     activo: Boolean(r.activo),
     ultima_ejecucion: r.ultima_ejecucion,
     proxima_fecha: r.proxima_fecha,
-    dias: Number(r.dias),
+    dias: numeroONull(r.dias),
+    estado_fecha: r.estado_fecha,
+    uso: usoDeTarea(r),
     estado: r.estado,
     intervencion_en_curso: enCurso(r),
   };
@@ -176,6 +207,7 @@ export async function listarPlanes(db: pg.Pool, filtros: FiltrosMaquina, todos: 
               count(v.id) FILTER (WHERE v.estado = 'VENCIDA')::int AS vencidas,
               count(v.id) FILTER (WHERE v.estado = 'PROXIMA')::int AS proximas,
               count(v.id) FILTER (WHERE v.estado = 'EN_CURSO')::int AS en_curso,
+              count(v.id) FILTER (WHERE v.estado = 'SIN_LECTURA')::int AS sin_lectura,
               min(v.proxima_fecha) FILTER (WHERE v.activo AND v.intervencion_en_curso_id IS NULL) AS proxima
        FROM planes_mantenimiento p
        JOIN maquinas m ON m.id = p.maquina_id
@@ -206,11 +238,12 @@ export async function listarPlanes(db: pg.Pool, filtros: FiltrosMaquina, todos: 
     vencidas: Number(r.vencidas),
     proximas: Number(r.proximas),
     en_curso: Number(r.en_curso),
+    sin_lectura: Number(r.sin_lectura),
     proxima_fecha: r.proxima_texto,
   }));
 }
 
-export const ESTADOS_VENCIMIENTO = ['VENCIDA', 'PROXIMA', 'EN_CURSO', 'AL_DIA'] as const;
+export const ESTADOS_VENCIMIENTO = ['VENCIDA', 'PROXIMA', 'SIN_LECTURA', 'EN_CURSO', 'AL_DIA'] as const;
 
 /** GET /api/planes/vencimientos (sección 5). */
 export async function listarVencimientos(
@@ -230,6 +263,7 @@ export async function listarVencimientos(
     JOIN sectores s ON s.id = m.sector_id
     JOIN criticidades c ON c.id = m.criticidad_id
     LEFT JOIN usuarios ur ON ur.id = p.responsable_usuario_id
+    LEFT JOIN medidores md ON md.id = v.medidor_id
     WHERE ${cond.join(' AND ')}`;
 
   // El resumen, con los mismos filtros salvo el estado
@@ -237,6 +271,7 @@ export async function listarVencimientos(
     `SELECT count(*) FILTER (WHERE v.estado = 'VENCIDA')::int AS vencidas,
             count(*) FILTER (WHERE v.estado = 'PROXIMA')::int AS proximas,
             count(*) FILTER (WHERE v.estado = 'EN_CURSO')::int AS en_curso,
+            count(*) FILTER (WHERE v.estado = 'SIN_LECTURA')::int AS sin_lectura,
             count(*) FILTER (WHERE v.estado = 'AL_DIA')::int AS al_dia
      ${base}`,
     params
@@ -253,13 +288,15 @@ export async function listarVencimientos(
             to_char(v.ultima_ejecucion, 'YYYY-MM-DD') AS ultima_ejecucion,
             to_char(v.proxima_fecha, 'YYYY-MM-DD') AS proxima_fecha,
             v.dias, v.estado, v.intervencion_en_curso_id, v.intervencion_en_curso_estado,
+            ${COLUMNAS_USO},
             p.id AS plan_id, p.nombre AS plan_nombre,
             m.id AS maquina_id, m.codigo AS maquina_codigo, m.nombre AS maquina_nombre,
             c.nombre AS criticidad_nombre, c.prioridad_alta,
             s.id AS sector_id, s.nombre AS sector_nombre,
             ${columnasPersona('ur', 'resp')}
      ${conEstado}
-     ORDER BY v.proxima_fecha ASC, c.prioridad_alta DESC, m.codigo ASC NULLS LAST, p.nombre ASC, p.id ASC, v.orden ASC, v.id ASC
+     ORDER BY CASE v.estado WHEN 'VENCIDA' THEN 1 WHEN 'PROXIMA' THEN 2 WHEN 'SIN_LECTURA' THEN 3 WHEN 'EN_CURSO' THEN 4 ELSE 5 END,
+              v.proxima_fecha ASC NULLS LAST, c.prioridad_alta DESC, m.codigo ASC NULLS LAST, p.nombre ASC, p.id ASC, v.orden ASC, v.id ASC
      LIMIT $${paramsPagina.length - 1} OFFSET $${paramsPagina.length}`,
     paramsPagina
   );
@@ -275,16 +312,19 @@ export async function listarVencimientos(
         vencidas: Number(r0.vencidas),
         proximas: Number(r0.proximas),
         en_curso: Number(r0.en_curso),
+        sin_lectura: Number(r0.sin_lectura),
         al_dia: Number(r0.al_dia),
       },
       tareas: res.rows.map((r) => ({
         tarea_id: Number(r.id),
         accion: r.accion,
-        frecuencia_valor: Number(r.frecuencia_valor),
+        frecuencia_valor: numeroONull(r.frecuencia_valor),
         frecuencia_unidad: r.frecuencia_unidad,
         ultima_ejecucion: r.ultima_ejecucion,
         proxima_fecha: r.proxima_fecha,
-        dias: Number(r.dias),
+        dias: numeroONull(r.dias),
+        estado_fecha: r.estado_fecha,
+        uso: usoDeTarea(r),
         estado: r.estado,
         intervencion_en_curso: enCurso(r),
         plan: { id: Number(r.plan_id), nombre: r.plan_nombre },
@@ -310,7 +350,7 @@ export async function leerTareaParaCambiar(
   const r = await client.query(
     `SELECT accion, detalle, frecuencia_valor, frecuencia_unidad,
             to_char(primera_fecha, 'YYYY-MM-DD') AS primera_fecha,
-            proveedor_id, activo
+            proveedor_id, activo, medidor_id, uso_cada, uso_primera, uso_anticipacion
      FROM plan_tareas WHERE id = $1 AND plan_id = $2
      FOR UPDATE`,
     [tareaId, planId]
@@ -326,9 +366,18 @@ export async function leerTareaParaCambiar(
     tarea: {
       accion: x.accion,
       detalle: x.detalle,
-      frecuencia_valor: Number(x.frecuencia_valor),
-      frecuencia_unidad: x.frecuencia_unidad as Unidad,
+      frecuencia_valor: numeroONull(x.frecuencia_valor),
+      frecuencia_unidad: x.frecuencia_unidad as Unidad | null,
       primera_fecha: x.primera_fecha,
+      uso:
+        x.medidor_id === null
+          ? null
+          : {
+              medidor_id: Number(x.medidor_id),
+              cada: Number(x.uso_cada),
+              primera: Number(x.uso_primera),
+              anticipacion: Number(x.uso_anticipacion),
+            },
       repuestos: previstos.rows.map((p) => ({ repuesto_id: Number(p.repuesto_id), cantidad: Number(p.cantidad) })),
       proveedor_id: x.proveedor_id === null ? null : Number(x.proveedor_id),
     },

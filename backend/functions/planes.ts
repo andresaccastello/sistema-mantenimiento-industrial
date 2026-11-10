@@ -24,6 +24,8 @@ import {
   leerRepuestosActivos,
   validarProveedorTarea,
   validarTarea,
+  leerMedidores,
+  controlarMedidorTarea,
   TareaValida,
 } from './preventivos/validaciones.ts';
 import {
@@ -92,10 +94,14 @@ async function controlarNombre(client: pg.PoolClient, maquinaId: number, nombre:
 async function insertarTarea(client: pg.PoolClient, planId: number, orden: number, t: TareaValida) {
   const res = await client.query(
     `INSERT INTO plan_tareas (
-       plan_id, orden, accion, detalle, frecuencia_valor, frecuencia_unidad, primera_fecha, proveedor_id
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7::date, $8)
+       plan_id, orden, accion, detalle, frecuencia_valor, frecuencia_unidad, primera_fecha, proveedor_id,
+       medidor_id, uso_cada, uso_primera, uso_anticipacion
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7::date, $8, $9, $10, $11, $12)
      RETURNING id`,
-    [planId, orden, t.accion, t.detalle, t.frecuencia_valor, t.frecuencia_unidad, t.primera_fecha, t.proveedor_id]
+    [
+      planId, orden, t.accion, t.detalle, t.frecuencia_valor, t.frecuencia_unidad, t.primera_fecha, t.proveedor_id,
+      t.uso?.medidor_id ?? null, t.uso?.cada ?? null, t.uso?.primera ?? null, t.uso?.anticipacion ?? null,
+    ]
   );
   await guardarPrevistos(client, Number(res.rows[0].id), t);
 }
@@ -123,7 +129,7 @@ planesApp.get('/vencimientos', async (c) => {
   try {
     const filtros = filtrosMaquina(c);
 
-    let estados: string[] = ['VENCIDA', 'PROXIMA', 'EN_CURSO'];
+    let estados: string[] = ['VENCIDA', 'PROXIMA', 'SIN_LECTURA', 'EN_CURSO'];
     const estadoParam = c.req.query('estado');
     if (estadoParam !== undefined && estadoParam.trim() !== '') {
       const tokens = estadoParam.split(',').map((s) => s.trim());
@@ -261,9 +267,11 @@ planesApp.post('/', async (c) => {
       await controlarNombre(client, maquinaId, nombre);
 
       const activos = await leerRepuestosActivos(client, tareas.flatMap((t) => t.repuestos.map((r) => r.repuesto_id)));
+      const medidores = await leerMedidores(client, tareas.flatMap((t) => (t.uso ? [t.uso.medidor_id] : [])));
       for (let indice = 0; indice < tareas.length; indice++) {
         try {
           controlarRepuestosTarea(tareas[indice], activos);
+          controlarMedidorTarea(tareas[indice], medidores, maquinaId);
           await validarProveedorTarea(client, tareas[indice]);
         } catch (err) {
           throw conIndice(err, indice);
@@ -395,6 +403,7 @@ planesApp.post('/:id/tareas', async (c) => {
       const hoy = await obtenerHoy(client);
       const tarea = validarTarea(leido.body, hoy);
       controlarRepuestosTarea(tarea, await leerRepuestosActivos(client, tarea.repuestos.map((r) => r.repuesto_id)));
+      controlarMedidorTarea(tarea, await leerMedidores(client, tarea.uso ? [tarea.uso.medidor_id] : []), plan.maquina_id);
       await validarProveedorTarea(client, tarea);
 
       // Al final del orden, con el plan bloqueado
@@ -430,13 +439,21 @@ planesApp.patch('/:id/tareas/:tareaId', async (c) => {
       const t = validarTarea(leido.body, hoy, actual.tarea);
       controlarRepuestosTarea(t, await leerRepuestosActivos(client, t.repuestos.map((r) => r.repuesto_id)), actual.tarea);
       await validarProveedorTarea(client, t, actual.tarea);
+      if ('uso' in leido.body) {
+        controlarMedidorTarea(t, await leerMedidores(client, t.uso ? [t.uso.medidor_id] : []), plan.maquina_id);
+      }
 
       await client.query(
         `UPDATE plan_tareas SET
            accion = $1, detalle = $2, frecuencia_valor = $3, frecuencia_unidad = $4, primera_fecha = $5::date,
-           proveedor_id = $6, actualizado_en = NOW()
-         WHERE id = $7`,
-        [t.accion, t.detalle, t.frecuencia_valor, t.frecuencia_unidad, t.primera_fecha, t.proveedor_id, tareaId]
+           proveedor_id = $6, medidor_id = $7, uso_cada = $8, uso_primera = $9, uso_anticipacion = $10,
+           actualizado_en = NOW()
+         WHERE id = $11`,
+        [
+          t.accion, t.detalle, t.frecuencia_valor, t.frecuencia_unidad, t.primera_fecha, t.proveedor_id,
+          t.uso?.medidor_id ?? null, t.uso?.cada ?? null, t.uso?.primera ?? null, t.uso?.anticipacion ?? null,
+          tareaId,
+        ]
       );
       if ('repuestos' in leido.body) await guardarPrevistos(client, tareaId, t);
       await tocarPlan(client, plan.id);
@@ -465,6 +482,13 @@ function cambiarActivoTarea(activo: boolean) {
           throw activo
             ? new ErrorNegocio(409, 'TAREA_YA_ACTIVA', 'La tarea ya está activa')
             : new ErrorNegocio(409, 'TAREA_YA_INACTIVA', 'La tarea ya está inactiva');
+        }
+        // El medidor, con FOR SHARE: desactivarlo a la vez espera esta transacción (4.5)
+        if (activo && actual.tarea.uso) {
+          const medidores = await leerMedidores(client, [actual.tarea.uso.medidor_id]);
+          if (!medidores.get(actual.tarea.uso.medidor_id)?.activo) {
+            throw new ErrorNegocio(409, 'MEDIDOR_INACTIVO', 'El medidor de la tarea está inactivo');
+          }
         }
         await client.query('UPDATE plan_tareas SET activo = $1, actualizado_en = NOW() WHERE id = $2', [activo, tareaId]);
         await tocarPlan(client, plan.id);

@@ -1034,6 +1034,38 @@ export interface PlanResumen {
 
 export type FrecuenciaUnidad = 'DIAS' | 'SEMANAS' | 'MESES' | 'ANIOS';
 
+/** El estado por fecha de una tarea; null si no vence por fecha (PV3). */
+export type EstadoFechaTarea = 'VENCIDA' | 'PROXIMA' | 'AL_DIA';
+
+/** `uso` de una tarea del plan y de un vencimiento: null si no vence por uso (PV3, 4.2). */
+export interface UsoTareaPlan {
+  medidor: { id: number; nombre: string; unidad: string; activo: boolean };
+  cada: number;
+  primera: number;
+  anticipacion: number;
+  lectura_actual: { valor: number; registrada_en: string } | null;
+  /** El mayor valor registrado al hacer la tarea, o null. */
+  ultimo: number | null;
+  proximo: number;
+  /** Negativo si está vencida; null sin lectura. */
+  faltan: number | null;
+  estado: 'VENCIDA' | 'PROXIMA' | 'AL_DIA' | 'SIN_LECTURA';
+}
+
+/** `uso` de una tarea en la intervención: null si la fila no tiene medidor (PV3, 4.4). */
+export interface UsoTareaIntervencion {
+  medidor: {
+    id: number;
+    nombre: string;
+    unidad: string;
+    activo: boolean;
+    ultima_lectura: { valor: number; registrada_en: string } | null;
+  };
+  programado: number;
+  /** El valor al hacer la tarea: null mientras no está hecha. */
+  valor: number | null;
+}
+
 /** El estado de una tarea, calculado por la vista `v_plan_tareas_estado`. */
 export type EstadoTareaPlan = 'INACTIVA' | 'EN_CURSO' | 'VENCIDA' | 'PROXIMA' | 'AL_DIA';
 
@@ -1104,6 +1136,8 @@ export interface TareaPlan {
   proxima_fecha: string;
   /** Negativo si está vencida. */
   dias: number;
+  estado_fecha: EstadoFechaTarea | null;
+  uso: UsoTareaPlan | null;
   estado: EstadoTareaPlan;
   intervencion_en_curso: IntervencionEnCurso | null;
 }
@@ -1146,6 +1180,7 @@ export interface PlanLista {
   vencidas: number;
   proximas: number;
   en_curso: number;
+  sin_lectura: number;
   /** La menor de sus tareas activas que no están en curso. */
   proxima_fecha: string | null;
 }
@@ -1159,6 +1194,8 @@ export interface VencimientoTarea {
   ultima_ejecucion: string | null;
   proxima_fecha: string;
   dias: number;
+  estado_fecha: EstadoFechaTarea | null;
+  uso: UsoTareaPlan | null;
   estado: EstadoVencimiento;
   intervencion_en_curso: IntervencionEnCurso | null;
   plan: PlanResumen;
@@ -1177,7 +1214,7 @@ export interface VencimientoTarea {
 export interface VencimientosRespuesta {
   hoy: string;
   /** Con los mismos filtros, salvo `estado`. */
-  resumen: { vencidas: number; proximas: number; en_curso: number; al_dia: number };
+  resumen: { vencidas: number; proximas: number; en_curso: number; sin_lectura: number; al_dia: number };
   tareas: VencimientoTarea[];
 }
 
@@ -1207,6 +1244,7 @@ export interface TareaIntervencion {
   detalle: string | null;
   fecha_programada: string;
   repuestos_previstos: RepuestoPrevistoIntervencion[];
+  uso: UsoTareaIntervencion | null;
   proveedor: ProveedorSugerido | null;
   hecha: boolean;
   hecha_por: Persona | null;
@@ -1224,6 +1262,8 @@ export interface IntervencionTareasRespuesta {
 /** `PATCH /api/intervenciones/:id/tareas/:tareaId`: la tarea, con la próxima fecha de la del plan. */
 export interface TareaIntervencionMarcada extends TareaIntervencion {
   proxima_fecha: string;
+  /** La próxima por uso de la tarea del plan, o null. */
+  proximo_uso: number | null;
 }
 
 // ---------------------------------------------------------------------------

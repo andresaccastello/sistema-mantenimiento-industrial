@@ -191,6 +191,10 @@ test('Ids fuera de rango (ID-01 a ID-05)', async (t) => {
       const rPlan = await pedir('POST', '/api/planes', A.token, { maquina_id: mId, nombre: `Plan ID ${suf}`, tareas: [tareaPlan] });
       assert.strictEqual(rPlan.status, 201, JSON.stringify(rPlan.cuerpo));
       const planId = Number((rPlan.cuerpo as any).id);
+      // Un medidor de la prueba, para las rutas de medidores (PV3). Se borra al final de ID-01.
+      const rMed = await pedir('POST', '/api/medidores', A.token, { maquina_id: mId, nombre: `Medidor ID ${suf}`, unidad: 'horas' });
+      assert.strictEqual(rMed.status, 201, JSON.stringify(rMed.cuerpo));
+      const medidorId = Number((rMed.cuerpo as any).id);
       try {
       // [método, ruta con X en lugar del id, cuerpo]
       const rutas: Array<[string, string, unknown?]> = [
@@ -282,6 +286,15 @@ test('Ids fuera de rango (ID-01 a ID-05)', async (t) => {
         ['GET', '/api/intervenciones/X/tareas'],
         ['PATCH', '/api/intervenciones/X/tareas/1', { hecha: true }],
         ['PATCH', `/api/intervenciones/${intId}/tareas/X`, { hecha: true }],
+        // Medidores y lecturas (PV3, sección 3)
+        ['GET', '/api/medidores/X'],
+        ['PATCH', '/api/medidores/X', { nombre: 'Medidor ID cambiado' }],
+        ['POST', '/api/medidores/X/desactivar', {}],
+        ['POST', '/api/medidores/X/reactivar', {}],
+        ['GET', '/api/medidores/X/lecturas'],
+        ['POST', '/api/medidores/X/lecturas', { valor: 1 }],
+        ['POST', '/api/medidores/X/lecturas/1/anular', { motivo: 'Prueba de ids' }],
+        ['POST', `/api/medidores/${medidorId}/lecturas/X/anular`, { motivo: 'Prueba de ids' }],
       ];
 
       for (const [metodo, ruta, cuerpo] of rutas) {
@@ -294,7 +307,12 @@ test('Ids fuera de rango (ID-01 a ID-05)', async (t) => {
       // Ni en el plan
       const resPlan = await client.query('SELECT nombre, activo FROM planes_mantenimiento WHERE id = $1', [planId]);
       assert.deepStrictEqual(resPlan.rows[0], { nombre: `Plan ID ${suf}`, activo: true });
+      // Ni en el medidor
+      const resMed = await client.query('SELECT nombre, activo FROM medidores WHERE id = $1', [medidorId]);
+      assert.deepStrictEqual(resMed.rows[0], { nombre: `Medidor ID ${suf}`, activo: true });
       } finally {
+        await client.query('DELETE FROM lecturas_medidor WHERE medidor_id = $1', [medidorId]);
+        await client.query('DELETE FROM medidores WHERE id = $1', [medidorId]);
         await client.query('DELETE FROM plan_tareas WHERE plan_id = $1', [planId]);
         await client.query('DELETE FROM planes_mantenimiento WHERE id = $1', [planId]);
       }

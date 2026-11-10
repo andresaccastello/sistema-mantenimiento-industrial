@@ -33,7 +33,7 @@ Tesis de Analista en Sistemas: un sistema de mantenimiento industrial **general*
 5. **Qué pruebas correr:**
    - de día, solo las suites que nombra la etapa;
    - `npm run test:todo -- <etiqueta>`, solo cuando la etapa pide la corrida de la noche: una vez, y sin arreglar ni reintentar nada después.
-6. **Cada prueba crea y borra sus propios datos.** No toca ni borra datos que no creó. `test:todo` controla 21 tablas y tienen que quedar en 0.
+6. **Cada prueba crea y borra sus propios datos.** No toca ni borra datos que no creó. `test:todo` controla 23 tablas y tienen que quedar en 0.
 
 ---
 

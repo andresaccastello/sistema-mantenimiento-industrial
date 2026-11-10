@@ -49,6 +49,8 @@ const tareaBase: TareaPlan = {
   ultima_ejecucion: null,
   proxima_fecha: '2026-11-01',
   dias: -8,
+  estado_fecha: 'VENCIDA',
+  uso: null,
   estado: 'VENCIDA',
   intervencion_en_curso: null,
 };

@@ -12,6 +12,7 @@ import {
   vencimientosEjemplo,
   generacionEjemplo,
   tareasIntervencionEjemplo,
+  tareaMarcadaEjemplo,
 } from '../../frontend/src/api/contrato-preventivos.ts';
 
 // Timeout de bloqueo para las pruebas de concurrencia
@@ -355,6 +356,8 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-21)', async (t) => {
           ultima_ejecucion: null,
           proxima_fecha: primera,
           dias: -5,
+          estado_fecha: 'VENCIDA',
+          uso: null,
           estado: 'VENCIDA',
           intervencion_en_curso: null,
         }
@@ -581,6 +584,8 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-21)', async (t) => {
         ultima_ejecucion: null,
         proxima_fecha: misma,
         dias: -5,
+        estado_fecha: 'VENCIDA',
+        uso: null,
         estado: 'VENCIDA',
         intervencion_en_curso: null,
         plan: { id: pa.id, nombre: pa.nombre },
@@ -603,7 +608,7 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-21)', async (t) => {
       assert.deepStrictEqual(orden, mias, 'El orden de la sección 5');
 
       // resumen cuenta igual con cualquier estado
-      const esperado = { vencidas: 2, proximas: 1, en_curso: 0, al_dia: 1 };
+      const esperado = { vencidas: 2, proximas: 1, en_curso: 0, sin_lectura: 0, al_dia: 1 };
       for (const estado of ['', '&estado=AL_DIA', '&estado=VENCIDA', '&estado=EN_CURSO,PROXIMA']) {
         const rr = await venc(`maquina_id=${m5n}${estado}`);
         assert.deepStrictEqual(rr.cuerpo.resumen, esperado, `resumen con ${estado || 'sin estado'}`);
@@ -1605,11 +1610,674 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-21)', async (t) => {
         assert.strictEqual(await stockDe(z), 0, `Vuelta ${vuelta}: nunca negativo`);
       }
     });
+
+    // -------------------------------------------------------------------------
+    // Helpers de los medidores (PV-22 a PV-31)
+    // -------------------------------------------------------------------------
+    let numeroMedidor = 0;
+    /** Un medidor con nombre único; con `lecturas`, se cargan en orden. */
+    async function crearMedidor(maquinaId: number, lecturas: number[] = []) {
+      numeroMedidor++;
+      const r = await pedir('POST', '/api/medidores', A.token, { maquina_id: maquinaId, nombre: `Horómetro ${numeroMedidor}`, unidad: 'horas' });
+      assert.strictEqual(r.status, 201, JSON.stringify(r.cuerpo));
+      const id = Number(r.cuerpo.id);
+      for (const valor of lecturas) await cargarLectura(id, valor);
+      return id;
+    }
+    async function cargarLectura(medidorId: number, valor: number) {
+      const r = await pedir('POST', `/api/medidores/${medidorId}/lecturas`, A.token, { valor });
+      assert.strictEqual(r.status, 201, JSON.stringify(r.cuerpo));
+      return r.cuerpo;
+    }
+    const lecturasDe = async (medidorId: number) =>
+      (await client.query(
+        `SELECT l.id, l.valor, l.origen, l.intervencion_tarea_id, l.anulada_en, it.intervencion_id
+         FROM lecturas_medidor l LEFT JOIN intervencion_tareas it ON it.id = l.intervencion_tarea_id
+         WHERE l.medidor_id = $1 ORDER BY l.id`,
+        [medidorId]
+      )).rows;
+    const USO = { cada: 250, primera: 500, anticipacion: 25 };
+    /** Una tarea solo por uso, sobre el medidor. */
+    const tareaUso = (medidorId: number, extra: Record<string, unknown> = {}, uso: Record<string, unknown> = {}) => ({
+      accion: 'Cambiar el aceite',
+      uso: { medidor_id: medidorId, cada: 250, primera: 500, ...uso },
+      ...extra,
+    });
+    /** Una intervención cargada en la base, con la tarea y su valor del medidor. */
+    async function ejecucionUso(
+      maquinaId: number,
+      planId: number,
+      tareaId: number,
+      opciones: { fin?: string; medidorId: number; valor: number | null; estado?: string; eliminada?: boolean }
+    ) {
+      const fin = opciones.fin ?? '2026-03-10 12:00:00-03';
+      const estado = opciones.estado ?? 'FINALIZADA';
+      const finalizada = estado === 'FINALIZADA';
+      const tipo = Number((await client.query(`SELECT id FROM tipos_intervencion WHERE codigo = 'PREVENTIVO'`)).rows[0].id);
+      const intId = Number((await client.query(
+        `INSERT INTO intervenciones (
+           maquina_id, tipo_intervencion_id, creado_por_usuario_id, descripcion, estado, plan_mantenimiento_id,
+           fecha_creacion, fecha_inicio, fecha_finalizacion, trabajo_realizado, ejecucion,
+           eliminado_en, eliminado_por_usuario_id, motivo_eliminacion
+         ) VALUES ($1, $2, $3, 'Preventivo PV', $4, $5,
+                   $6::timestamptz - interval '2 hours',
+                   CASE WHEN $7 THEN $6::timestamptz - interval '1 hour' ELSE NULL END,
+                   CASE WHEN $7 THEN $6::timestamptz ELSE NULL END,
+                   CASE WHEN $7 THEN 'Trabajo PV' ELSE NULL END,
+                   CASE WHEN $7 THEN 'INTERNA' ELSE NULL END,
+                   CASE WHEN $8 THEN NOW() ELSE NULL END,
+                   CASE WHEN $8 THEN $3::bigint ELSE NULL END,
+                   CASE WHEN $8 THEN 'Baja de prueba' ELSE NULL END)
+         RETURNING id`,
+        [maquinaId, tipo, A.id, estado, planId, fin, finalizada, Boolean(opciones.eliminada)]
+      )).rows[0].id);
+      await client.query(
+        `INSERT INTO intervencion_tareas (
+           intervencion_id, plan_tarea_id, orden, accion, medidor_id, uso_programado, valor_medidor,
+           hecha, hecha_por_usuario_id, hecha_en
+         )
+         SELECT $1, t.id, t.orden, t.accion, $2::bigint, 500, $3::numeric,
+                $4::boolean, CASE WHEN $4::boolean THEN $5::bigint ELSE NULL END, CASE WHEN $4::boolean THEN NOW() ELSE NULL END
+         FROM plan_tareas t WHERE t.id = $6`,
+        [intId, opciones.medidorId, opciones.valor, opciones.valor !== null, A.id, tareaId]
+      );
+      return intId;
+    }
+    const usoDe = async (planId: number, tareaId: number) => (await tareaDelPlan(planId, tareaId)).uso;
+    /** Un plan con R de responsable y una tarea por uso, generado eligiéndola. */
+    async function generarUso(medidorId: number, uso: Record<string, unknown> = {}, extraTarea: Record<string, unknown> = {}) {
+      const p = await crearPlan(m1, [tareaUso(medidorId, extraTarea, uso)], { responsable_usuario_id: R.id });
+      const tareaPlanId = p.tareas[0].id;
+      const g = await generarOk(p.id, { tarea_ids: [tareaPlanId] });
+      return { p, tareaPlanId, intId: g.intervencion.id as number, tareaId: g.tareas[0].id as number };
+    }
+
+    // =========================================================================
+    // PV-22: La tarea por uso en el plan
+    // =========================================================================
+    await t.test('PV-22: La tarea por uso en el plan', async () => {
+      const med = await crearMedidor(m1);
+      const otroMed = await crearMedidor(m1);
+      const deOtraMaquina = await crearMedidor(m2);
+      const inactivo = await crearMedidor(m1);
+      assert.strictEqual((await pedir('POST', `/api/medidores/${inactivo}/desactivar`, A.token, {})).status, 200);
+
+      // Solo por uso
+      const p = await crearPlan(m1, [tareaUso(med)]);
+      const t0 = p.tareas[0];
+      assert.deepStrictEqual(
+        [t0.frecuencia_valor, t0.frecuencia_unidad, t0.primera_fecha, t0.proxima_fecha, t0.dias, t0.estado_fecha],
+        [null, null, null, null, null, null]
+      );
+      assert.deepStrictEqual(
+        [t0.uso.medidor.id, t0.uso.cada, t0.uso.primera, t0.uso.anticipacion, t0.uso.ultimo, t0.uso.proximo, t0.uso.estado],
+        [med, 250, 500, 25, null, 500, 'SIN_LECTURA']
+      );
+
+      // Con los dos criterios
+      const dos = await crearPlan(m1, [tarea(sumarDias(hoy, 30), { uso: { medidor_id: med, cada: 100, primera: 100, anticipacion: 0 } })]);
+      assert.deepStrictEqual(
+        [dos.tareas[0].frecuencia_valor, dos.tareas[0].uso.anticipacion, dos.tareas[0].estado_fecha],
+        [1, 0, 'AL_DIA']
+      );
+
+      // 422 con indice, sin guardar nada
+      const antes = await planesDeMaquina(m1);
+      const invalidos: Array<[string, unknown, string]> = [
+        ['sin criterio', { accion: 'Sin criterio' }, 'DATOS_INVALIDOS'],
+        ['sin primera_fecha', tareaUso(med, { frecuencia_valor: 1, frecuencia_unidad: 'MESES' }), 'DATOS_INVALIDOS'],
+        ['cada 0', tareaUso(med, {}, { cada: 0 }), 'DATOS_INVALIDOS'],
+        ['cada "250"', tareaUso(med, {}, { cada: '250' }), 'DATOS_INVALIDOS'],
+        ['primera -1', tareaUso(med, {}, { primera: -1 }), 'DATOS_INVALIDOS'],
+        ['anticipación mayor que cada', tareaUso(med, {}, { anticipacion: 251 }), 'DATOS_INVALIDOS'],
+        ['3 decimales', tareaUso(med, {}, { cada: 1.234 }), 'DATOS_INVALIDOS'],
+        ['un medidor de otra máquina', tareaUso(deOtraMaquina), 'MEDIDOR_INVALIDO'],
+        ['un medidor inactivo', tareaUso(inactivo), 'MEDIDOR_INVALIDO'],
+        ['un medidor que no existe', tareaUso(2147483000), 'MEDIDOR_INVALIDO'],
+        ['medidor_id: true', tareaUso(true as unknown as number), 'MEDIDOR_INVALIDO'],
+      ];
+      for (const [nombre, mala, codigo] of invalidos) {
+        const r = await pedir('POST', '/api/planes', A.token, { maquina_id: m1, nombre: 'Plan con error', tareas: [tarea(hoy), mala] });
+        assert.strictEqual(r.status, 422, `${nombre}: ${JSON.stringify(r.cuerpo)}`);
+        assert.strictEqual(r.cuerpo.codigo, codigo, `${nombre}: ${JSON.stringify(r.cuerpo)}`);
+        assert.strictEqual(r.cuerpo.indice, 1, `${nombre}: indice`);
+      }
+      const sinCriterio = await pedir('POST', '/api/planes', A.token, { maquina_id: m1, nombre: 'Plan con error', tareas: [{ accion: 'Sin criterio' }] });
+      assert.strictEqual(sinCriterio.cuerpo.error, 'Una tarea vence por fecha, por uso o por las dos');
+      assert.strictEqual(await planesDeMaquina(m1), antes, 'No se guardó ningún plan');
+
+      // POST de una tarea
+      const agregada = await pedir('POST', `/api/planes/${p.id}/tareas`, A.token, tareaUso(med, { accion: 'Engrasar' }));
+      assert.strictEqual(agregada.status, 201, JSON.stringify(agregada.cuerpo));
+      const agregadaInv = await pedir('POST', `/api/planes/${p.id}/tareas`, A.token, tareaUso(deOtraMaquina));
+      assert.deepStrictEqual([agregadaInv.status, agregadaInv.cuerpo.codigo], [422, 'MEDIDOR_INVALIDO']);
+
+      // PATCH: sacar la fecha, con uso
+      const conFecha = await crearPlan(m1, [tarea(sumarDias(hoy, 30), { uso: { medidor_id: med, ...USO } })]);
+      const tf = conFecha.tareas[0].id;
+      const patch = (cuerpo: unknown) => pedir('PATCH', `/api/planes/${conFecha.id}/tareas/${tf}`, A.token, cuerpo);
+      const sacar = await patch({ frecuencia_valor: null, frecuencia_unidad: null, primera_fecha: null });
+      assert.strictEqual(sacar.status, 200, JSON.stringify(sacar.cuerpo));
+      assert.deepStrictEqual(
+        [sacar.cuerpo.tareas[0].primera_fecha, sacar.cuerpo.tareas[0].proxima_fecha, sacar.cuerpo.tareas[0].dias],
+        [null, null, null]
+      );
+
+      // uso: null sin fecha: 422
+      const sinNada = await patch({ uso: null });
+      assert.deepStrictEqual([sinNada.status, sinNada.cuerpo.codigo], [422, 'DATOS_INVALIDOS']);
+
+      // Solo primera_fecha: null: 422 (en una tarea con fecha)
+      const conDos = await crearPlan(m1, [tarea(sumarDias(hoy, 30), { uso: { medidor_id: med, ...USO } })]);
+      const soloNull = await pedir('PATCH', `/api/planes/${conDos.id}/tareas/${conDos.tareas[0].id}`, A.token, { primera_fecha: null });
+      assert.deepStrictEqual([soloNull.status, soloNull.cuerpo.codigo], [422, 'DATOS_INVALIDOS']);
+      const dosDeTres = await pedir('PATCH', `/api/planes/${conDos.id}/tareas/${conDos.tareas[0].id}`, A.token, { frecuencia_valor: null, frecuencia_unidad: null });
+      assert.deepStrictEqual([dosDeTres.status, dosDeTres.cuerpo.codigo], [422, 'DATOS_INVALIDOS']);
+
+      // Sin tocar el uso, sigue igual
+      const soloAccion = await patch({ accion: 'Solo cambia la acción' });
+      assert.deepStrictEqual([soloAccion.status, soloAccion.cuerpo.tareas[0].uso.medidor.id], [200, med]);
+
+      // Cambiar de medidor, con una ejecución en el otro: la próxima vuelve a primera
+      await ejecucionUso(m1, conFecha.id, tf, { medidorId: med, valor: 510 });
+      assert.strictEqual((await usoDe(conFecha.id, tf)).proximo, 760);
+      const cambio = await patch({ uso: { medidor_id: otroMed, ...USO } });
+      assert.strictEqual(cambio.status, 200, JSON.stringify(cambio.cuerpo));
+      assert.deepStrictEqual(
+        [cambio.cuerpo.tareas[0].uso.medidor.id, cambio.cuerpo.tareas[0].uso.ultimo, cambio.cuerpo.tareas[0].uso.proximo],
+        [otroMed, null, 500]
+      );
+
+      // Desactivar un medidor con una tarea activa
+      const enUso = await crearMedidor(m1);
+      const pu = await crearPlan(m1, [tareaUso(enUso)]);
+      const tu = pu.tareas[0].id;
+      const baja = await pedir('POST', `/api/medidores/${enUso}/desactivar`, A.token, {});
+      assert.deepStrictEqual([baja.status, baja.cuerpo.codigo, baja.cuerpo.tarea_ids], [409, 'MEDIDOR_EN_USO', [tu]]);
+
+      assert.strictEqual((await pedir('POST', `/api/planes/${pu.id}/tareas/${tu}/desactivar`, A.token, {})).status, 200);
+      assert.strictEqual((await pedir('POST', `/api/medidores/${enUso}/desactivar`, A.token, {})).status, 200);
+      const reactivar = await pedir('POST', `/api/planes/${pu.id}/tareas/${tu}/reactivar`, A.token, {});
+      assert.deepStrictEqual([reactivar.status, reactivar.cuerpo.codigo], [409, 'MEDIDOR_INACTIVO']);
+    });
+
+    // =========================================================================
+    // PV-23: Estado por uso
+    // =========================================================================
+    await t.test('PV-23: Estado por uso', async () => {
+      const med = await crearMedidor(m1);
+      const p = await crearPlan(m1, [tareaUso(med)]);
+      const id = p.tareas[0].id;
+      const leer = async () => {
+        const x = await tareaDelPlan(p.id, id);
+        return [x.estado, x.uso.estado, x.uso.faltan];
+      };
+
+      assert.deepStrictEqual(await leer(), ['SIN_LECTURA', 'SIN_LECTURA', null]);
+      await cargarLectura(med, 400);
+      assert.deepStrictEqual(await leer(), ['AL_DIA', 'AL_DIA', 100]);
+      await cargarLectura(med, 475);
+      assert.deepStrictEqual(await leer(), ['PROXIMA', 'PROXIMA', 25]);
+      await cargarLectura(med, 500);
+      assert.deepStrictEqual(await leer(), ['PROXIMA', 'PROXIMA', 0]);
+      const l = await cargarLectura(med, 500.5);
+      assert.deepStrictEqual(await leer(), ['VENCIDA', 'VENCIDA', -0.5]);
+      const uso505 = await usoDe(p.id, id);
+      assert.deepStrictEqual(
+        [uso505.lectura_actual.valor, typeof uso505.lectura_actual.registrada_en, uso505.proximo],
+        [500.5, 'string', 500]
+      );
+
+      const an = await pedir('POST', `/api/medidores/${med}/lecturas/${l.id}/anular`, A.token, { motivo: 'Mal cargada' });
+      assert.strictEqual(an.status, 200, JSON.stringify(an.cuerpo));
+      assert.deepStrictEqual(await leer(), ['PROXIMA', 'PROXIMA', 0]);
+
+      // Finalizada con la tarea hecha en 510
+      await ejecucionUso(m1, p.id, id, { medidorId: med, valor: 510 });
+      const hecha = await usoDe(p.id, id);
+      assert.deepStrictEqual([hecha.ultimo, hecha.proximo], [510, 760]);
+
+      // Cancelada, eliminada o sin la tarea hecha: no cuenta
+      const pNo = await crearPlan(m1, [tareaUso(med)]);
+      const tNo = pNo.tareas[0].id;
+      await ejecucionUso(m1, pNo.id, tNo, { medidorId: med, valor: 900, estado: 'CANCELADA' });
+      await ejecucionUso(m1, pNo.id, tNo, { medidorId: med, valor: 900, eliminada: true });
+      await ejecucionUso(m1, pNo.id, tNo, { medidorId: med, valor: null });
+      const noCuenta = await usoDe(pNo.id, tNo);
+      assert.deepStrictEqual([noCuenta.ultimo, noCuenta.proximo], [null, 500]);
+
+      // Un valor de otro medidor no cuenta
+      const otro = await crearMedidor(m1);
+      const pOtro = await crearPlan(m1, [tareaUso(med)]);
+      await ejecucionUso(m1, pOtro.id, pOtro.tareas[0].id, { medidorId: otro, valor: 900 });
+      assert.deepStrictEqual((await usoDe(pOtro.id, pOtro.tareas[0].id)).ultimo, null);
+
+      // El medidor inactivo: INACTIVA (una tarea activa no deja desactivarlo: va directo a la base)
+      const pIn = await crearPlan(m1, [tareaUso(await crearMedidor(m1))]);
+      await client.query('UPDATE medidores SET activo = FALSE WHERE id = $1', [pIn.tareas[0].uso.medidor.id]);
+      assert.strictEqual((await tareaDelPlan(pIn.id, pIn.tareas[0].id)).estado, 'INACTIVA');
+
+      // Combinadas, con la anticipación por omisión del plan (7 días)
+      const combinada = async (lectura: number | null, fecha: string) => {
+        const m = await crearMedidor(m1, lectura === null ? [] : [lectura]);
+        const pc = await crearPlan(m1, [tarea(fecha, { uso: { medidor_id: m, ...USO } })]);
+        const x = pc.tareas[0];
+        return [x.estado_fecha, x.uso.estado, x.estado];
+      };
+      assert.deepStrictEqual(await combinada(600, sumarDias(hoy, 100)), ['AL_DIA', 'VENCIDA', 'VENCIDA']);
+      assert.deepStrictEqual(await combinada(100, sumarDias(hoy, -3)), ['VENCIDA', 'AL_DIA', 'VENCIDA']);
+      assert.deepStrictEqual(await combinada(null, sumarDias(hoy, 3)), ['PROXIMA', 'SIN_LECTURA', 'PROXIMA']);
+      assert.deepStrictEqual(await combinada(null, sumarDias(hoy, 100)), ['AL_DIA', 'SIN_LECTURA', 'SIN_LECTURA']);
+    });
+
+    // =========================================================================
+    // PV-24: Vencimientos con uso
+    // =========================================================================
+    await t.test('PV-24: Vencimientos con uso', async () => {
+      const m24 = await crearMaquina('M24', s1, critNormal);
+      const medVencida = await crearMedidor(m24, [600]);
+      const medSinLectura = await crearMedidor(m24);
+
+      const pFecha = await crearPlan(m24, [
+        tarea(sumarDias(hoy, -3), { accion: 'Vencida con fecha' }),
+        tarea(sumarDias(hoy, 2), { accion: 'Próxima' }),
+        tarea(sumarDias(hoy, 60), { accion: 'Al día' }),
+      ]);
+      const pUso = await crearPlan(m24, [
+        tareaUso(medVencida, { accion: 'Vencida solo por uso' }),
+        tareaUso(medSinLectura, { accion: 'Sin lectura' }),
+      ]);
+      const pCurso = await crearPlan(m24, [tarea(sumarDias(hoy, -1), { accion: 'En curso' })]);
+      await generarOk(pCurso.id);
+
+      const r = await pedir('GET', `/api/planes/vencimientos?maquina_id=${m24}`, A.token);
+      assert.strictEqual(r.status, 200, JSON.stringify(r.cuerpo));
+      assert.deepStrictEqual(
+        r.cuerpo.tareas.map((x: any) => [x.accion, x.estado]),
+        [
+          ['Vencida con fecha', 'VENCIDA'],
+          ['Vencida solo por uso', 'VENCIDA'],
+          ['Próxima', 'PROXIMA'],
+          ['Sin lectura', 'SIN_LECTURA'],
+          ['En curso', 'EN_CURSO'],
+        ],
+        'El orden de la 4.2'
+      );
+      assert.strictEqual(r.total, '5');
+      assert.deepStrictEqual(r.cuerpo.resumen, { vencidas: 2, proximas: 1, en_curso: 1, sin_lectura: 1, al_dia: 1 });
+
+      const soloUso = r.cuerpo.tareas.find((x: any) => x.accion === 'Vencida solo por uso');
+      assert.deepStrictEqual(
+        [soloUso.frecuencia_valor, soloUso.proxima_fecha, soloUso.dias, soloUso.estado_fecha, soloUso.uso.estado, soloUso.uso.faltan],
+        [null, null, null, null, 'VENCIDA', -100]
+      );
+      const conFecha = r.cuerpo.tareas.find((x: any) => x.accion === 'Vencida con fecha');
+      assert.deepStrictEqual([conFecha.estado_fecha, conFecha.uso], ['VENCIDA', null]);
+
+      const solo = await pedir('GET', `/api/planes/vencimientos?maquina_id=${m24}&estado=SIN_LECTURA`, A.token);
+      assert.deepStrictEqual(solo.cuerpo.tareas.map((x: any) => x.accion), ['Sin lectura']);
+
+      const lista = (await pedir('GET', `/api/planes?maquina_id=${m24}`, A.token)).cuerpo;
+      const deUso = lista.find((x: any) => x.id === pUso.id);
+      assert.deepStrictEqual([deUso.sin_lectura, deUso.vencidas, deUso.proxima_fecha], [1, 1, null], 'Un plan solo por uso, sin próxima fecha');
+      const deFecha = lista.find((x: any) => x.id === pFecha.id);
+      assert.deepStrictEqual([deFecha.sin_lectura, deFecha.proxima_fecha], [0, sumarDias(hoy, -3)]);
+    });
+
+    // =========================================================================
+    // PV-25: Generar con uso
+    // =========================================================================
+    await t.test('PV-25: Generar con uso', async () => {
+      const med = await crearMedidor(m1, [600]);
+      const otro = await crearMedidor(m1);
+      const p = await crearPlan(m1, [tareaUso(med)], { responsable_usuario_id: R.id });
+      const tareaPlanId = p.tareas[0].id;
+
+      // Sin cuerpo, lleva la vencida por uso
+      const g = await generarOk(p.id);
+      assert.deepStrictEqual(g.tareas.map((x: any) => [x.plan_tarea_id, x.fecha_programada]), [[tareaPlanId, null]]);
+
+      const fila = (await client.query(
+        'SELECT medidor_id, uso_programado, fecha_programada, valor_medidor FROM intervencion_tareas WHERE id = $1',
+        [g.tareas[0].id]
+      )).rows[0];
+      assert.deepStrictEqual(
+        [Number(fila.medidor_id), Number(fila.uso_programado), fila.fecha_programada, fila.valor_medidor],
+        [med, 500, null, null]
+      );
+
+      const leerUso = async () => (await tareasDe(g.intervencion.id)).cuerpo.tareas[0].uso;
+      const antes = await leerUso();
+      assert.deepStrictEqual(
+        [antes.medidor.id, antes.medidor.nombre, antes.medidor.unidad, antes.medidor.activo, antes.medidor.ultima_lectura.valor, antes.programado, antes.valor],
+        [med, (await pedir('GET', `/api/medidores/${med}`, A.token)).cuerpo.nombre, 'horas', true, 600, 500, null]
+      );
+
+      // Cambiar el medidor de la tarea del plan después no cambia la de la intervención
+      const cambio = await pedir('PATCH', `/api/planes/${p.id}/tareas/${tareaPlanId}`, A.token, { uso: { medidor_id: otro, ...USO } });
+      assert.strictEqual(cambio.status, 200, JSON.stringify(cambio.cuerpo));
+      const despues = await leerUso();
+      assert.deepStrictEqual([despues.medidor.id, despues.programado], [med, 500]);
+
+      // Una tarea sin medidor: uso null
+      const pf = await crearPlan(m1, [tarea(sumarDias(hoy, -1))], { responsable_usuario_id: R.id });
+      const gf = await generarOk(pf.id);
+      assert.strictEqual((await tareasDe(gf.intervencion.id)).cuerpo.tareas[0].uso, null);
+
+      // Una próxima por uso que no entra en la columna: 422, nunca 500
+      const grande = await crearMedidor(m1, [999999999999.99]);
+      const pg = await crearPlan(m1, [tareaUso(grande, {}, { cada: 999999999999.99, primera: 0, anticipacion: 0 })]);
+      await ejecucionUso(m1, pg.id, pg.tareas[0].id, { medidorId: grande, valor: 999999999999.99 });
+      const fuera = await generar(pg.id, { tarea_ids: [pg.tareas[0].id] });
+      assert.deepStrictEqual([fuera.status, fuera.cuerpo.codigo], [422, 'DATOS_INVALIDOS'], JSON.stringify(fuera.cuerpo));
+    });
+
+    // =========================================================================
+    // PV-26: Marcar con lectura
+    // =========================================================================
+    await t.test('PV-26: Marcar con lectura', async () => {
+      // Sin lecturas y sin lectura: 422
+      const sinNada = await generarUso(await crearMedidor(m1));
+      const r0 = await marcar(sinNada.intId, sinNada.tareaId, { hecha: true });
+      assert.deepStrictEqual([r0.status, r0.cuerpo.codigo], [422, 'LECTURA_REQUERIDA']);
+
+      // Menor: 422, con ultima. Igual: 200, sin lectura nueva
+      const medIgual = await crearMedidor(m1, [100]);
+      const a = await generarUso(medIgual);
+      const menor = await marcar(a.intId, a.tareaId, { hecha: true, lectura: 50 });
+      assert.deepStrictEqual([menor.status, menor.cuerpo.codigo, menor.cuerpo.ultima.valor], [422, 'LECTURA_MENOR', 100]);
+      const igual = await marcar(a.intId, a.tareaId, { hecha: true, lectura: 100 });
+      assert.strictEqual(igual.status, 200, JSON.stringify(igual.cuerpo));
+      assert.deepStrictEqual([igual.cuerpo.hecha, igual.cuerpo.uso.valor, igual.cuerpo.proximo_uso], [true, 100, 500]);
+      assert.strictEqual((await lecturasDe(medIgual)).length, 1, 'Igual: sin lectura nueva');
+
+      // Mayor: 200, con una lectura TAREA con su intervencion_id
+      const medMayor = await crearMedidor(m1, [100]);
+      const b = await generarUso(medMayor);
+      const mayor = await marcar(b.intId, b.tareaId, { hecha: true, lectura: 150.5 });
+      assert.strictEqual(mayor.status, 200, JSON.stringify(mayor.cuerpo));
+      assert.strictEqual(mayor.cuerpo.uso.valor, 150.5);
+      const lecturas = await lecturasDe(medMayor);
+      assert.strictEqual(lecturas.length, 2);
+      assert.deepStrictEqual(
+        [Number(lecturas[1].valor), lecturas[1].origen, Number(lecturas[1].intervencion_tarea_id), Number(lecturas[1].intervencion_id)],
+        [150.5, 'TAREA', b.tareaId, b.intId]
+      );
+      const api = (await pedir('GET', `/api/medidores/${medMayor}/lecturas`, A.token)).cuerpo[0];
+      assert.deepStrictEqual([api.origen, api.intervencion_id], ['TAREA', b.intId]);
+      assert.strictEqual(api.registrada_por.id, R.id, 'A nombre de quien marca');
+
+      // Sin lecturas, con lectura: se registra
+      const medPrimera = await crearMedidor(m1);
+      const c = await generarUso(medPrimera);
+      const primera = await marcar(c.intId, c.tareaId, { hecha: true, lectura: 10 });
+      assert.deepStrictEqual([primera.status, primera.cuerpo.uso.valor], [200, 10]);
+      assert.strictEqual((await lecturasDe(medPrimera)).length, 1);
+
+      // Sin lectura, con lecturas: el valor es la última
+      const medUltima = await crearMedidor(m1, [100, 120]);
+      const d = await generarUso(medUltima);
+      const conUltima = await marcar(d.intId, d.tareaId, { hecha: true });
+      assert.deepStrictEqual([conUltima.status, conUltima.cuerpo.uso.valor], [200, 120]);
+      assert.strictEqual((await lecturasDe(medUltima)).length, 2, 'Sin lectura nueva');
+
+      // 422: sin medidor, con hecha: false y "600"
+      const pf = await crearPlan(m1, [tarea(sumarDias(hoy, -1))], { responsable_usuario_id: R.id });
+      const gf = await generarOk(pf.id);
+      const sinMedidor = await marcar(gf.intervencion.id, gf.tareas[0].id, { hecha: true, lectura: 100 });
+      assert.deepStrictEqual([sinMedidor.status, sinMedidor.cuerpo.codigo], [422, 'DATOS_INVALIDOS']);
+      const conFalse = await marcar(d.intId, d.tareaId, { hecha: false, lectura: 100 });
+      assert.deepStrictEqual([conFalse.status, conFalse.cuerpo.codigo], [422, 'DATOS_INVALIDOS']);
+      const texto = await marcar(d.intId, d.tareaId, { hecha: true, lectura: '600' });
+      assert.deepStrictEqual([texto.status, texto.cuerpo.codigo], [422, 'DATOS_INVALIDOS']);
+
+      // Repetir hecha: true con otra lectura: 200, sin cambios ni lectura nueva
+      const repite = await marcar(d.intId, d.tareaId, { hecha: true, lectura: 999 });
+      assert.deepStrictEqual([repite.status, repite.cuerpo.uso.valor], [200, 120]);
+      assert.strictEqual((await lecturasDe(medUltima)).length, 2);
+
+      // Desmarcar: valor null, y la lectura queda
+      const desm = await marcar(b.intId, b.tareaId, { hecha: false });
+      assert.deepStrictEqual([desm.status, desm.cuerpo.hecha, desm.cuerpo.uso.valor], [200, false, null]);
+      assert.strictEqual((await lecturasDe(medMayor)).length, 2, 'La lectura queda');
+
+      // El medidor inactivo: con la última, 200; con una mayor, 409
+      const medInactivo = await crearMedidor(m1, [100]);
+      const e = await generarUso(medInactivo);
+      const f = await crearPlan(m1, [tareaUso(medInactivo)], { responsable_usuario_id: R.id });
+      const gF = await generarOk(f.id, { tarea_ids: [f.tareas[0].id] });
+      await client.query('UPDATE medidores SET activo = FALSE WHERE id = $1', [medInactivo]);
+      const inactMayor = await marcar(e.intId, e.tareaId, { hecha: true, lectura: 150 });
+      assert.deepStrictEqual([inactMayor.status, inactMayor.cuerpo.codigo], [409, 'MEDIDOR_INACTIVO']);
+      const inactUltima = await marcar(gF.intervencion.id, gF.tareas[0].id, { hecha: true });
+      assert.deepStrictEqual([inactUltima.status, inactUltima.cuerpo.uso.valor], [200, 100]);
+
+      // proximo_uso, también en una tarea sin medidor
+      const marcadaSinMedidor = await marcar(gf.intervencion.id, gf.tareas[0].id, { hecha: true });
+      assert.deepStrictEqual([marcadaSinMedidor.status, marcadaSinMedidor.cuerpo.proximo_uso, marcadaSinMedidor.cuerpo.uso], [200, null, null]);
+
+      // Todo o nada: una tarea con previstos y una lectura menor
+      const repu = await crearRepuesto(10);
+      const medTodo = await crearMedidor(m1, [100]);
+      const g = await generarUso(medTodo, {}, { repuestos: [previsto(repu, 2)] });
+      await iniciar(g.intId);
+      const [previstoId] = await idsPrevistos(g.intId, g.tareaId);
+      const fallo = await marcar(g.intId, g.tareaId, { hecha: true, lectura: 50, repuestos: [{ id: previstoId, cantidad: 2 }] });
+      assert.deepStrictEqual([fallo.status, fallo.cuerpo.codigo], [422, 'LECTURA_MENOR']);
+      assert.strictEqual((await tareaInt(g.intId, g.tareaId)).hecha, false, 'La tarea no se marcó');
+      assert.strictEqual((await consumosDe(g.intId)).length, 0, 'Ningún consumo');
+      assert.strictEqual(await stockDe(repu), 10, 'El stock sigue igual');
+    });
+
+    // =========================================================================
+    // PV-27: La próxima por uso se mueve sola
+    // =========================================================================
+    await t.test('PV-27: La próxima por uso se mueve sola', async () => {
+      const med = await crearMedidor(m1, [480]);
+      const a = await generarUso(med);
+      await iniciar(a.intId);
+      assert.strictEqual((await marcar(a.intId, a.tareaId, { hecha: true, lectura: 512.5 })).status, 200);
+      await finalizar(a.intId);
+
+      const hecha = await tareaDelPlan(a.p.id, a.tareaPlanId);
+      assert.deepStrictEqual([hecha.uso.ultimo, hecha.uso.proximo, hecha.uso.estado, hecha.estado], [512.5, 762.5, 'AL_DIA', 'AL_DIA']);
+
+      // Reabrir: vuelve
+      await accionOk(a.intId, 'reabrir', { estado_esperado: 'FINALIZADA', motivo: 'Sigue perdiendo aceite', maquina_detenida: false });
+      const reabierta = await tareaDelPlan(a.p.id, a.tareaPlanId);
+      assert.deepStrictEqual([reabierta.uso.ultimo, reabierta.uso.proximo, reabierta.estado], [null, 500, 'EN_CURSO']);
+
+      // Cancelar o eliminar otra con la tarea: no cuenta
+      const otro = await crearMedidor(m1, [600]);
+      const b = await generarUso(otro);
+      assert.strictEqual((await marcar(b.intId, b.tareaId, { hecha: true, lectura: 700 })).status, 200);
+      await accionOk(b.intId, 'cancelar', { estado_esperado: 'PENDIENTE', motivo: 'Se reprograma' });
+      const cancelada = await usoDe(b.p.id, b.tareaPlanId);
+      assert.deepStrictEqual([cancelada.ultimo, cancelada.proximo], [null, 500]);
+
+      const g2 = await generarOk(b.p.id);
+      assert.strictEqual((await marcar(g2.intervencion.id, g2.tareas[0].id, { hecha: true, lectura: 800 })).status, 200);
+      await accionOk(g2.intervencion.id, 'eliminar', { motivo: 'Generada de más' });
+      const eliminada = await usoDe(b.p.id, b.tareaPlanId);
+      assert.deepStrictEqual([eliminada.ultimo, eliminada.proximo], [null, 500]);
+    });
+
+    // =========================================================================
+    // PV-28: Corrección en FINALIZADA
+    // =========================================================================
+    await t.test('PV-28: Corrección en FINALIZADA', async () => {
+      const med = await crearMedidor(m1, [500]);
+      const p = await crearPlan(m1, [tareaUso(med, { accion: 'Tarea X' }), tareaUso(med, { accion: 'Tarea Y' })], { responsable_usuario_id: R.id });
+      const g = await generarOk(p.id, { tarea_ids: p.tareas.map((x: any) => x.id) });
+      const intId = g.intervencion.id;
+      const [x, y] = g.tareas;
+      await iniciar(intId);
+      await finalizar(intId);
+      await cargarLectura(med, 600);
+      const antes = (await lecturasDe(med)).length;
+
+      const motivo = 'Se olvidó de marcarla';
+      const r403 = await marcar(intId, x.id, { hecha: true, lectura: 480, motivo }, R.token);
+      assert.deepStrictEqual([r403.status, r403.cuerpo.codigo], [403, 'PERMISO_INSUFICIENTE']);
+      const sinMotivo = await marcar(intId, x.id, { hecha: true, lectura: 480 }, A.token);
+      assert.deepStrictEqual([sinMotivo.status, sinMotivo.cuerpo.codigo], [422, 'MOTIVO_REQUERIDO']);
+      const sinLectura = await marcar(intId, x.id, { hecha: true, motivo }, A.token);
+      assert.deepStrictEqual([sinLectura.status, sinLectura.cuerpo.codigo], [422, 'LECTURA_REQUERIDA']);
+      const mayor = await marcar(intId, x.id, { hecha: true, lectura: 700, motivo }, A.token);
+      assert.deepStrictEqual([mayor.status, mayor.cuerpo.codigo, mayor.cuerpo.ultima.valor], [422, 'LECTURA_MAYOR', 600]);
+
+      const ok = await marcar(intId, x.id, { hecha: true, lectura: 480, motivo }, A.token);
+      assert.strictEqual(ok.status, 200, JSON.stringify(ok.cuerpo));
+      assert.deepStrictEqual([ok.cuerpo.uso.valor, ok.cuerpo.proximo_uso], [480, 730]);
+      assert.strictEqual((await lecturasDe(med)).length, antes, 'Ninguna lectura nueva');
+      assert.deepStrictEqual((await usoDe(p.id, x.plan_tarea_id)).ultimo, 480, 'La próxima, movida');
+
+      // El valor, con coma decimal y sin separador de miles
+      await cargarLectura(med, 2000);
+      const conDecimal = await marcar(intId, y.id, { hecha: true, lectura: 1234.5, motivo }, A.token);
+      assert.strictEqual(conDecimal.status, 200, JSON.stringify(conDecimal.cuerpo));
+
+      const aud = (await client.query(
+        `SELECT valor_nuevo, motivo FROM intervencion_auditoria
+         WHERE intervencion_id = $1 AND tipo_evento = 'CORRECCION_TAREA' ORDER BY id`,
+        [intId]
+      )).rows;
+      assert.deepStrictEqual(aud, [
+        { valor_nuevo: 'Se marcó como hecha: Tarea X, con el medidor en 480 horas', motivo },
+        { valor_nuevo: 'Se marcó como hecha: Tarea Y, con el medidor en 1234,5 horas', motivo },
+      ]);
+    });
+
+    // =========================================================================
+    // PV-29: Lo que llegue primero
+    // =========================================================================
+    await t.test('PV-29: Lo que llegue primero', async () => {
+      const seisMeses = { frecuencia_valor: 6, frecuencia_unidad: 'MESES' };
+
+      // Por uso: la lectura pasa el valor
+      const med = await crearMedidor(m1, [600]);
+      const p = await crearPlan(m1, [tarea(sumarDias(hoy, 100), { ...seisMeses, uso: { medidor_id: med, ...USO } })], { responsable_usuario_id: R.id });
+      const id = p.tareas[0].id;
+      assert.deepStrictEqual([p.tareas[0].estado, p.tareas[0].estado_fecha, p.tareas[0].uso.estado], ['VENCIDA', 'AL_DIA', 'VENCIDA']);
+
+      const g = await generarOk(p.id);
+      assert.strictEqual(g.tareas[0].fecha_programada, sumarDias(hoy, 100));
+      await iniciar(g.intervencion.id);
+      assert.strictEqual((await marcar(g.intervencion.id, g.tareas[0].id, { hecha: true, lectura: 610 })).status, 200);
+      await finalizar(g.intervencion.id);
+
+      const hecha = await tareaDelPlan(p.id, id);
+      assert.deepStrictEqual(
+        [hecha.ultima_ejecucion, hecha.proxima_fecha, hecha.uso.ultimo, hecha.uso.proximo, hecha.estado_fecha, hecha.uso.estado, hecha.estado],
+        [hoy, await hoyMas('6 months'), 610, 860, 'AL_DIA', 'AL_DIA', 'AL_DIA']
+      );
+
+      // Por fecha: una ejecución hace 7 meses, con valor 100, y la lectura en 200
+      const medF = await crearMedidor(m1, [200]);
+      const pf = await crearPlan(m1, [tarea(sumarDias(hoy, 100), { ...seisMeses, uso: { medidor_id: medF, ...USO } })]);
+      const tf = pf.tareas[0].id;
+      const hace7 = await hoyMas('-7 months');
+      await ejecucionUso(m1, pf.id, tf, { medidorId: medF, valor: 100, fin: `${hace7} 12:00:00-03` });
+      const porFecha = await tareaDelPlan(pf.id, tf);
+      assert.deepStrictEqual(
+        [porFecha.estado, porFecha.estado_fecha, porFecha.uso.estado, porFecha.uso.ultimo, porFecha.uso.proximo],
+        ['VENCIDA', 'VENCIDA', 'AL_DIA', 100, 350]
+      );
+    });
+
+    // =========================================================================
+    // PV-30: Concurrencia
+    // =========================================================================
+    await t.test('PV-30: Concurrencia', async () => {
+      for (let vuelta = 1; vuelta <= 10; vuelta++) {
+        // Marcar con una lectura mayor y cargar una lectura manual a la vez
+        const med = await crearMedidor(m1, [10]);
+        const a = await generarUso(med);
+        const [marca, manual] = await Promise.all([
+          marcar(a.intId, a.tareaId, { hecha: true, lectura: 20 }),
+          pedir('POST', `/api/medidores/${med}/lecturas`, A.token, { valor: 30 }),
+        ]);
+        assert.strictEqual(manual.status, 201, `Vuelta ${vuelta}: ${JSON.stringify(manual.cuerpo)}`);
+        if (marca.status !== 200) {
+          assert.deepStrictEqual([marca.status, marca.cuerpo.codigo], [422, 'LECTURA_MENOR'], `Vuelta ${vuelta}: ${JSON.stringify(marca.cuerpo)}`);
+        }
+        const vigentes = (await lecturasDe(med)).filter((x) => x.anulada_en === null).map((x) => Number(x.valor));
+        for (let i = 1; i < vigentes.length; i++) {
+          assert.ok(vigentes[i] >= vigentes[i - 1], `Vuelta ${vuelta}: las vigentes, por id, nunca bajan: ${vigentes}`);
+        }
+
+        // Cambiar una tarea a un medidor y desactivarlo a la vez
+        const nuevo = await crearMedidor(m1);
+        const p = await crearPlan(m1, [tarea(sumarDias(hoy, 30))]);
+        const [cambio, baja] = await Promise.all([
+          pedir('PATCH', `/api/planes/${p.id}/tareas/${p.tareas[0].id}`, A.token, { uso: { medidor_id: nuevo, ...USO } }),
+          pedir('POST', `/api/medidores/${nuevo}/desactivar`, A.token, {}),
+        ]);
+        const detalleMed = (await pedir('GET', `/api/medidores/${nuevo}`, A.token)).cuerpo;
+        if (cambio.status === 200) {
+          assert.deepStrictEqual([baja.status, baja.cuerpo.codigo, detalleMed.activo], [409, 'MEDIDOR_EN_USO', true], `Vuelta ${vuelta}: ${JSON.stringify(baja.cuerpo)}`);
+        } else {
+          assert.deepStrictEqual([cambio.status, cambio.cuerpo.codigo], [422, 'MEDIDOR_INVALIDO'], `Vuelta ${vuelta}: ${JSON.stringify(cambio.cuerpo)}`);
+          assert.deepStrictEqual([baja.status, detalleMed.activo], [200, false], `Vuelta ${vuelta}: ${JSON.stringify(baja.cuerpo)}`);
+        }
+      }
+    });
+
+    // =========================================================================
+    // PV-31: Contrato del uso
+    // =========================================================================
+    await t.test('PV-31: Contrato del uso', async () => {
+      const med = await crearMedidor(m1, [512.5]);
+      const p = await crearPlan(m1, [
+        tarea(sumarDias(hoy, -3), {
+          accion: 'Cambiar el aceite',
+          detalle: 'Con el equipo frío',
+          repuestos: [{ repuesto_id: repId, cantidad: 2.5 }],
+          proveedor_id: provId,
+          uso: { medidor_id: med, ...USO },
+        }),
+      ], { responsable_usuario_id: R.id, descripcion: 'Plan del contrato' });
+      const g = await generarOk(p.id);
+      await iniciar(g.intervencion.id);
+      const [previstoContrato] = (await tareasDe(g.intervencion.id)).cuerpo.tareas[0].repuestos_previstos;
+      const marcada = await marcar(g.intervencion.id, g.tareas[0].id, {
+        hecha: true,
+        observacion: 'Sin novedades',
+        repuestos: [{ id: previstoContrato.id, cantidad: 2 }],
+        lectura: 512.5,
+      });
+      assert.strictEqual(marcada.status, 200, JSON.stringify(marcada.cuerpo));
+
+      const detalle = await detallePlan(p.id);
+      const lista = (await pedir('GET', `/api/planes?maquina_id=${m1}`, A.token)).cuerpo.find((x: any) => x.id === p.id);
+      const vencimientos = (await pedir('GET', `/api/planes/vencimientos?maquina_id=${m1}&estado=EN_CURSO`, A.token)).cuerpo;
+      vencimientos.tareas = vencimientos.tareas.filter((x: any) => x.plan.id === p.id);
+      const tareas = (await tareasDe(g.intervencion.id)).cuerpo;
+
+      const verificar = (ruta: string, real: unknown, ejemplo: unknown) => {
+        const diferencias = mismaForma(real, ejemplo);
+        assert.deepStrictEqual(diferencias, [], `${ruta}:\n${diferencias.join('\n')}`);
+      };
+      assert.notStrictEqual(detalle.tareas[0].uso, null);
+      assert.notStrictEqual(vencimientos.tareas[0].uso, null);
+      assert.notStrictEqual(tareas.tareas[0].uso, null);
+      verificar('GET /api/planes/:id', detalle, planDetalleEjemplo);
+      verificar('GET /api/planes (un elemento)', lista, planListaEjemplo);
+      verificar('GET /api/planes/vencimientos', vencimientos, vencimientosEjemplo);
+      verificar('GET /api/intervenciones/:id/tareas', tareas, tareasIntervencionEjemplo);
+      verificar('PATCH /api/intervenciones/:id/tareas/:tareaId', marcada.cuerpo, tareaMarcadaEjemplo);
+    });
   } finally {
     // Limpieza: solo lo que creó esta prueba
     try {
       const maquinas = createdMaquinaIds;
       const intIds = (await client.query('SELECT id FROM intervenciones WHERE maquina_id = ANY($1)', [maquinas])).rows.map((r) => Number(r.id));
+      if (maquinas.length > 0) {
+        await client.query(
+          'DELETE FROM lecturas_medidor WHERE medidor_id IN (SELECT id FROM medidores WHERE maquina_id = ANY($1))',
+          [maquinas]
+        );
+      }
       if (intIds.length > 0) {
         await client.query(
           'DELETE FROM intervencion_tarea_repuestos WHERE intervencion_tarea_id IN (SELECT id FROM intervencion_tareas WHERE intervencion_id = ANY($1))',
@@ -1641,6 +2309,7 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-21)', async (t) => {
           [maquinas]
         );
         await client.query('DELETE FROM planes_mantenimiento WHERE maquina_id = ANY($1)', [maquinas]);
+        await client.query('DELETE FROM medidores WHERE maquina_id = ANY($1)', [maquinas]);
         await client.query('DELETE FROM intervencion_periodos_detencion WHERE maquina_id = ANY($1)', [maquinas]);
         await client.query('DELETE FROM historial_estados_maquina WHERE maquina_id = ANY($1)', [maquinas]);
         await client.query('DELETE FROM maquinas WHERE id = ANY($1)', [maquinas]);

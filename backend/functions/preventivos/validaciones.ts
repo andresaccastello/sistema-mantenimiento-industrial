@@ -1,6 +1,7 @@
 import pg from 'pg';
 import { ErrorNegocio } from '../intervenciones/errores.ts';
 import { validarCantidad, validarIdCuerpo } from '../repuestos/validaciones.ts';
+import { validarValorMedidor } from '../medidores/lecturas.ts';
 import { Hoy } from './comun.ts';
 
 export const UNIDADES = ['DIAS', 'SEMANAS', 'MESES', 'ANIOS'] as const;
@@ -80,13 +81,22 @@ export interface RepuestoPrevisto {
   cantidad: number;
 }
 
-/** Una tarea validada, lista para guardar. */
+/** El criterio de uso de una tarea (D-023). */
+export interface UsoTarea {
+  medidor_id: number;
+  cada: number;
+  primera: number;
+  anticipacion: number;
+}
+
+/** Una tarea validada, lista para guardar. La fecha va entera o nula, como el uso. */
 export interface TareaValida {
   accion: string;
   detalle: string | null;
-  frecuencia_valor: number;
-  frecuencia_unidad: Unidad;
-  primera_fecha: string;
+  frecuencia_valor: number | null;
+  frecuencia_unidad: Unidad | null;
+  primera_fecha: string | null;
+  uso: UsoTarea | null;
   repuestos: RepuestoPrevisto[];
   proveedor_id: number | null;
 }
@@ -98,6 +108,7 @@ const CAMPOS_TAREA = [
   'frecuencia_valor',
   'frecuencia_unidad',
   'primera_fecha',
+  'uso',
   'repuestos',
   'proveedor_id',
 ] as const;
@@ -136,10 +147,27 @@ function validarListaPrevistos(raw: unknown): RepuestoPrevisto[] {
   });
 }
 
+/** `uso` de una tarea (4.1): un objeto, o null para sacarlo. La anticipación, por omisión, el 10 % de `cada`. */
+function validarUso(raw: unknown): UsoTarea | null {
+  if (raw === null) return null;
+  if (typeof raw !== 'object' || Array.isArray(raw)) throw invalido('El campo uso debe ser un objeto o null');
+  const b = raw as Record<string, unknown>;
+  const medidor_id = validarIdCuerpo(b.medidor_id, 'MEDIDOR_INVALIDO', 'medidor_id');
+  const cada = validarValorMedidor(b.cada, 'cada', true);
+  const primera = validarValorMedidor(b.primera, 'primera');
+  if (!presente(b.anticipacion)) {
+    return { medidor_id, cada, primera, anticipacion: Math.round(Math.round(cada * 100) / 10) / 100 };
+  }
+  const anticipacion = validarValorMedidor(b.anticipacion, 'anticipacion');
+  if (anticipacion > cada) throw invalido('El campo anticipacion no puede ser mayor que cada');
+  return { medidor_id, cada, primera, anticipacion };
+}
+
 /**
  * Valida una tarea sin tocar la base. Con `actual`, es un PATCH: los campos que no
  * vienen quedan como están, y se validan solo los que vienen; las reglas que cruzan
- * campos (la frecuencia) se controlan sobre el resultado. En el PATCH, `repuestos` reemplaza la lista.
+ * campos (la frecuencia y el criterio) se controlan sobre el resultado. En el PATCH,
+ * `repuestos` reemplaza la lista y `uso`, todo el criterio de uso.
  */
 export function validarTarea(raw: unknown, hoy: Hoy, actual?: TareaValida): TareaValida {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
@@ -155,12 +183,22 @@ export function validarTarea(raw: unknown, hoy: Hoy, actual?: TareaValida): Tare
   const accion = viene('accion') ? textoObligatorio(b.accion, 'accion', 3, 200) : actual!.accion;
   const detalle = viene('detalle') ? textoOpcional(b.detalle, 'detalle', 2000) : actual!.detalle;
 
-  const frecuencia = validarFrecuencia(
-    viene('frecuencia_valor') ? b.frecuencia_valor : actual!.frecuencia_valor,
-    viene('frecuencia_unidad') ? b.frecuencia_unidad : actual!.frecuencia_unidad
-  );
+  // La fecha: los tres, o ninguno. En el PATCH se saca con los tres en null (4.1)
+  const valorCrudo = viene('frecuencia_valor') ? b.frecuencia_valor : actual!.frecuencia_valor;
+  const unidadCruda = viene('frecuencia_unidad') ? b.frecuencia_unidad : actual!.frecuencia_unidad;
+  const fechaCruda = viene('primera_fecha') ? b.primera_fecha : actual!.primera_fecha;
+  const presentes = [valorCrudo, unidadCruda, fechaCruda].filter(presente).length;
+  if (presentes !== 0 && presentes !== 3) {
+    throw invalido('frecuencia_valor, frecuencia_unidad y primera_fecha van los tres o ninguno');
+  }
+  const frecuencia = presentes === 3 ? validarFrecuencia(valorCrudo, unidadCruda) : null;
+  const primera_fecha =
+    presentes !== 3 ? null : viene('primera_fecha') ? validarPrimeraFecha(fechaCruda, hoy) : actual!.primera_fecha;
 
-  const primera_fecha = viene('primera_fecha') ? validarPrimeraFecha(b.primera_fecha, hoy) : actual!.primera_fecha;
+  const uso = 'uso' in b ? validarUso(b.uso) : actual ? actual.uso : null;
+  if (primera_fecha === null && uso === null) {
+    throw invalido('Una tarea vence por fecha, por uso o por las dos');
+  }
 
   const repuestos =
     'repuestos' in b ? validarListaPrevistos(b.repuestos) : actual ? actual.repuestos : [];
@@ -174,9 +212,10 @@ export function validarTarea(raw: unknown, hoy: Hoy, actual?: TareaValida): Tare
   return {
     accion,
     detalle,
-    frecuencia_valor: frecuencia.valor,
-    frecuencia_unidad: frecuencia.unidad,
+    frecuencia_valor: frecuencia === null ? null : frecuencia.valor,
+    frecuencia_unidad: frecuencia === null ? null : frecuencia.unidad,
     primera_fecha,
+    uso,
     repuestos,
     proveedor_id,
   };
@@ -212,6 +251,34 @@ export function controlarRepuestosTarea(
       throw new ErrorNegocio(422, 'REPUESTO_INVALIDO', 'El repuesto no existe o está inactivo', { indice_repuesto: indice });
     }
   });
+}
+
+/** Los medidores, leídos con FOR SHARE después de bloquear el plan (4.5), en orden de id. */
+export async function leerMedidores(
+  client: pg.PoolClient,
+  ids: number[]
+): Promise<Map<number, { activo: boolean; maquina_id: number }>> {
+  const medidores = new Map<number, { activo: boolean; maquina_id: number }>();
+  if (ids.length === 0) return medidores;
+  const r = await client.query(
+    'SELECT id, activo, maquina_id FROM medidores WHERE id = ANY($1::bigint[]) ORDER BY id FOR SHARE',
+    [[...new Set(ids)]]
+  );
+  for (const x of r.rows) medidores.set(Number(x.id), { activo: Boolean(x.activo), maquina_id: Number(x.maquina_id) });
+  return medidores;
+}
+
+/** El medidor de una tarea, ya leído: activo y de la máquina del plan (4.1). */
+export function controlarMedidorTarea(
+  tarea: TareaValida,
+  medidores: Map<number, { activo: boolean; maquina_id: number }>,
+  maquinaId: number
+): void {
+  if (tarea.uso === null) return;
+  const m = medidores.get(tarea.uso.medidor_id);
+  if (!m || !m.activo || m.maquina_id !== maquinaId) {
+    throw new ErrorNegocio(422, 'MEDIDOR_INVALIDO', 'El medidor no existe, está inactivo o es de otra máquina');
+  }
 }
 
 /** El proveedor de una tarea: activo, leído con FOR SHARE. Con `actual`, solo si cambia. */

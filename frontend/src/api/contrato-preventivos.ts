@@ -14,6 +14,7 @@ import type {
   VencimientosRespuesta,
   GeneracionRespuesta,
   IntervencionTareasRespuesta,
+  TareaIntervencionMarcada,
 } from './tipos';
 
 /** `GET /api/planes/:id`: una tarea con repuesto y proveedor, en curso. */
@@ -76,6 +77,26 @@ export const planDetalleEjemplo: PlanDetalle = {
       ultima_ejecucion: null,
       proxima_fecha: '2026-11-06',
       dias: -3,
+      estado_fecha: 'VENCIDA',
+      uso: {
+        medidor: {
+          id: 145,
+          nombre: 'Horómetro 50',
+          unidad: 'horas',
+          activo: true,
+        },
+        cada: 250,
+        primera: 500,
+        anticipacion: 25,
+        lectura_actual: {
+          valor: 512.5,
+          registrada_en: '2026-11-10T15:55:02.738Z',
+        },
+        ultimo: null,
+        proximo: 500,
+        faltan: -12.5,
+        estado: 'VENCIDA',
+      },
       estado: 'EN_CURSO',
       intervencion_en_curso: {
         id: 18259,
@@ -125,6 +146,7 @@ export const planListaEjemplo: PlanLista = {
   vencidas: 0,
   proximas: 0,
   en_curso: 1,
+  sin_lectura: 0,
   proxima_fecha: null,
 };
 
@@ -135,6 +157,7 @@ export const vencimientosEjemplo: VencimientosRespuesta = {
     vencidas: 5,
     proximas: 12,
     en_curso: 29,
+    sin_lectura: 0,
     al_dia: 3,
   },
   tareas: [
@@ -146,6 +169,26 @@ export const vencimientosEjemplo: VencimientosRespuesta = {
       ultima_ejecucion: null,
       proxima_fecha: '2026-11-06',
       dias: -3,
+      estado_fecha: 'VENCIDA',
+      uso: {
+        medidor: {
+          id: 145,
+          nombre: 'Horómetro 50',
+          unidad: 'horas',
+          activo: true,
+        },
+        cada: 250,
+        primera: 500,
+        anticipacion: 25,
+        lectura_actual: {
+          valor: 512.5,
+          registrada_en: '2026-11-10T15:55:02.738Z',
+        },
+        ultimo: null,
+        proximo: 500,
+        faltan: -12.5,
+        estado: 'VENCIDA',
+      },
       estado: 'EN_CURSO',
       intervencion_en_curso: {
         id: 18081,
@@ -232,6 +275,20 @@ export const tareasIntervencionEjemplo: IntervencionTareasRespuesta = {
           },
         },
       ],
+      uso: {
+        medidor: {
+          id: 145,
+          nombre: 'Horómetro 50',
+          unidad: 'horas',
+          activo: true,
+          ultima_lectura: {
+            valor: 512.5,
+            registrada_en: '2026-11-10T15:55:02.738Z',
+          },
+        },
+        programado: 500,
+        valor: 512.5,
+      },
       proveedor: {
         id: 195,
         nombre: 'PV Proveedor 1794278518823',
@@ -253,4 +310,11 @@ export const tareasIntervencionEjemplo: IntervencionTareasRespuesta = {
     previstos_sin_confirmar: 0,
   },
   puede_marcar: true,
+};
+
+/** `PATCH /api/intervenciones/:id/tareas/:tareaId`: la tarea, con la próxima fecha y la próxima por uso. */
+export const tareaMarcadaEjemplo: TareaIntervencionMarcada = {
+  ...tareasIntervencionEjemplo.tareas[0],
+  proxima_fecha: '2026-11-07',
+  proximo_uso: 500,
 };
