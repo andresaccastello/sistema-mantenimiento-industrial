@@ -66,6 +66,9 @@ async function pedir(method: string, path: string, token: string, body?: unknown
   return { status: r.status, cuerpo, total: r.headers.get('X-Total-Count') };
 }
 
+/** La operación esperó el bloqueo más que el lock_timeout: no hizo nada y se puede reintentar (PV3.1, 3). */
+const ocupado = (r: Respuesta) => r.status === 409 && r.cuerpo?.codigo === 'RECURSO_OCUPADO';
+
 test('Etapa PV3 — Medidores y lecturas (ME-01 a ME-06)', async (t) => {
   const client = await pool.connect();
 
@@ -452,11 +455,21 @@ test('Etapa PV3 — Medidores y lecturas (ME-01 a ME-06)', async (t) => {
         const med = await medidor();
         await lecturaOk(med.id, 50);
         const [r100, r90] = await Promise.all([lectura(med.id, 100), lectura(med.id, 90)]);
-        assert.strictEqual(r100.status, 201, `Vuelta ${vuelta}: ${JSON.stringify(r100.cuerpo)}`);
-        if (r90.status !== 201) {
-          assert.deepStrictEqual([r90.status, r90.cuerpo.codigo], [422, 'LECTURA_MENOR'], `Vuelta ${vuelta}`);
+        // La que pierde por el lock_timeout no deja nada hecho (PV3.1, 3)
+        const base = await lecturasBase(med.id);
+        if (ocupado(r100)) {
+          assert.ok(!base.some((x) => Number(x.valor) === 100), `Vuelta ${vuelta}: sin la de 100`);
+        } else {
+          assert.strictEqual(r100.status, 201, `Vuelta ${vuelta}: ${JSON.stringify(r100.cuerpo)}`);
         }
-        const valores = (await lecturasBase(med.id)).filter((x) => x.anulada_en === null).map((x) => Number(x.valor));
+        if (r90.status !== 201) {
+          assert.ok(
+            JSON.stringify([r90.status, r90.cuerpo.codigo]) === JSON.stringify([422, 'LECTURA_MENOR']) || ocupado(r90),
+            `Vuelta ${vuelta}: ${JSON.stringify(r90.cuerpo)}`
+          );
+          assert.ok(!base.some((x) => Number(x.valor) === 90), `Vuelta ${vuelta}: sin la de 90`);
+        }
+        const valores = base.filter((x) => x.anulada_en === null).map((x) => Number(x.valor));
         for (let i = 1; i < valores.length; i++) {
           assert.ok(valores[i] >= valores[i - 1], `Vuelta ${vuelta}: las vigentes, por id, nunca bajan: ${valores}`);
         }
@@ -467,13 +480,20 @@ test('Etapa PV3 — Medidores y lecturas (ME-01 a ME-06)', async (t) => {
           lectura(d.id, 10),
           pedir('POST', `/api/medidores/${d.id}/desactivar`, A.token, {}),
         ]);
-        assert.strictEqual(baja.status, 200, `Vuelta ${vuelta}: ${JSON.stringify(baja.cuerpo)}`);
-        assert.strictEqual((await detalle(d.id)).activo, false);
-        if (carga.status === 201) {
+        if (ocupado(baja)) {
+          // Desactivar perdió por el lock_timeout: el medidor sigue activo, con la lectura
+          assert.deepStrictEqual([carga.status, (await detalle(d.id)).activo], [201, true], `Vuelta ${vuelta}: ${JSON.stringify(carga.cuerpo)}`);
           assert.strictEqual((await lecturasBase(d.id)).length, 1, `Vuelta ${vuelta}`);
         } else {
-          assert.deepStrictEqual([carga.status, carga.cuerpo.codigo], [409, 'MEDIDOR_INACTIVO'], `Vuelta ${vuelta}`);
-          assert.strictEqual((await lecturasBase(d.id)).length, 0, `Vuelta ${vuelta}: ninguna lectura nueva`);
+          assert.strictEqual(baja.status, 200, `Vuelta ${vuelta}: ${JSON.stringify(baja.cuerpo)}`);
+          assert.strictEqual((await detalle(d.id)).activo, false);
+          if (carga.status === 201) {
+            assert.strictEqual((await lecturasBase(d.id)).length, 1, `Vuelta ${vuelta}`);
+          } else {
+            assert.strictEqual(carga.status, 409, `Vuelta ${vuelta}: ${JSON.stringify(carga.cuerpo)}`);
+            assert.ok(['MEDIDOR_INACTIVO', 'RECURSO_OCUPADO'].includes(carga.cuerpo.codigo), `Vuelta ${vuelta}: ${carga.cuerpo.codigo}`);
+            assert.strictEqual((await lecturasBase(d.id)).length, 0, `Vuelta ${vuelta}: ninguna lectura nueva`);
+          }
         }
 
         // Dos altas con el mismo nombre en la misma máquina
@@ -483,7 +503,13 @@ test('Etapa PV3 — Medidores y lecturas (ME-01 a ME-06)', async (t) => {
           pedir('POST', '/api/medidores', A.token, cuerpo),
         ]);
         assert.deepStrictEqual([a1.status, a2.status].sort(), [201, 409], `Vuelta ${vuelta}: ${JSON.stringify([a1.cuerpo, a2.cuerpo])}`);
-        assert.strictEqual((a1.status === 409 ? a1 : a2).cuerpo.codigo, 'MEDIDOR_DUPLICADO', `Vuelta ${vuelta}`);
+        const codigoAlta = (a1.status === 409 ? a1 : a2).cuerpo.codigo;
+        assert.ok(['MEDIDOR_DUPLICADO', 'RECURSO_OCUPADO'].includes(codigoAlta), `Vuelta ${vuelta}: ${codigoAlta}`);
+        const conEseNombre = (await client.query(
+          'SELECT count(*)::int AS n FROM medidores WHERE maquina_id = $1 AND lower(nombre) = lower($2)',
+          [m1, cuerpo.nombre]
+        )).rows[0].n;
+        assert.strictEqual(conEseNombre, 1, `Vuelta ${vuelta}: nada duplicado`);
       }
     });
 

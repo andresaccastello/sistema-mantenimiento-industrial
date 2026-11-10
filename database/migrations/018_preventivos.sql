@@ -342,7 +342,7 @@ INSERT INTO perfil_permiso (perfil_id, permiso_id, alcance)
 SELECT p.id, pe.id, 'TODAS'
 FROM perfiles p
 JOIN permisos pe ON pe.codigo = 'MAQUINAS_REGISTRAR_LECTURAS'
-WHERE p.nombre IN ('ADMINISTRADOR', 'RESPONSABLE_MANTENIMIENTO', 'OPERARIO')
+WHERE p.nombre IN ('ADMINISTRADOR', 'RESPONSABLE_MANTENIMIENTO', 'OPERARIO', 'I_D')
 ON CONFLICT (perfil_id, permiso_id) DO NOTHING;
 
 -- 6. "Hoy" de la instalación (D-021, punto 6), en un solo lugar: lo usan la vista y la API
@@ -368,7 +368,7 @@ SELECT
     ec.estado AS intervencion_en_curso_estado,
     la.valor AS lectura_actual,
     la.registrada_en AS lectura_actual_en,
-    uu.ultimo_uso,
+    u.ultimo_uso,
     pu.proximo_uso,
     (pu.proximo_uso - la.valor) AS faltan_uso,
     eu.estado_uso,
@@ -394,9 +394,11 @@ CROSS JOIN (
     hoy_instalacion() AS hoy
 ) z
 -- La última ejecución: la fecha local de finalización de la última intervención
--- finalizada, no eliminada, con la tarea hecha
+-- finalizada, no eliminada, con la tarea hecha. El último uso, sobre las mismas filas:
+-- el mayor valor registrado con el medidor de hoy
 LEFT JOIN LATERAL (
-    SELECT max((i.fecha_finalizacion AT TIME ZONE z.zona)::date) AS ultima_ejecucion
+    SELECT max((i.fecha_finalizacion AT TIME ZONE z.zona)::date) AS ultima_ejecucion,
+           max(it.valor_medidor) FILTER (WHERE it.medidor_id = t.medidor_id) AS ultimo_uso
     FROM intervencion_tareas it
     JOIN intervenciones i ON i.id = it.intervencion_id
     WHERE it.plan_tarea_id = t.id
@@ -448,24 +450,12 @@ LEFT JOIN LATERAL (
     ORDER BY l.valor DESC, l.id DESC
     LIMIT 1
 ) la ON TRUE
--- El último uso: el mayor valor registrado con el medidor de hoy, en una intervención
--- finalizada, no eliminada, con la tarea hecha
-LEFT JOIN LATERAL (
-    SELECT max(it.valor_medidor) AS ultimo_uso
-    FROM intervencion_tareas it
-    JOIN intervenciones i ON i.id = it.intervencion_id
-    WHERE it.plan_tarea_id = t.id
-      AND it.medidor_id = t.medidor_id
-      AND it.hecha
-      AND i.estado = 'FINALIZADA'
-      AND i.eliminado_en IS NULL
-) uu ON TRUE
 -- La próxima por uso: sin medidor, nula; sin ejecuciones, la primera; con ellas, la última más el intervalo
 CROSS JOIN LATERAL (
     SELECT CASE
         WHEN t.medidor_id IS NULL THEN NULL
-        WHEN uu.ultimo_uso IS NULL THEN t.uso_primera
-        ELSE uu.ultimo_uso + t.uso_cada
+        WHEN u.ultimo_uso IS NULL THEN t.uso_primera
+        ELSE u.ultimo_uso + t.uso_cada
     END AS proximo_uso
 ) pu
 -- El estado por uso: sin medidor, nulo

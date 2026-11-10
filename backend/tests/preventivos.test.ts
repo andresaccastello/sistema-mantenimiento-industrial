@@ -68,6 +68,9 @@ async function pedir(method: string, path: string, token: string, body?: unknown
   return { status: r.status, cuerpo, total: r.headers.get('X-Total-Count') };
 }
 
+/** La operación esperó el bloqueo más que el lock_timeout: no hizo nada y se puede reintentar (PV3.1, 3). */
+const ocupado = (r: Respuesta) => r.status === 409 && r.cuerpo?.codigo === 'RECURSO_OCUPADO';
+
 /** Suma días a una fecha YYYY-MM-DD. */
 function sumarDias(fecha: string, dias: number): string {
   const d = new Date(`${fecha}T00:00:00Z`);
@@ -968,7 +971,9 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-21)', async (t) => {
         const estados = [a.status, b.status].sort();
         assert.deepStrictEqual(estados, [201, 409], `Vuelta ${vuelta}: ${JSON.stringify([a.cuerpo, b.cuerpo])}`);
         const perdedor = a.status === 409 ? a : b;
-        assert.strictEqual(perdedor.cuerpo.codigo, 'SIN_TAREAS_PARA_GENERAR');
+        // Contra Neon, el que espera el bloqueo puede pasar el lock_timeout: no hizo nada (PV3.1, 3)
+        assert.ok(['SIN_TAREAS_PARA_GENERAR', 'RECURSO_OCUPADO'].includes(perdedor.cuerpo.codigo), `Vuelta ${vuelta}: ${perdedor.cuerpo.codigo}`);
+        assert.strictEqual(await intervencionesDelPlan(p.id), 1, `Vuelta ${vuelta}: una sola intervención`);
         const resUna = await client.query(
           `SELECT plan_tarea_id, count(*)::int AS n FROM intervencion_tareas
            WHERE plan_tarea_id = ANY($1) GROUP BY plan_tarea_id`,
@@ -979,14 +984,22 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-21)', async (t) => {
         // Generar y desactivar el plan a la vez
         const q = await crearPlan(m1, [tarea(sumarDias(hoy, -1))]);
         const [gen, des] = await Promise.all([generar(q.id), pedir('POST', `/api/planes/${q.id}/desactivar`, A.token, {})]);
-        assert.strictEqual(des.status, 200, `Vuelta ${vuelta}: ${JSON.stringify(des.cuerpo)}`);
         const generadas = await intervencionesDelPlan(q.id);
-        if (gen.status === 201) {
-          assert.strictEqual(generadas, 1, `Vuelta ${vuelta}`);
+        if (ocupado(des)) {
+          // Desactivar perdió la carrera por el lock_timeout: el plan sigue activo
+          assert.deepStrictEqual([gen.status, generadas], [201, 1], `Vuelta ${vuelta}: ${JSON.stringify(gen.cuerpo)}`);
+          assert.strictEqual((await detallePlan(q.id)).activo, true, `Vuelta ${vuelta}`);
         } else {
-          assert.deepStrictEqual([gen.status, gen.cuerpo.codigo, generadas], [409, 'PLAN_INACTIVO', 0], `Vuelta ${vuelta}`);
+          assert.strictEqual(des.status, 200, `Vuelta ${vuelta}: ${JSON.stringify(des.cuerpo)}`);
+          if (gen.status === 201) {
+            assert.strictEqual(generadas, 1, `Vuelta ${vuelta}`);
+          } else {
+            assert.strictEqual(gen.status, 409, `Vuelta ${vuelta}: ${JSON.stringify(gen.cuerpo)}`);
+            assert.ok(['PLAN_INACTIVO', 'RECURSO_OCUPADO'].includes(gen.cuerpo.codigo), `Vuelta ${vuelta}: ${gen.cuerpo.codigo}`);
+            assert.strictEqual(generadas, 0, `Vuelta ${vuelta}: ninguna generada`);
+          }
+          assert.strictEqual((await detallePlan(q.id)).activo, false);
         }
-        assert.strictEqual((await detallePlan(q.id)).activo, false);
 
         // Dos altas a la vez con el mismo nombre en la misma máquina
         const cuerpo = { maquina_id: m1, nombre: `Plan simultáneo ${vuelta}`, tareas: [tarea(hoy)] };
@@ -995,7 +1008,13 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-21)', async (t) => {
           pedir('POST', '/api/planes', A.token, { ...cuerpo, nombre: `plan simultáneo ${vuelta}` }),
         ]);
         assert.deepStrictEqual([c1.status, c2.status].sort(), [201, 409], `Vuelta ${vuelta}: ${JSON.stringify([c1.cuerpo, c2.cuerpo])}`);
-        assert.strictEqual((c1.status === 409 ? c1 : c2).cuerpo.codigo, 'PLAN_DUPLICADO');
+        const codigoAlta = (c1.status === 409 ? c1 : c2).cuerpo.codigo;
+        assert.ok(['PLAN_DUPLICADO', 'RECURSO_OCUPADO'].includes(codigoAlta), `Vuelta ${vuelta}: ${codigoAlta}`);
+        const conEseNombre = (await client.query(
+          'SELECT count(*)::int AS n FROM planes_mantenimiento WHERE maquina_id = $1 AND lower(nombre) = lower($2)',
+          [m1, cuerpo.nombre]
+        )).rows[0].n;
+        assert.strictEqual(conEseNombre, 1, `Vuelta ${vuelta}: nada duplicado`);
       }
     });
 
@@ -1589,7 +1608,13 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-21)', async (t) => {
         const [pa] = await idsPrevistos(uno.intId, uno.tareas[0].id);
         const cuerpo = { hecha: true, repuestos: [{ id: pa, cantidad: 2 }] };
         const [c1, c2] = await Promise.all([marcar(uno.intId, uno.tareas[0].id, cuerpo), marcar(uno.intId, uno.tareas[0].id, cuerpo)]);
-        assert.deepStrictEqual([c1.status, c2.status], [200, 200], `Vuelta ${vuelta}: ${JSON.stringify([c1.cuerpo, c2.cuerpo])}`);
+        // Una de las dos puede perder por el lock_timeout (PV3.1, 3): la otra la marcó
+        const estadosC = [c1, c2].map((r) => (ocupado(r) ? 'OCUPADO' : r.status)).sort();
+        assert.ok(
+          JSON.stringify(estadosC) === JSON.stringify([200, 200]) || JSON.stringify(estadosC) === JSON.stringify([200, 'OCUPADO']),
+          `Vuelta ${vuelta}: ${JSON.stringify([c1.cuerpo, c2.cuerpo])}`
+        );
+        assert.strictEqual((await tareaInt(uno.intId, uno.tareas[0].id)).hecha, true, `Vuelta ${vuelta}`);
         assert.strictEqual((await consumosDe(uno.intId)).length, 1, `Vuelta ${vuelta}: un solo consumo`);
         assert.strictEqual(await stockDe(a), 8, `Vuelta ${vuelta}`);
 
@@ -1606,7 +1631,10 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-21)', async (t) => {
           marcar(t2.intId, t2.tareas[0].id, { hecha: true, repuestos: [{ id: p2, cantidad: 1 }] }),
         ]);
         assert.deepStrictEqual([r1.status, r2.status].sort(), [200, 409], `Vuelta ${vuelta}: ${JSON.stringify([r1.cuerpo, r2.cuerpo])}`);
-        assert.strictEqual((r1.status === 409 ? r1 : r2).cuerpo.codigo, 'STOCK_INSUFICIENTE');
+        const [perdio, deQuien] = r1.status === 409 ? [r1, t1] : [r2, t2];
+        assert.ok(['STOCK_INSUFICIENTE', 'RECURSO_OCUPADO'].includes(perdio.cuerpo.codigo), `Vuelta ${vuelta}: ${perdio.cuerpo.codigo}`);
+        assert.strictEqual((await tareaInt(deQuien.intId, deQuien.tareas[0].id)).hecha, false, `Vuelta ${vuelta}: la que perdió no se marcó`);
+        assert.strictEqual((await consumosDe(deQuien.intId)).length, 0, `Vuelta ${vuelta}: sin consumos de la que perdió`);
         assert.strictEqual(await stockDe(z), 0, `Vuelta ${vuelta}: nunca negativo`);
       }
     });
@@ -2197,11 +2225,20 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-21)', async (t) => {
           marcar(a.intId, a.tareaId, { hecha: true, lectura: 20 }),
           pedir('POST', `/api/medidores/${med}/lecturas`, A.token, { valor: 30 }),
         ]);
-        assert.strictEqual(manual.status, 201, `Vuelta ${vuelta}: ${JSON.stringify(manual.cuerpo)}`);
-        if (marca.status !== 200) {
-          assert.deepStrictEqual([marca.status, marca.cuerpo.codigo], [422, 'LECTURA_MENOR'], `Vuelta ${vuelta}: ${JSON.stringify(marca.cuerpo)}`);
+        // La que pierde por el lock_timeout no deja nada hecho (PV3.1, 3)
+        const lecturasMed = await lecturasDe(med);
+        if (ocupado(manual)) {
+          assert.ok(!lecturasMed.some((x) => x.origen === 'MANUAL' && Number(x.valor) === 30), `Vuelta ${vuelta}: sin la manual`);
+        } else {
+          assert.strictEqual(manual.status, 201, `Vuelta ${vuelta}: ${JSON.stringify(manual.cuerpo)}`);
         }
-        const vigentes = (await lecturasDe(med)).filter((x) => x.anulada_en === null).map((x) => Number(x.valor));
+        if (marca.status !== 200) {
+          assert.strictEqual(marca.status, marca.cuerpo.codigo === 'RECURSO_OCUPADO' ? 409 : 422, `Vuelta ${vuelta}: ${JSON.stringify(marca.cuerpo)}`);
+          assert.ok(['LECTURA_MENOR', 'RECURSO_OCUPADO'].includes(marca.cuerpo.codigo), `Vuelta ${vuelta}: ${JSON.stringify(marca.cuerpo)}`);
+          assert.strictEqual((await tareaInt(a.intId, a.tareaId)).hecha, false, `Vuelta ${vuelta}: la tarea no se marcó`);
+          assert.ok(!lecturasMed.some((x) => x.origen === 'TAREA'), `Vuelta ${vuelta}: sin lectura de la tarea`);
+        }
+        const vigentes = lecturasMed.filter((x) => x.anulada_en === null).map((x) => Number(x.valor));
         for (let i = 1; i < vigentes.length; i++) {
           assert.ok(vigentes[i] >= vigentes[i - 1], `Vuelta ${vuelta}: las vigentes, por id, nunca bajan: ${vigentes}`);
         }
@@ -2214,7 +2251,14 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-21)', async (t) => {
           pedir('POST', `/api/medidores/${nuevo}/desactivar`, A.token, {}),
         ]);
         const detalleMed = (await pedir('GET', `/api/medidores/${nuevo}`, A.token)).cuerpo;
-        if (cambio.status === 200) {
+        const usoTarea = (await tareaDelPlan(p.id, p.tareas[0].id)).uso;
+        if (ocupado(cambio)) {
+          // El cambio perdió por el lock_timeout: la tarea sigue sin uso
+          assert.deepStrictEqual([usoTarea, baja.status, detalleMed.activo], [null, 200, false], `Vuelta ${vuelta}: ${JSON.stringify(baja.cuerpo)}`);
+        } else if (ocupado(baja)) {
+          // Desactivar perdió por el lock_timeout: el medidor sigue activo
+          assert.deepStrictEqual([cambio.status, usoTarea?.medidor.id, detalleMed.activo], [200, nuevo, true], `Vuelta ${vuelta}: ${JSON.stringify(cambio.cuerpo)}`);
+        } else if (cambio.status === 200) {
           assert.deepStrictEqual([baja.status, baja.cuerpo.codigo, detalleMed.activo], [409, 'MEDIDOR_EN_USO', true], `Vuelta ${vuelta}: ${JSON.stringify(baja.cuerpo)}`);
         } else {
           assert.deepStrictEqual([cambio.status, cambio.cuerpo.codigo], [422, 'MEDIDOR_INVALIDO'], `Vuelta ${vuelta}: ${JSON.stringify(cambio.cuerpo)}`);

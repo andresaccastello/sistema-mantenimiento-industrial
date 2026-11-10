@@ -782,7 +782,7 @@ test('Migración 018 — Preventivos por calendario', async (t) => {
          JOIN permisos pe ON pe.id = pp.permiso_id
          WHERE pe.codigo = 'MAQUINAS_REGISTRAR_LECTURAS'`
       )).rows.map((r) => r.nombre);
-      for (const perfil of ['ADMINISTRADOR', 'RESPONSABLE_MANTENIMIENTO', 'OPERARIO']) {
+      for (const perfil of ['ADMINISTRADOR', 'RESPONSABLE_MANTENIMIENTO', 'OPERARIO', 'I_D']) {
         assert.ok(perfiles.includes(perfil), `Lo tiene ${perfil}`);
       }
       assert.ok(!perfiles.includes('CONSULTA'), 'CONSULTA no lo tiene');

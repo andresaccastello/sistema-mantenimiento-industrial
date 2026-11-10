@@ -38,9 +38,13 @@ export function medidorNoEncontrado(): ErrorNegocio {
 }
 
 /**
- * Bloquea el medidor con FOR UPDATE (3.5). Antes toma la máquina con FOR SHARE: generar
- * una intervención bloquea la máquina y después toma el medidor, y cargar una lectura
- * va en el mismo orden para no trabarse con ella.
+ * Bloquea el medidor con FOR UPDATE (3.5). Antes toma la máquina con FOR SHARE, siempre en
+ * el orden máquina → medidor:
+ * - marcar una tarea llega al medidor con la máquina ya bloqueada, porque bloquearIntervencion
+ *   bloquea la máquina antes que la intervención;
+ * - generar una intervención bloquea la máquina, y al insertar la tarea con su medidor_id la
+ *   FK toma FOR KEY SHARE sobre el medidor, que choca con este FOR UPDATE.
+ * Cargar una lectura va en el mismo orden para no trabarse con ninguna de las dos.
  */
 export async function bloquearMedidor(client: pg.PoolClient, medidorId: number | null): Promise<MedidorBloqueado> {
   if (medidorId === null) throw medidorNoEncontrado();
