@@ -1,6 +1,7 @@
 import { Stack, Paper, Group, Text, Button } from '@mantine/core';
 import { IconEdit, IconTrash } from '@tabler/icons-react';
-import { BorradorTarea, formatFechaDia, textoFrecuencia } from '../../lib/preventivos';
+import { BorradorTarea, formatFechaDia, previstosDeBorrador, textoFrecuencia } from '../../lib/preventivos';
+import { TextoPrevistos } from './TextoPrevistos';
 
 interface Props {
   tareas: BorradorTarea[];
@@ -33,6 +34,7 @@ export function ListaTareasBorrador({ tareas, errores, onEditar, onQuitar }: Pro
                   {Number.isInteger(valor) ? textoFrecuencia(valor, t.frecuenciaUnidad) : ''} · Primera vez:{' '}
                   {formatFechaDia(t.primeraFecha)}
                 </Text>
+                <TextoPrevistos repuestos={previstosDeBorrador(t.repuestos)} size="xs" dimmed />
                 {error && (
                   <Text size="xs" c="red">
                     {error}

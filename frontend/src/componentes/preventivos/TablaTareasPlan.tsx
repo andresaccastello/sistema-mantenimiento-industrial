@@ -2,9 +2,9 @@ import { Link } from 'react-router';
 import { Table, Text, Menu, ActionIcon, Stack } from '@mantine/core';
 import { IconDotsVertical, IconEdit, IconBan, IconRotateClockwise, IconExternalLink } from '@tabler/icons-react';
 import type { TareaPlan } from '../../api/tipos';
-import { formatCantidad } from '../../lib/formato';
 import { formatFechaDia, textoFrecuencia, textoVencimiento } from '../../lib/preventivos';
 import { EstadoBadge } from '../EstadoBadge';
+import { TextoPrevistos } from './TextoPrevistos';
 
 interface Props {
   tareas: TareaPlan[];
@@ -64,17 +64,13 @@ export function TablaTareasPlan({ tareas, onEditar, onCambiarActivo }: Props) {
               </Table.Td>
               <Table.Td>
                 <Stack gap={0}>
-                  {t.repuestos[0] && (
-                    <Text size="sm">
-                      {t.repuestos[0].repuesto.nombre} × {formatCantidad(t.repuestos[0].cantidad)} {t.repuestos[0].repuesto.unidad}
-                    </Text>
-                  )}
+                  <TextoPrevistos repuestos={t.repuestos} />
                   {t.proveedor && (
                     <Text size="xs" c="dimmed">
                       {t.proveedor.nombre}
                     </Text>
                   )}
-                  {!t.repuestos[0] && !t.proveedor && (
+                  {t.repuestos.length === 0 && !t.proveedor && (
                     <Text size="sm" c="dimmed">
                       —
                     </Text>

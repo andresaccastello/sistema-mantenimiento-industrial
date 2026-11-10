@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Modal, Stack, TextInput, Textarea, Group, Select, Button, Alert, Text } from '@mantine/core';
+import { Modal, Stack, TextInput, Textarea, Group, Select, Button, Alert, Text, ActionIcon } from '@mantine/core';
 import { DatePickerInput, DateStringValue } from '@mantine/dates';
-import { IconAlertCircle } from '@tabler/icons-react';
+import { IconAlertCircle, IconPlus, IconTrash } from '@tabler/icons-react';
 import { clienteApi } from '../../api/cliente';
 import type { FrecuenciaUnidad, ProveedorOpcion, RepuestoOpcion } from '../../api/tipos';
 import { ApiError, mensajeError } from '../../lib/errores';
@@ -10,9 +10,13 @@ import {
   BorradorTarea,
   CampoTarea,
   ErroresTarea,
+  FilaPrevisto,
+  MAXIMO_PREVISTOS,
   UNIDADES_FRECUENCIA,
   errorTareaDeApi,
+  erroresDeApi,
   hayErrores,
+  sinErrorDeFila,
   validarTareaBorrador,
 } from '../../lib/preventivos';
 import { CampoNumero } from '../CampoNumero';
@@ -20,6 +24,7 @@ import { CampoNumero } from '../CampoNumero';
 export interface ErrorTareaExterno {
   campo: CampoTarea | null;
   mensaje: string;
+  indiceRepuesto?: number;
 }
 
 interface Props {
@@ -51,7 +56,7 @@ export function ModalTareaPlan({ abierto, titulo, inicial, yaSeHizo, errorInicia
     setB(inicial);
     setErrorGeneral(null);
     if (errorInicial?.campo) {
-      setErrores({ [errorInicial.campo]: errorInicial.mensaje });
+      setErrores(erroresDeApi({ ...errorInicial, campo: errorInicial.campo }));
     } else {
       setErrores({});
       if (errorInicial) setErrorGeneral(errorInicial.mensaje);
@@ -69,7 +74,10 @@ export function ModalTareaPlan({ abierto, titulo, inicial, yaSeHizo, errorInicia
     queryFn: () => clienteApi.get<ProveedorOpcion[]>('/api/proveedores/opciones'),
     enabled: abierto,
   });
-  const repuesto = repuestos?.find((r) => String(r.id) === b.repuestoId);
+  const opcionesRepuesto = (repuestos || []).map((r) => ({
+    value: String(r.id),
+    label: r.codigo ? `${r.codigo} · ${r.nombre}` : r.nombre,
+  }));
 
   const cambiar = (cambios: Partial<BorradorTarea>, limpiar: CampoTarea[]) => {
     setB((actual) => ({ ...actual, ...cambios }));
@@ -78,6 +86,25 @@ export function ModalTareaPlan({ abierto, titulo, inicial, yaSeHizo, errorInicia
       for (const campo of limpiar) delete nuevos[campo];
       return nuevos;
     });
+  };
+
+  const cambiarFila = (i: number, cambios: Partial<FilaPrevisto>, campo: 'repuesto' | 'cantidad') => {
+    setB((actual) => ({ ...actual, repuestos: actual.repuestos.map((f, j) => (j === i ? { ...f, ...cambios } : f)) }));
+    setErrores((actual) => sinErrorDeFila(actual, i, campo));
+  };
+
+  const elegirRepuesto = (i: number, valor: string | null) => {
+    const elegido = repuestos?.find((r) => String(r.id) === valor);
+    cambiarFila(i, { repuestoId: valor, nombre: elegido?.nombre, unidad: elegido?.unidad }, 'repuesto');
+  };
+
+  const agregarFila = () =>
+    setB((actual) => ({ ...actual, repuestos: [...actual.repuestos, { repuestoId: null, cantidad: '' }] }));
+
+  const quitarFila = (i: number) => {
+    setB((actual) => ({ ...actual, repuestos: actual.repuestos.filter((_, j) => j !== i) }));
+    // Las filas se corren: los errores por posición ya no valen
+    setErrores(({ filas: _filas, ...resto }) => resto);
   };
 
   const guardar = async () => {
@@ -90,9 +117,13 @@ export function ModalTareaPlan({ abierto, titulo, inicial, yaSeHizo, errorInicia
     try {
       await onGuardar(b);
     } catch (err) {
-      const enCampo = err instanceof ApiError ? errorTareaDeApi(err.codigo, err.message) : null;
+      const indiceRepuesto = err instanceof ApiError ? err.datos?.indice_repuesto : undefined;
+      const enCampo =
+        err instanceof ApiError
+          ? errorTareaDeApi(err.codigo, err.message, typeof indiceRepuesto === 'number' ? indiceRepuesto : undefined)
+          : null;
       if (enCampo) {
-        setErrores({ [enCampo.campo]: enCampo.mensaje });
+        setErrores(erroresDeApi(enCampo));
       } else {
         setErrorGeneral(mensajeError(err));
       }
@@ -157,39 +188,61 @@ export function ModalTareaPlan({ abierto, titulo, inicial, yaSeHizo, errorInicia
           error={errores.primeraFecha}
         />
 
-        <Group grow align="flex-start">
-          <Select
-            label="Repuesto sugerido"
-            placeholder="Opcional"
-            searchable
-            clearable
-            data={(repuestos || []).map((r) => ({
-              value: String(r.id),
-              label: r.codigo ? `${r.codigo} · ${r.nombre}` : r.nombre,
-            }))}
-            value={b.repuestoId}
-            onChange={(v) => cambiar(v ? { repuestoId: v } : { repuestoId: null, cantidad: '' }, ['repuesto', 'cantidad'])}
-            error={errores.repuesto}
-          />
-          {b.repuestoId && (
-            <CampoNumero
-              label="Cantidad"
-              required
-              decimalScale={3}
-              rightSection={
-                repuesto ? (
-                  <Text size="xs" c="dimmed" pr="xs">
-                    {repuesto.unidad}
-                  </Text>
-                ) : undefined
-              }
-              rightSectionWidth={repuesto ? 70 : undefined}
-              value={b.cantidad}
-              onChange={(v) => cambiar({ cantidad: v }, ['cantidad', 'repuesto'])}
-              error={errores.cantidad}
-            />
+        <Stack gap="xs">
+          <Text size="sm" fw={500}>
+            Repuestos previstos
+          </Text>
+          {b.repuestos.map((f, i) => {
+            const enOpciones = opcionesRepuesto.some((o) => o.value === f.repuestoId);
+            // Un repuesto que se desactivó después sigue en la fila, con su nombre
+            const data = f.repuestoId && f.nombre && !enOpciones ? [{ value: f.repuestoId, label: f.nombre }, ...opcionesRepuesto] : opcionesRepuesto;
+            return (
+              <Group key={i} gap="xs" align="flex-start" wrap="nowrap">
+                <Select
+                  aria-label={`Repuesto ${i + 1}`}
+                  placeholder="Buscá el repuesto"
+                  searchable
+                  clearable
+                  data={data}
+                  value={f.repuestoId}
+                  onChange={(v) => elegirRepuesto(i, v)}
+                  error={errores.filas?.[i]?.repuesto}
+                  style={{ flex: 1, minWidth: 0 }}
+                />
+                <CampoNumero
+                  aria-label={`Cantidad del repuesto ${i + 1}`}
+                  placeholder="Cantidad"
+                  decimalScale={3}
+                  w={140}
+                  rightSection={
+                    f.unidad ? (
+                      <Text size="xs" c="dimmed" pr="xs">
+                        {f.unidad}
+                      </Text>
+                    ) : undefined
+                  }
+                  rightSectionWidth={f.unidad ? 70 : undefined}
+                  value={f.cantidad}
+                  onChange={(v) => cambiarFila(i, { cantidad: v }, 'cantidad')}
+                  error={errores.filas?.[i]?.cantidad}
+                />
+                <ActionIcon variant="subtle" color="gray" size={36} aria-label={`Quitar el repuesto ${i + 1}`} onClick={() => quitarFila(i)}>
+                  <IconTrash size={16} />
+                </ActionIcon>
+              </Group>
+            );
+          })}
+          {(errores.repuesto || errores.cantidad) && (
+            <Text size="xs" c="red">
+              {errores.repuesto ?? errores.cantidad}
+            </Text>
           )}
-        </Group>
+          {b.repuestos.length < MAXIMO_PREVISTOS && (
+            <Button size="xs" variant="subtle" color="marca" leftSection={<IconPlus size={14} />} onClick={agregarFila} style={{ alignSelf: 'flex-start' }}>
+              Agregar repuesto
+            </Button>
+          )}
+        </Stack>
 
         <Select
           label="Proveedor sugerido"

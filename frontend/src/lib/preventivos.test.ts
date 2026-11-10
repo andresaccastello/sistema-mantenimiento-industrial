@@ -18,6 +18,10 @@ import {
   alternarEstado,
   textoPendientes,
   errorTareaDeApi,
+  erroresDeApi,
+  sinErrorDeFila,
+  textoPrevistos,
+  previstosDeBorrador,
   BorradorTarea,
 } from './preventivos';
 import { obtenerInfoEstado, ESTADOS_TAREA_PREVENTIVA } from './estados';
@@ -89,7 +93,7 @@ describe('FE-69: formatFechaDia', () => {
 describe('FE-70: validarTareaBorrador', () => {
   it('una tarea completa no tiene errores', () => {
     assert.deepEqual(validarTareaBorrador(borrador()), {});
-    assert.deepEqual(validarTareaBorrador(borrador({ repuestoId: '2', cantidad: 2.5, proveedorId: '3' })), {});
+    assert.deepEqual(validarTareaBorrador(borrador({ repuestos: [{ repuestoId: '2', cantidad: 2.5 }], proveedorId: '3' })), {});
   });
 
   it('acción de 3 a 200 caracteres, recortada', () => {
@@ -124,10 +128,11 @@ describe('FE-70: validarTareaBorrador', () => {
   });
 
   it('repuesto y cantidad van juntos', () => {
-    assert.deepEqual(validarTareaBorrador(borrador({ repuestoId: '2' })), { cantidad: 'Ingresá la cantidad.' });
-    assert.deepEqual(validarTareaBorrador(borrador({ cantidad: 2 })), { repuesto: 'Elegí el repuesto.' });
-    assert.ok(validarTareaBorrador(borrador({ repuestoId: '2', cantidad: 0 })).cantidad);
-    assert.ok(validarTareaBorrador(borrador({ repuestoId: '2', cantidad: '1,2345' })).cantidad);
+    const fila = (repuestoId: string | null, cantidad: number | string) => borrador({ repuestos: [{ repuestoId, cantidad }] });
+    assert.deepEqual(validarTareaBorrador(fila('2', '')), { filas: { 0: { cantidad: 'Ingresá la cantidad.' } } });
+    assert.deepEqual(validarTareaBorrador(fila(null, 2)), { filas: { 0: { repuesto: 'Elegí el repuesto.' } } });
+    assert.ok(validarTareaBorrador(fila('2', 0)).filas?.[0]?.cantidad);
+    assert.ok(validarTareaBorrador(fila('2', '1,2345')).filas?.[0]?.cantidad);
   });
 });
 
@@ -140,15 +145,14 @@ describe('FE-71: cuerpoPlan y cuerpoTarea', () => {
       primera_fecha: '2026-12-01',
     });
     assert.deepEqual(
-      cuerpoTarea(borrador({ detalle: ' Con el equipo frío ', repuestoId: '2', cantidad: '2,5', proveedorId: '3' })),
+      cuerpoTarea(borrador({ detalle: ' Con el equipo frío ', repuestos: [{ repuestoId: '2', cantidad: '2,5' }], proveedorId: '3' })),
       {
         accion: 'Cambiar el aceite',
         detalle: 'Con el equipo frío',
         frecuencia_valor: 1,
         frecuencia_unidad: 'MESES',
         primera_fecha: '2026-12-01',
-        repuesto_id: 2,
-        cantidad: 2.5,
+        repuestos: [{ repuesto_id: 2, cantidad: 2.5 }],
         proveedor_id: 3,
       }
     );
@@ -163,11 +167,10 @@ describe('FE-71: cuerpoPlan y cuerpoTarea', () => {
     assert.deepEqual(cuerpoTarea(original, original), {});
     assert.deepEqual(cuerpoTarea({ ...original, frecuenciaValor: 3 }, original), { frecuencia_valor: 3 });
     assert.deepEqual(cuerpoTarea({ ...original, detalle: '' }, original), { detalle: null });
-    assert.deepEqual(cuerpoTarea({ ...original, cantidad: 4 }, original), { repuesto_id: 2, cantidad: 4 });
-    assert.deepEqual(cuerpoTarea({ ...original, repuestoId: null, cantidad: '' }, original), {
-      repuesto_id: null,
-      cantidad: null,
+    assert.deepEqual(cuerpoTarea({ ...original, repuestos: [{ repuestoId: '2', cantidad: 4 }] }, original), {
+      repuestos: [{ repuesto_id: 2, cantidad: 4 }],
     });
+    assert.deepEqual(cuerpoTarea({ ...original, repuestos: [] }, original), { repuestos: [] });
     assert.deepEqual(cuerpoTarea({ ...original, proveedorId: '7' }, original), { proveedor_id: 7 });
   });
 
@@ -315,5 +318,119 @@ describe('FE-77: errorTareaDeApi', () => {
   it('sin campo reconocible: null', () => {
     assert.equal(errorTareaDeApi('DATOS_INVALIDOS', 'El plan lleva de 1 a 50 tareas'), null);
     assert.equal(errorTareaDeApi('PLAN_NO_ENCONTRADO', 'Plan no encontrado'), null);
+  });
+});
+
+const aceite = { repuesto: { id: 2, codigo: 'AC-68', nombre: 'Aceite ISO 68', unidad: 'litro' }, cantidad: 2.5 };
+const filtro = { repuesto: { id: 3, codigo: null, nombre: 'Filtro de aceite', unidad: 'unidad' }, cantidad: 1 };
+const correa = { repuesto: { id: 4, codigo: null, nombre: 'Correa', unidad: 'unidad' }, cantidad: 2 };
+
+describe('FE-80: validarTareaBorrador con la lista de repuestos', () => {
+  it('un repuesto repetido da el error en la segunda fila', () => {
+    const b = borrador({ repuestos: [{ repuestoId: '2', cantidad: 1 }, { repuestoId: '2', cantidad: 2 }] });
+    assert.deepEqual(validarTareaBorrador(b), { filas: { 1: { repuesto: 'Ese repuesto ya está en la lista.' } } });
+  });
+
+  it('una fila vacía no es un error, y cada fila tiene el suyo', () => {
+    assert.deepEqual(validarTareaBorrador(borrador({ repuestos: [{ repuestoId: null, cantidad: '' }] })), {});
+    const b = borrador({ repuestos: [{ repuestoId: '2', cantidad: 1 }, { repuestoId: '3', cantidad: '' }, { repuestoId: null, cantidad: 2 }] });
+    assert.deepEqual(validarTareaBorrador(b), {
+      filas: { 1: { cantidad: 'Ingresá la cantidad.' }, 2: { repuesto: 'Elegí el repuesto.' } },
+    });
+  });
+});
+
+describe('FE-81: cuerpoTarea con la lista de repuestos', () => {
+  it('el alta manda las filas completas, y sin filas no manda repuestos', () => {
+    const conFilas = cuerpoTarea(borrador({ repuestos: [{ repuestoId: '2', cantidad: '2,5' }, { repuestoId: null, cantidad: '' }, { repuestoId: '3', cantidad: 1 }] }));
+    assert.deepEqual(conFilas.repuestos, [{ repuesto_id: 2, cantidad: 2.5 }, { repuesto_id: 3, cantidad: 1 }]);
+    assert.equal('repuestos' in cuerpoTarea(borrador()), false);
+  });
+
+  it('el PATCH manda la lista entera solo si cambió', () => {
+    const original = borrador({ repuestos: [{ repuestoId: '2', cantidad: 2.5, nombre: 'Aceite', unidad: 'litro' }] });
+    assert.deepEqual(cuerpoTarea({ ...original, repuestos: [{ repuestoId: '2', cantidad: '2,5' }] }, original), {});
+    assert.deepEqual(
+      cuerpoTarea({ ...original, repuestos: [...original.repuestos, { repuestoId: '3', cantidad: 1 }] }, original),
+      { repuestos: [{ repuesto_id: 2, cantidad: 2.5 }, { repuesto_id: 3, cantidad: 1 }] }
+    );
+  });
+});
+
+describe('FE-82: borradorDeTarea con varios repuestos', () => {
+  it('una fila por repuesto, con su nombre y unidad', () => {
+    assert.deepEqual(borradorDeTarea({ ...tareaBase, repuestos: [aceite, filtro] }).repuestos, [
+      { repuestoId: '2', cantidad: 2.5, nombre: 'Aceite ISO 68', unidad: 'litro' },
+      { repuestoId: '3', cantidad: 1, nombre: 'Filtro de aceite', unidad: 'unidad' },
+    ]);
+  });
+});
+
+describe('FE-83: errorTareaDeApi con indice_repuesto', () => {
+  it('el error va a su fila', () => {
+    assert.deepEqual(errorTareaDeApi('REPUESTO_INVALIDO', 'x', 2), {
+      campo: 'repuesto', mensaje: 'El repuesto no existe o está inactivo.', indiceRepuesto: 2,
+    });
+    assert.deepEqual(errorTareaDeApi('DATOS_INVALIDOS', 'El campo cantidad debe ser mayor que cero', 1), {
+      campo: 'cantidad', mensaje: 'Revisá la cantidad.', indiceRepuesto: 1,
+    });
+    assert.deepEqual(errorTareaDeApi('DATOS_INVALIDOS', 'El repuesto está repetido en la lista', 1), {
+      campo: 'repuesto', mensaje: 'Ese repuesto ya está en la lista.', indiceRepuesto: 1,
+    });
+  });
+});
+
+describe('FE-84: textoPrevistos', () => {
+  it('sin repuestos, uno y dos', () => {
+    assert.deepEqual(textoPrevistos([]), { texto: '', detalle: null });
+    assert.deepEqual(textoPrevistos([aceite]), { texto: 'Aceite ISO 68 × 2,5 litro', detalle: null });
+    assert.deepEqual(textoPrevistos([aceite, filtro]), {
+      texto: 'Aceite ISO 68 × 2,5 litro · Filtro de aceite × 1 unidad', detalle: null,
+    });
+  });
+
+  it('con más de dos: el primero, cuántos más, y la lista en el detalle', () => {
+    assert.deepEqual(textoPrevistos([aceite, filtro, correa]), {
+      texto: 'Aceite ISO 68 × 2,5 litro y 2 más',
+      detalle: 'Aceite ISO 68 × 2,5 litro · Filtro de aceite × 1 unidad · Correa × 2 unidad',
+    });
+  });
+});
+
+describe('FE-85: previstosDeBorrador', () => {
+  it('solo las filas completas, con la cantidad como número', () => {
+    assert.deepEqual(
+      previstosDeBorrador([
+        { repuestoId: '2', cantidad: '2,5', nombre: 'Aceite', unidad: 'litro' },
+        { repuestoId: null, cantidad: '' },
+        { repuestoId: '3', cantidad: '', nombre: 'Filtro', unidad: 'unidad' },
+      ]),
+      [{ repuesto: { nombre: 'Aceite', unidad: 'litro' }, cantidad: 2.5 }]
+    );
+  });
+});
+
+describe('FE-86: erroresDeApi', () => {
+  it('con indiceRepuesto va a la fila; sin él, al campo', () => {
+    assert.deepEqual(erroresDeApi({ campo: 'cantidad', mensaje: 'x', indiceRepuesto: 3 }), { filas: { 3: { cantidad: 'x' } } });
+    assert.deepEqual(erroresDeApi({ campo: 'accion', mensaje: 'x' }), { accion: 'x' });
+  });
+});
+
+describe('FE-87: sinErrorDeFila', () => {
+  const errores = { accion: 'a', filas: { 0: { repuesto: 'r0' }, 1: { repuesto: 'r1', cantidad: 'c1' }, 2: { cantidad: 'c2' } } };
+
+  it('al cambiar la cantidad, solo esa fila', () => {
+    assert.deepEqual(sinErrorDeFila(errores, 2, 'cantidad'), {
+      accion: 'a', filas: { 0: { repuesto: 'r0' }, 1: { repuesto: 'r1', cantidad: 'c1' } },
+    });
+  });
+
+  it('al cambiar el repuesto, también los repetidos de las otras', () => {
+    assert.deepEqual(sinErrorDeFila(errores, 0, 'repuesto'), { accion: 'a', filas: { 1: { cantidad: 'c1' }, 2: { cantidad: 'c2' } } });
+  });
+
+  it('sin errores de filas, no queda la clave', () => {
+    assert.deepEqual(sinErrorDeFila({ filas: { 0: { cantidad: 'c' } } }, 0, 'cantidad'), {});
   });
 });

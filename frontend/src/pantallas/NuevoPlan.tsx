@@ -118,7 +118,8 @@ export function NuevoPlan() {
       const indice = err instanceof ApiError ? err.datos?.indice : undefined;
       if (err instanceof ApiError && typeof indice === 'number' && tareas[indice]) {
         // El error de una tarea: en rojo, con el mensaje, y su diálogo abierto
-        const enCampo = errorTareaDeApi(err.codigo, err.message);
+        const indiceRepuesto = err.datos?.indice_repuesto;
+        const enCampo = errorTareaDeApi(err.codigo, err.message, typeof indiceRepuesto === 'number' ? indiceRepuesto : undefined);
         const mensaje = enCampo?.mensaje ?? mensajeError(err);
         setErroresTareas({ [indice]: mensaje });
         setDialogo({ indice, errorInicial: enCampo ?? { campo: null, mensaje } });

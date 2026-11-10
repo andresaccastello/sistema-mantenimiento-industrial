@@ -4,7 +4,7 @@
  * El front no calcula fechas de vencimiento ni estados: usa `hoy`, `dias`, `estado`
  * y `proxima_fecha` tal como los manda la API (D-021).
  */
-import { parsearId } from './formato';
+import { formatCantidad, parsearId } from './formato';
 import { validarCantidad } from './repuestos';
 import type { EstadoVencimiento, FrecuenciaUnidad, TareaPlan } from '../api/tipos';
 
@@ -71,14 +71,29 @@ export interface BorradorTarea {
   frecuenciaUnidad: FrecuenciaUnidad;
   /** YYYY-MM-DD, o null sin elegir. */
   primeraFecha: string | null;
-  /** El id como texto, como el de un Select, o null. */
-  repuestoId: string | null;
-  cantidad: number | string;
+  repuestos: FilaPrevisto[];
   proveedorId: string | null;
 }
 
+/** Una fila de "Repuestos previstos". El nombre y la unidad son solo para mostrarla. */
+export interface FilaPrevisto {
+  /** El id como texto, como el de un Select, o null. */
+  repuestoId: string | null;
+  cantidad: number | string;
+  nombre?: string;
+  unidad?: string;
+}
+
+/** Hasta 10 repuestos previstos por tarea (PV2.2, 3.1). */
+export const MAXIMO_PREVISTOS = 10;
+
 export type CampoTarea = 'accion' | 'frecuencia' | 'primeraFecha' | 'repuesto' | 'cantidad' | 'proveedor';
-export type ErroresTarea = Partial<Record<CampoTarea, string>>;
+export interface ErrorFilaPrevisto {
+  repuesto?: string;
+  cantidad?: string;
+}
+/** Los errores por campo; `filas`, los de cada repuesto previsto, por su posición. */
+export type ErroresTarea = Partial<Record<CampoTarea, string>> & { filas?: Record<number, ErrorFilaPrevisto> };
 
 export function borradorTareaVacio(): BorradorTarea {
   return {
@@ -87,8 +102,7 @@ export function borradorTareaVacio(): BorradorTarea {
     frecuenciaValor: 1,
     frecuenciaUnidad: 'MESES',
     primeraFecha: null,
-    repuestoId: null,
-    cantidad: '',
+    repuestos: [],
     proveedorId: null,
   };
 }
@@ -101,14 +115,42 @@ export function borradorDeTarea(t: TareaPlan): BorradorTarea {
     frecuenciaValor: t.frecuencia_valor,
     frecuenciaUnidad: t.frecuencia_unidad,
     primeraFecha: t.primera_fecha,
-    repuestoId: t.repuestos[0] ? String(t.repuestos[0].repuesto.id) : null,
-    cantidad: t.repuestos[0]?.cantidad ?? '',
+    repuestos: t.repuestos.map((r) => ({
+      repuestoId: String(r.repuesto.id),
+      cantidad: r.cantidad,
+      nombre: r.repuesto.nombre,
+      unidad: r.repuesto.unidad,
+    })),
     proveedorId: t.proveedor ? String(t.proveedor.id) : null,
   };
 }
 
 function vacio(valor: unknown): boolean {
   return valor === null || valor === undefined || String(valor).trim() === '';
+}
+
+function validarFilasPrevistos(filas: FilaPrevisto[]): Record<number, ErrorFilaPrevisto> {
+  const errores: Record<number, ErrorFilaPrevisto> = {};
+  const vistos = new Set<string>();
+  filas.forEach((f, i) => {
+    const conRepuesto = !vacio(f.repuestoId);
+    const conCantidad = !vacio(f.cantidad);
+    const error: ErrorFilaPrevisto = {};
+    if (conRepuesto) {
+      if (vistos.has(f.repuestoId as string)) error.repuesto = 'Ese repuesto ya está en la lista.';
+      vistos.add(f.repuestoId as string);
+    }
+    if (conRepuesto && !conCantidad) {
+      error.cantidad = 'Ingresá la cantidad.';
+    } else if (!conRepuesto && conCantidad) {
+      error.repuesto = 'Elegí el repuesto.';
+    } else if (conRepuesto && conCantidad) {
+      const mensaje = validarCantidad(f.cantidad);
+      if (mensaje) error.cantidad = mensaje;
+    }
+    if (Object.keys(error).length > 0) errores[i] = error;
+  });
+  return errores;
 }
 
 /** Los mismos límites que la API (PV1, 4.4). Devuelve los errores por campo; vacío si está bien. */
@@ -130,16 +172,8 @@ export function validarTareaBorrador(b: BorradorTarea): ErroresTarea {
     errores.primeraFecha = 'Elegí la fecha.';
   }
 
-  const conRepuesto = !vacio(b.repuestoId);
-  const conCantidad = !vacio(b.cantidad);
-  if (conRepuesto && !conCantidad) {
-    errores.cantidad = 'Ingresá la cantidad.';
-  } else if (!conRepuesto && conCantidad) {
-    errores.repuesto = 'Elegí el repuesto.';
-  } else if (conRepuesto && conCantidad) {
-    const error = validarCantidad(b.cantidad);
-    if (error) errores.cantidad = error;
-  }
+  const filas = validarFilasPrevistos(b.repuestos);
+  if (Object.keys(filas).length > 0) errores.filas = filas;
 
   return errores;
 }
@@ -159,9 +193,18 @@ export interface CuerpoTarea {
   frecuencia_valor?: number;
   frecuencia_unidad?: FrecuenciaUnidad;
   primera_fecha?: string;
-  repuesto_id?: number | null;
-  cantidad?: number | null;
+  repuestos?: Array<{ repuesto_id: number; cantidad: number }>;
   proveedor_id?: number | null;
+}
+
+/** Las filas completas, como las manda la API. Una fila vacía no va. */
+function previstosDeFilas(filas: FilaPrevisto[]): Array<{ repuesto_id: number; cantidad: number }> {
+  const previstos: Array<{ repuesto_id: number; cantidad: number }> = [];
+  for (const f of filas) {
+    const repuestoId = parsearId(f.repuestoId);
+    if (repuestoId !== null && !vacio(f.cantidad)) previstos.push({ repuesto_id: repuestoId, cantidad: numero(f.cantidad) });
+  }
+  return previstos;
 }
 
 function cuerpoCompleto(b: BorradorTarea): CuerpoTarea {
@@ -173,11 +216,8 @@ function cuerpoCompleto(b: BorradorTarea): CuerpoTarea {
   if (b.primeraFecha) cuerpo.primera_fecha = b.primeraFecha;
   const detalle = b.detalle.trim();
   if (detalle) cuerpo.detalle = detalle;
-  const repuestoId = parsearId(b.repuestoId);
-  if (repuestoId !== null && !vacio(b.cantidad)) {
-    cuerpo.repuesto_id = repuestoId;
-    cuerpo.cantidad = numero(b.cantidad);
-  }
+  const repuestos = previstosDeFilas(b.repuestos);
+  if (repuestos.length > 0) cuerpo.repuestos = repuestos;
   const proveedorId = parsearId(b.proveedorId);
   if (proveedorId !== null) cuerpo.proveedor_id = proveedorId;
   return cuerpo;
@@ -186,6 +226,7 @@ function cuerpoCompleto(b: BorradorTarea): CuerpoTarea {
 /**
  * El cuerpo de una tarea. Sin `original`, para el alta: los campos vacíos no van.
  * Con `original`, para el PATCH: solo lo que cambió; lo que se vació va en null.
+ * `repuestos` va entero si cambió, porque el PATCH reemplaza la lista; vaciada, va [].
  */
 export function cuerpoTarea(b: BorradorTarea, original?: BorradorTarea): CuerpoTarea {
   const nuevo = cuerpoCompleto(b);
@@ -199,8 +240,6 @@ export function cuerpoTarea(b: BorradorTarea, original?: BorradorTarea): CuerpoT
     'frecuencia_valor',
     'frecuencia_unidad',
     'primera_fecha',
-    'repuesto_id',
-    'cantidad',
     'proveedor_id',
   ];
   for (const campo of campos) {
@@ -210,12 +249,38 @@ export function cuerpoTarea(b: BorradorTarea, original?: BorradorTarea): CuerpoT
       (cambios as Record<string, unknown>)[campo] = valorNuevo;
     }
   }
-  // El repuesto y la cantidad van juntos
-  if ('repuesto_id' in cambios || 'cantidad' in cambios) {
-    cambios.repuesto_id = nuevo.repuesto_id ?? null;
-    cambios.cantidad = nuevo.cantidad ?? null;
+  if (JSON.stringify(nuevo.repuestos ?? []) !== JSON.stringify(antes.repuestos ?? [])) {
+    cambios.repuestos = nuevo.repuestos ?? [];
   }
   return cambios;
+}
+
+/** Lo que hace falta para mostrar un repuesto previsto. */
+export interface PrevistoParaTexto {
+  repuesto: { nombre: string; unidad: string };
+  cantidad: number;
+}
+
+/** "Aceite ISO 68 × 2,5 litro". */
+export function textoUnPrevisto(repuesto: { nombre: string; unidad: string }, cantidad: number): string {
+  return `${repuesto.nombre} × ${formatCantidad(cantidad)} ${repuesto.unidad}`;
+}
+
+/**
+ * La lista de previstos, con " · ". Con más de dos: "Aceite ISO 68 × 2,5 litro y 2 más",
+ * y en `detalle` la lista completa, para el Tooltip.
+ */
+export function textoPrevistos(repuestos: PrevistoParaTexto[]): { texto: string; detalle: string | null } {
+  const partes = repuestos.map((r) => textoUnPrevisto(r.repuesto, r.cantidad));
+  if (partes.length <= 2) return { texto: partes.join(' · '), detalle: null };
+  return { texto: `${partes[0]} y ${partes.length - 1} más`, detalle: partes.join(' · ') };
+}
+
+/** Las filas completas de un borrador, para mostrarlas con `textoPrevistos`. */
+export function previstosDeBorrador(filas: FilaPrevisto[]): PrevistoParaTexto[] {
+  return filas
+    .filter((f) => f.nombre && !vacio(f.cantidad))
+    .map((f) => ({ repuesto: { nombre: f.nombre as string, unidad: f.unidad ?? '' }, cantidad: numero(f.cantidad) }));
 }
 
 export interface BorradorPlan {
@@ -392,8 +457,23 @@ export function textoPendientes(plan: { vencidas: number; proximas: number; en_c
 /**
  * El campo y el mensaje de un error de la API sobre una tarea (PV1, 4.4), para ponerlo
  * en su campo, como en el diálogo de costos. Sin campo reconocible: null.
+ * Con `indiceRepuesto`, el error es de esa fila de los previstos.
  */
-export function errorTareaDeApi(codigo: string, mensaje: string): { campo: CampoTarea; mensaje: string } | null {
+export function errorTareaDeApi(codigo: string, mensaje: string, indiceRepuesto?: number): ErrorTareaApi | null {
+  const error = campoDeErrorApi(codigo, mensaje);
+  if (indiceRepuesto === undefined) return error;
+  if (error?.campo === 'repuesto' || error?.campo === 'cantidad') return { ...error, indiceRepuesto };
+  if (mensaje.includes('repetido')) return { campo: 'repuesto', mensaje: 'Ese repuesto ya está en la lista.', indiceRepuesto };
+  return error;
+}
+
+export interface ErrorTareaApi {
+  campo: CampoTarea;
+  mensaje: string;
+  indiceRepuesto?: number;
+}
+
+function campoDeErrorApi(codigo: string, mensaje: string): ErrorTareaApi | null {
   if (codigo === 'REPUESTO_INVALIDO') return { campo: 'repuesto', mensaje: 'El repuesto no existe o está inactivo.' };
   if (codigo === 'PROVEEDOR_INVALIDO') return { campo: 'proveedor', mensaje: 'El proveedor no existe o está inactivo.' };
   if (codigo !== 'DATOS_INVALIDOS') return null;
@@ -410,4 +490,29 @@ export function errorTareaDeApi(codigo: string, mensaje: string): { campo: Campo
   }
   if (mensaje.includes('cantidad')) return { campo: 'cantidad', mensaje: 'Revisá la cantidad.' };
   return null;
+}
+
+/** Un error de la API, como errores del formulario: en su fila si trae `indiceRepuesto`. */
+export function erroresDeApi(error: ErrorTareaApi): ErroresTarea {
+  if (error.indiceRepuesto !== undefined && (error.campo === 'repuesto' || error.campo === 'cantidad')) {
+    return { filas: { [error.indiceRepuesto]: { [error.campo]: error.mensaje } } };
+  }
+  return { [error.campo]: error.mensaje };
+}
+
+/**
+ * Saca los errores de una fila que se tocó. Al cambiar el repuesto saca también los
+ * "repetido" de las otras filas: se arregla tocando cualquiera de las dos.
+ */
+export function sinErrorDeFila(errores: ErroresTarea, indice: number, campo: 'repuesto' | 'cantidad'): ErroresTarea {
+  const { filas, ...resto } = errores;
+  const nuevas: Record<number, ErrorFilaPrevisto> = {};
+  for (const [clave, error] of Object.entries(filas ?? {})) {
+    const i = Number(clave);
+    if (i === indice) continue;
+    const copia = { ...error };
+    if (campo === 'repuesto') delete copia.repuesto;
+    if (Object.keys(copia).length > 0) nuevas[i] = copia;
+  }
+  return Object.keys(nuevas).length > 0 ? { ...resto, filas: nuevas } : resto;
 }
