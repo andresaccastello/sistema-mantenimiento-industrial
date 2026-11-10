@@ -272,7 +272,7 @@ Sobre las máquinas activas de la selección y el período elegido:
 1. **Un plan es de una máquina** y tiene tareas. Cada tarea tiene su frecuencia: cada N días, semanas, meses o años. Una máquina puede tener varios planes, por ejemplo uno mecánico y uno eléctrico, cada uno con su responsable.
 2. **La próxima fecha se calcula, no se guarda.** Es la última ejecución más la frecuencia; sin ejecuciones, la primera fecha que se cargó. La última ejecución es la fecha de finalización de la última intervención finalizada, no eliminada, con esa tarea marcada como hecha. Así, reabrir, cancelar, eliminar o corregir la fecha de una intervención mueve la próxima fecha sin ningún paso extra.
 3. **Se cuenta desde la última ejecución,** no desde la fecha que tocaba. Si un cambio de aceite cada 6 meses se hizo con un mes de atraso, el próximo es 6 meses después de cuando se hizo.
-4. **La intervención se genera a pedido.** Un usuario con `PLANES_GESTIONAR` genera, desde el plan, una intervención `PREVENTIVO` con las tareas que vencen. Sigue el mismo circuito que una correctiva: estados, tiempos, repuestos, costos y detenciones. La generación automática y los avisos de vencimiento quedan para la PV5, porque necesitan un disparador programado y un autor que no es una persona.
+4. **La intervención se genera a pedido.** Un usuario con `PLANES_GESTIONAR` genera, desde el plan, una intervención `PREVENTIVO` con las tareas que vencen. Sigue el mismo circuito que una correctiva: estados, tiempos, repuestos, costos y detenciones. La generación automática y los avisos de vencimiento quedan para la PV6, porque necesitan un disparador programado y un autor que no es una persona.
 5. **Una tarea está en una sola intervención abierta a la vez.** Mientras está en una, no se vuelve a generar.
 6. **"Hoy" es el de la instalación,** según su zona horaria (`configuracion_sistema.zona_horaria`), no el del servidor.
 
@@ -290,3 +290,22 @@ Sobre las máquinas activas de la selección y el período elegido:
 6. **Todo o nada:** si un repuesto no alcanza (`STOCK_INSUFICIENTE`) o está inactivo, no se marca la tarea ni se registra ningún consumo.
 
 **Motivo:** no cargar dos veces lo que el plan ya sabe, sin descontar stock de algo que quizás no se usó.
+
+## D-023 — Medidores y tareas que vencen por uso
+
+**Estado:** Aceptada
+
+1. **Un medidor es de una máquina:** un horómetro, un cuentakilómetros, un contador de ciclos o de piezas. Tiene un nombre y una unidad, que se escribe libre. Una máquina puede tener varios.
+2. **Las lecturas son acumuladas.** Cada una es mayor o igual que la última vigente. Vale desde que se registra: no se carga con fecha pasada. Una lectura mal cargada se anula con motivo, y nada se borra.
+3. **Una tarea vence por fecha, por uso o por las dos,** y en ese caso, lo que llegue primero. Por uso es cada N unidades de un medidor de la misma máquina, con la primera en un valor dado y una anticipación en unidades.
+4. **La próxima por uso se calcula, no se guarda,** como la fecha (D-021):
+   - es el mayor valor del medidor registrado al hacer la tarea en una intervención finalizada y no eliminada, más el intervalo;
+   - sin ninguno, es la primera.
+
+   Reabrir, cancelar o eliminar la intervención la mueve sola.
+5. **El valor al hacer la tarea queda en la tarea de la intervención.** Es la última lectura, o una nueva que se carga en ese momento. Hacer la tarea reinicia los dos relojes, el de fecha y el de uso.
+6. **El estado de la tarea es el más urgente de los dos.** "Sin lectura" es una tarea por uso cuyo medidor no tiene ninguna lectura vigente.
+7. **No se estima.** El sistema compara la última lectura real con el valor que toca. No calcula fechas a partir del ritmo de uso.
+8. **Si se cambia el medidor físico,** por ejemplo un horómetro nuevo que arranca de cero, se da de alta otro medidor y se le pasan las tareas.
+
+**Motivo:** cumplir el requisito 6 con la misma idea de D-021: nada se guarda que se pueda calcular, y deshacer una intervención deshace su efecto sin pasos extra.

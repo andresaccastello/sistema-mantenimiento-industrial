@@ -113,12 +113,27 @@ Planes preventivos de una máquina, armados con tareas (D-021). Una máquina pue
 - `creado_por_usuario_id`, `creado_en` y `actualizado_en`.
 
 ### plan_tareas
-Las tareas de un plan, en su `orden` (único en el plan). Cada una tiene su `accion`, su `detalle` y su frecuencia: `frecuencia_valor` y `frecuencia_unidad` (`DIAS`, `SEMANAS`, `MESES` o `ANIOS`), hasta 10 años. `primera_fecha` es cuándo vence por primera vez. Pueden llevar un repuesto sugerido con su `cantidad` (van juntos) y un proveedor sugerido. No se borran: se desactivan.
+Las tareas de un plan, en su `orden` (único en el plan). Cada una tiene su `accion` y su `detalle`, un proveedor sugerido (`proveedor_id`, nulo) y al menos un criterio de vencimiento (D-023). No se borran: se desactivan.
 
-El estado de cada tarea no se guarda: lo calcula la vista `v_plan_tareas_estado` (última ejecución, próxima fecha, días que faltan, intervención en curso y estado: `INACTIVA`, `EN_CURSO`, `VENCIDA`, `PROXIMA` o `AL_DIA`), con el "hoy" de la zona horaria de la instalación (`configuracion_sistema.zona_horaria`).
+- **Por fecha:** `frecuencia_valor` y `frecuencia_unidad` (`DIAS`, `SEMANAS`, `MESES` o `ANIOS`), hasta 10 años, y `primera_fecha`, cuándo vence por primera vez. Van los tres o ninguno.
+- **Por uso:** `medidor_id`, un medidor de la misma máquina; `uso_cada` (mayor que 0), cada cuántas unidades; `uso_primera` (mayor o igual que 0), en qué valor vence la primera vez; y `uso_anticipacion` (de 0 a `uso_cada`), cuántas unidades antes pasa a "próxima". Van los cuatro o ninguno. `anticipacion_dias`, del plan, es solo para la fecha.
+
+El estado de cada tarea no se guarda: lo calcula la vista `v_plan_tareas_estado`, con el "hoy" de la zona horaria de la instalación (`configuracion_sistema.zona_horaria`). Por fecha: última ejecución, próxima fecha, días que faltan y `estado_fecha`. Por uso: `lectura_actual` y `lectura_actual_en`, `ultimo_uso`, `proximo_uso`, `faltan_uso` y `estado_uso`, que también puede ser `SIN_LECTURA`. El `estado` es el más urgente de los dos: `INACTIVA`, `EN_CURSO`, `VENCIDA`, `PROXIMA`, `SIN_LECTURA` o `AL_DIA`, en ese orden.
+
+### plan_tarea_repuestos
+Los repuestos previstos de una tarea del plan, hasta 10 (D-022): `plan_tarea_id`, `repuesto_id` (único en la tarea), `cantidad` (`numeric(14,3)`, mayor que 0) y `orden`. No mueven stock.
 
 ### intervencion_tareas
-Las tareas de una intervención preventiva, copiadas del plan al generarla (`orden`, `accion`, `detalle` y `fecha_programada`, la próxima fecha de la tarea en ese momento), para que cambiar el plan después no cambie lo que se hizo. Una tarea del plan va una sola vez por intervención. `hecha` lleva quién (`hecha_por_usuario_id`) y cuándo (`hecha_en`); sin `hecha`, ninguno de los dos. `observacion`, hasta 500 caracteres.
+Las tareas de una intervención preventiva, copiadas del plan al generarla (`orden`, `accion`, `detalle`, `fecha_programada`, `medidor_id` y `uso_programado`, la próxima fecha y la próxima por uso en ese momento), para que cambiar el plan después no cambie lo que se hizo. Tiene `fecha_programada`, `medidor_id` o los dos, y `uso_programado` va si y solo si va `medidor_id`. Una tarea del plan va una sola vez por intervención. `hecha` lleva quién (`hecha_por_usuario_id`) y cuándo (`hecha_en`); sin `hecha`, ninguno de los dos. `valor_medidor` es el valor del medidor al hacer la tarea: va si y solo si la tarea está hecha y tiene medidor. `observacion`, hasta 500 caracteres.
+
+### intervencion_tarea_repuestos
+Los repuestos previstos de una tarea en la intervención, copiados del plan al generarla (D-022): `intervencion_tarea_id`, `repuesto_id` (único en la tarea), `cantidad_prevista` (mayor que 0), `orden` y `consumo_id` (nulo, único), el consumo que se registró al confirmar.
+
+### medidores
+Los medidores de una máquina (D-023): `maquina_id`, `nombre` (hasta 60, único en la máquina sin importar mayúsculas), `unidad` (hasta 20, se escribe libre), `activo`, `creado_por_usuario_id`, `creado_en` y `actualizado_en`. No se borran: se desactivan.
+
+### lecturas_medidor
+Las lecturas acumuladas de un medidor: `medidor_id`, `valor` (`numeric(14,2)`, mayor o igual que 0), `registrada_en`, `registrada_por_usuario_id`, `origen` (`MANUAL` o `TAREA`), `intervencion_tarea_id` (va si y solo si el origen es `TAREA`) y `observacion` (hasta 200). Una lectura mal cargada se anula: `anulada_en`, `anulada_por_usuario_id` y `motivo_anulacion` van los tres o ninguno. La última vigente es la de mayor valor; a igual valor, la de mayor id.
 
 ### documentos
 Metadatos de documentación asociada a máquinas o intervenciones.
@@ -151,6 +166,12 @@ PLANTAS ──< SECTORES ──< MAQUINAS >── CRITICIDADES
 MAQUINAS ──< PLANES_MANTENIMIENTO ──< INTERVENCIONES
                     │
                     └──< PLAN_TAREAS ──< INTERVENCION_TAREAS
+                              │                  │
+                              │                  └──< INTERVENCION_TAREA_REPUESTOS >── REPUESTOS
+                              └──< PLAN_TAREA_REPUESTOS >── REPUESTOS
+MAQUINAS ──< MEDIDORES ──< LECTURAS_MEDIDOR
+                 ├──< PLAN_TAREAS
+                 └──< INTERVENCION_TAREAS
 MAQUINAS ──< DOCUMENTOS
 ```
 

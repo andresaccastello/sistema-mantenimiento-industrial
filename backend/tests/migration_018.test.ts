@@ -249,7 +249,8 @@ test('Migración 018 — Preventivos por calendario', async (t) => {
         Object.keys(tareas).sort(),
         [
           'accion', 'activo', 'actualizado_en', 'creado_en', 'detalle', 'frecuencia_unidad',
-          'frecuencia_valor', 'id', 'orden', 'plan_id', 'primera_fecha', 'proveedor_id',
+          'frecuencia_valor', 'id', 'medidor_id', 'orden', 'plan_id', 'primera_fecha', 'proveedor_id',
+          'uso_anticipacion', 'uso_cada', 'uso_primera',
         ]
       );
       assert.strictEqual(tareas.accion.character_maximum_length, 200);
@@ -262,7 +263,7 @@ test('Migración 018 — Preventivos por calendario', async (t) => {
         Object.keys(it).sort(),
         [
           'accion', 'detalle', 'fecha_programada', 'hecha', 'hecha_en', 'hecha_por_usuario_id', 'id',
-          'intervencion_id', 'observacion', 'orden', 'plan_tarea_id',
+          'intervencion_id', 'medidor_id', 'observacion', 'orden', 'plan_tarea_id', 'uso_programado', 'valor_medidor',
         ]
       );
       assert.strictEqual(it.observacion.character_maximum_length, 500);
@@ -644,6 +645,417 @@ test('Migración 018 — Preventivos por calendario', async (t) => {
       const queda = await client.query('SELECT 1 FROM plan_tareas WHERE id = $1', [tareaCon]);
       assert.strictEqual(queda.rows.length, 0, 'El ROLLBACK sacó los datos');
       assert.strictEqual(await columnasViejas(), 0);
+    });
+
+    // -------------------------------------------------------------------------
+    // Helpers de los medidores (PV3)
+    // -------------------------------------------------------------------------
+    const crearMedidor = async (b: Base, nombre = 'Horómetro', maquinaId = b.maquinaId) =>
+      Number((await client.query(
+        `INSERT INTO medidores (maquina_id, nombre, unidad, creado_por_usuario_id) VALUES ($1, $2, 'horas', $3) RETURNING id`,
+        [maquinaId, nombre, b.usuarioId]
+      )).rows[0].id);
+
+    const crearLectura = async (b: Base, medidorId: number, valor: number) =>
+      Number((await client.query(
+        `INSERT INTO lecturas_medidor (medidor_id, valor, registrada_por_usuario_id, origen) VALUES ($1, $2, $3, 'MANUAL') RETURNING id`,
+        [medidorId, valor, b.usuarioId]
+      )).rows[0].id);
+
+    /** Una tarea del plan por uso; con `primeraFecha`, también por fecha. */
+    const crearTareaUso = async (
+      planId: number,
+      orden: number,
+      medidorId: number,
+      uso: { cada: number; primera: number; anticipacion: number },
+      primeraFecha: string | null = null
+    ) =>
+      Number((await client.query(
+        `INSERT INTO plan_tareas (
+           plan_id, orden, accion, frecuencia_valor, frecuencia_unidad, primera_fecha,
+           medidor_id, uso_cada, uso_primera, uso_anticipacion
+         ) VALUES ($1, $2, $3, $4, $5, $6::date, $7, $8, $9, $10) RETURNING id`,
+        [
+          planId, orden, `Tarea uso M18 ${orden}`,
+          primeraFecha === null ? null : 6, primeraFecha === null ? null : 'MESES', primeraFecha,
+          medidorId, uso.cada, uso.primera, uso.anticipacion,
+        ]
+      )).rows[0].id);
+
+    /** La tarea en una intervención, con su medidor y, si está hecha, su valor. */
+    const agregarTareaUso = async (
+      intervencionId: number,
+      tareaId: number,
+      usuarioId: number,
+      medidorId: number,
+      valor: number | null
+    ) =>
+      Number((await client.query(
+        `INSERT INTO intervencion_tareas (
+           intervencion_id, plan_tarea_id, orden, accion, medidor_id, uso_programado, valor_medidor,
+           hecha, hecha_por_usuario_id, hecha_en
+         )
+         SELECT $1, t.id, t.orden, t.accion, $2::bigint, 500, $3::numeric,
+                $4::boolean, CASE WHEN $4::boolean THEN $5::bigint ELSE NULL END, CASE WHEN $4::boolean THEN NOW() ELSE NULL END
+         FROM plan_tareas t WHERE t.id = $6
+         RETURNING id`,
+        [intervencionId, medidorId, valor, valor !== null, usuarioId, tareaId]
+      )).rows[0].id);
+
+    const USO_250 = { cada: 250, primera: 500, anticipacion: 25 };
+
+    // =========================================================================
+    // M18-07: Estructura de los medidores
+    // =========================================================================
+    await t.test('M18-07: Estructura', async () => {
+      const columnas = async (tabla: string) => {
+        const r = await client.query(
+          `SELECT column_name, data_type, is_nullable, column_default, character_maximum_length, numeric_precision, numeric_scale
+           FROM information_schema.columns
+           WHERE table_schema = current_schema() AND table_name = $1`,
+          [tabla]
+        );
+        const mapa: Record<string, any> = {};
+        for (const c of r.rows) mapa[c.column_name] = c;
+        return mapa;
+      };
+      const numerico = (c: any, nullable: string) =>
+        assert.deepStrictEqual([c?.data_type, c?.numeric_precision, c?.numeric_scale, c?.is_nullable], ['numeric', 14, 2, nullable]);
+
+      const med = await columnas('medidores');
+      assert.deepStrictEqual(
+        Object.keys(med).sort(),
+        ['activo', 'actualizado_en', 'creado_en', 'creado_por_usuario_id', 'id', 'maquina_id', 'nombre', 'unidad']
+      );
+      assert.deepStrictEqual([med.id.data_type, med.maquina_id.is_nullable], ['bigint', 'NO']);
+      assert.deepStrictEqual([med.nombre.character_maximum_length, med.nombre.is_nullable], [60, 'NO']);
+      assert.deepStrictEqual([med.unidad.character_maximum_length, med.unidad.is_nullable], [20, 'NO']);
+      assert.deepStrictEqual([med.activo.is_nullable, med.activo.column_default], ['NO', 'true']);
+      assert.strictEqual(med.creado_por_usuario_id.is_nullable, 'NO');
+
+      const lec = await columnas('lecturas_medidor');
+      assert.deepStrictEqual(
+        Object.keys(lec).sort(),
+        [
+          'anulada_en', 'anulada_por_usuario_id', 'id', 'intervencion_tarea_id', 'medidor_id', 'motivo_anulacion',
+          'observacion', 'origen', 'registrada_en', 'registrada_por_usuario_id', 'valor',
+        ]
+      );
+      numerico(lec.valor, 'NO');
+      assert.deepStrictEqual([lec.medidor_id.is_nullable, lec.registrada_por_usuario_id.is_nullable, lec.origen.is_nullable], ['NO', 'NO', 'NO']);
+      assert.strictEqual(lec.registrada_en.is_nullable, 'NO');
+      assert.match(lec.registrada_en.column_default, /now\(\)/);
+      assert.strictEqual(lec.observacion.character_maximum_length, 200);
+      for (const c of ['intervencion_tarea_id', 'anulada_en', 'anulada_por_usuario_id', 'motivo_anulacion']) {
+        assert.strictEqual(lec[c].is_nullable, 'YES', c);
+      }
+
+      const indice = await client.query(`SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_lecturas_medidor_vigentes'`);
+      assert.match(indice.rows[0].indexdef, /\(medidor_id, valor DESC, id DESC\) WHERE \(anulada_en IS NULL\)/);
+      const unico = await client.query(`SELECT indexdef FROM pg_indexes WHERE indexname = 'uq_medidores_maquina_nombre'`);
+      assert.match(unico.rows[0].indexdef, /UNIQUE.*maquina_id, lower\(/);
+
+      const tareas = await columnas('plan_tareas');
+      for (const c of ['frecuencia_valor', 'frecuencia_unidad', 'primera_fecha']) {
+        assert.strictEqual(tareas[c].is_nullable, 'YES', c);
+      }
+      assert.deepStrictEqual([tareas.medidor_id.data_type, tareas.medidor_id.is_nullable], ['bigint', 'YES']);
+      for (const c of ['uso_cada', 'uso_primera', 'uso_anticipacion']) numerico(tareas[c], 'YES');
+
+      const it = await columnas('intervencion_tareas');
+      assert.strictEqual(it.fecha_programada.is_nullable, 'YES');
+      assert.deepStrictEqual([it.medidor_id.data_type, it.medidor_id.is_nullable], ['bigint', 'YES']);
+      for (const c of ['uso_programado', 'valor_medidor']) numerico(it[c], 'YES');
+
+      const vista = await columnas('v_plan_tareas_estado');
+      for (const c of ['lectura_actual', 'lectura_actual_en', 'ultimo_uso', 'proximo_uso', 'faltan_uso', 'estado_uso', 'estado_fecha']) {
+        assert.ok(vista[c], `La vista tiene ${c}`);
+      }
+
+      const permiso = await client.query(
+        `SELECT nombre, usa_alcance FROM permisos WHERE codigo = 'MAQUINAS_REGISTRAR_LECTURAS'`
+      );
+      assert.deepStrictEqual(permiso.rows, [{ nombre: 'Cargar lecturas de medidores', usa_alcance: false }]);
+      const perfiles = (await client.query(
+        `SELECT p.nombre FROM perfil_permiso pp
+         JOIN perfiles p ON p.id = pp.perfil_id
+         JOIN permisos pe ON pe.id = pp.permiso_id
+         WHERE pe.codigo = 'MAQUINAS_REGISTRAR_LECTURAS'`
+      )).rows.map((r) => r.nombre);
+      for (const perfil of ['ADMINISTRADOR', 'RESPONSABLE_MANTENIMIENTO', 'OPERARIO']) {
+        assert.ok(perfiles.includes(perfil), `Lo tiene ${perfil}`);
+      }
+      assert.ok(!perfiles.includes('CONSULTA'), 'CONSULTA no lo tiene');
+    });
+
+    // =========================================================================
+    // M18-08: Restricciones de los medidores
+    // =========================================================================
+    await t.test('M18-08: Restricciones', async () => {
+      await client.query('BEGIN');
+      try {
+        const b = await crearBase(client);
+        const planId = await crearPlan(client, b, 'Plan M18-08');
+        const medidorId = await crearMedidor(b);
+        let orden = 1;
+
+        const rechaza = async (nombre: string, hacer: () => Promise<unknown>, regex: RegExp) => {
+          await client.query('SAVEPOINT caso');
+          await assert.rejects(hacer(), regex, nombre);
+          await client.query('ROLLBACK TO SAVEPOINT caso');
+        };
+
+        type CamposTarea = {
+          fv?: number | null; fu?: string | null; pf?: string | null;
+          med?: number | null; cada?: number | null; primera?: number | null; ant?: number | null;
+        };
+        const FECHA = { fv: 1, fu: 'MESES', pf: '2026-01-01' };
+        const USO = { med: medidorId, cada: 250, primera: 500, ant: 25 };
+        const tarea = (c: CamposTarea) =>
+          client.query(
+            `INSERT INTO plan_tareas (
+               plan_id, orden, accion, frecuencia_valor, frecuencia_unidad, primera_fecha,
+               medidor_id, uso_cada, uso_primera, uso_anticipacion
+             ) VALUES ($1, $2, 'Tarea M18-08', $3, $4, $5::date, $6, $7, $8, $9) RETURNING id`,
+            [planId, orden++, c.fv ?? null, c.fu ?? null, c.pf ?? null, c.med ?? null, c.cada ?? null, c.primera ?? null, c.ant ?? null]
+          );
+
+        await rechaza('sin fecha ni uso', () => tarea({}), /ck_plan_tareas_criterio/);
+        await rechaza('fecha sin primera_fecha', () => tarea({ ...USO, ...FECHA, pf: null }), /ck_plan_tareas_fecha_completa/);
+        await rechaza('fecha sin unidad', () => tarea({ ...USO, ...FECHA, fu: null }), /ck_plan_tareas_fecha_completa/);
+        await rechaza('uso sin uso_cada', () => tarea({ ...USO, cada: null }), /ck_plan_tareas_uso_completo/);
+        await rechaza('uso sin medidor', () => tarea({ ...FECHA, ...USO, med: null }), /ck_plan_tareas_uso_completo/);
+        await rechaza('uso_cada 0', () => tarea({ ...USO, cada: 0, ant: 0 }), /ck_plan_tareas_uso_cada/);
+        await rechaza('anticipación mayor que uso_cada', () => tarea({ ...USO, ant: 251 }), /ck_plan_tareas_uso_anticipacion/);
+        await rechaza('uso_primera negativa', () => tarea({ ...USO, primera: -1 }), /ck_plan_tareas_uso_primera/);
+
+        const lectura = (c: { valor?: number; origen?: string; tarea?: number | null; en?: string | null; por?: number | null; motivo?: string | null }) =>
+          client.query(
+            `INSERT INTO lecturas_medidor (
+               medidor_id, valor, registrada_por_usuario_id, origen, intervencion_tarea_id,
+               anulada_en, anulada_por_usuario_id, motivo_anulacion
+             ) VALUES ($1, $2, $3, $4, $5, $6::timestamptz, $7, $8)`,
+            [medidorId, c.valor ?? 10, b.usuarioId, c.origen ?? 'MANUAL', c.tarea ?? null, c.en ?? null, c.por ?? null, c.motivo ?? null]
+          );
+        await rechaza('lectura negativa', () => lectura({ valor: -1 }), /ck_lecturas_medidor_valor/);
+        await rechaza('origen desconocido', () => lectura({ origen: 'OTRO' }), /ck_lecturas_medidor_origen/);
+        await rechaza('lectura TAREA sin tarea', () => lectura({ origen: 'TAREA' }), /ck_lecturas_medidor_tarea/);
+
+        const soloUso = Number((await tarea(USO)).rows[0].id);
+        const conLosDos = Number((await tarea({ ...FECHA, ...USO })).rows[0].id);
+        assert.ok(soloUso > 0, 'Una tarea solo por uso');
+        assert.ok(conLosDos > 0, 'Una tarea con los dos criterios');
+
+        const intId = await crearIntervencion(client, b, planId, 'PENDIENTE');
+        const fila = (c: { tarea?: number; fecha?: string | null; med?: number | null; prog?: number | null; valor?: number | null; hecha?: boolean }) => {
+          const hecha = c.hecha ?? false;
+          return client.query(
+            `INSERT INTO intervencion_tareas (
+               intervencion_id, plan_tarea_id, orden, accion, fecha_programada, medidor_id, uso_programado, valor_medidor,
+               hecha, hecha_por_usuario_id, hecha_en
+             ) VALUES ($1, $2, 1, 'Tarea M18-08', $3::date, $4, $5, $6, $7, $8, $9::timestamptz) RETURNING id`,
+            [intId, c.tarea ?? soloUso, c.fecha ?? null, c.med ?? null, c.prog ?? null, c.valor ?? null, hecha, hecha ? b.usuarioId : null, hecha ? '2026-01-02T10:00:00Z' : null]
+          );
+        };
+        const CON_MEDIDOR = { med: medidorId, prog: 500 };
+        await rechaza('valor_medidor en una tarea sin hacer', () => fila({ ...CON_MEDIDOR, valor: 10 }), /ck_intervencion_tareas_valor_medidor/);
+        await rechaza('valor_medidor sin medidor', () => fila({ fecha: '2026-01-01', valor: 10, hecha: true }), /ck_intervencion_tareas_valor_medidor/);
+        await rechaza('hecha, con medidor y sin valor', () => fila({ ...CON_MEDIDOR, hecha: true }), /ck_intervencion_tareas_valor_medidor/);
+        await rechaza('sin fecha ni medidor', () => fila({}), /ck_intervencion_tareas_criterio/);
+        await rechaza('uso_programado sin medidor', () => fila({ fecha: '2026-01-01', prog: 500 }), /ck_intervencion_tareas_uso_programado/);
+
+        const itId = Number((await fila(CON_MEDIDOR)).rows[0].id);
+        await rechaza('lectura MANUAL con tarea', () => lectura({ tarea: itId }), /ck_lecturas_medidor_tarea/);
+        await rechaza('anulación sin motivo', () => lectura({ en: '2026-01-02T10:00:00Z', por: b.usuarioId }), /ck_lecturas_medidor_anulacion/);
+        await rechaza('anulación sin quién', () => lectura({ en: '2026-01-02T10:00:00Z', motivo: 'Mal cargada' }), /ck_lecturas_medidor_anulacion/);
+        await rechaza('anulación sin fecha', () => lectura({ por: b.usuarioId, motivo: 'Mal cargada' }), /ck_lecturas_medidor_anulacion/);
+        await rechaza('el mismo nombre en la máquina', () => crearMedidor(b, 'horómetro'), /uq_medidores_maquina_nombre/);
+
+        // Se aceptan
+        assert.ok((await crearMedidor(b, 'horómetro', b.maquina2Id)) > 0, 'El mismo nombre en otra máquina');
+        await lectura({ origen: 'TAREA', tarea: itId });
+        await lectura({ en: '2026-01-02T10:00:00Z', por: b.usuarioId, motivo: 'Mal cargada' });
+      } finally {
+        await client.query('ROLLBACK');
+      }
+    });
+
+    // =========================================================================
+    // M18-09: El estado por uso
+    // =========================================================================
+    await t.test('M18-09: El estado por uso', async () => {
+      await client.query('BEGIN');
+      try {
+        const hoy: string = (await client.query(`SELECT to_char(hoy_instalacion(), 'YYYY-MM-DD') AS hoy`)).rows[0].hoy;
+        const b = await crearBase(client);
+        const planId = await crearPlan(client, b, 'Plan M18-09', b.maquinaId, 7);
+        let orden = 1;
+
+        const estado = async (tareaId: number) => {
+          const x = (await client.query('SELECT * FROM v_plan_tareas_estado WHERE id = $1', [tareaId])).rows[0];
+          const num = (v: unknown) => (v === null ? null : Number(v));
+          return {
+            estado: x.estado,
+            estado_uso: x.estado_uso,
+            estado_fecha: x.estado_fecha,
+            faltan: num(x.faltan_uso),
+            ultimo: num(x.ultimo_uso),
+            proximo: num(x.proximo_uso),
+            lectura: num(x.lectura_actual),
+            proxima_fecha: x.proxima_fecha,
+            dias: x.dias,
+            ultima_ejecucion: x.ultima_ejecucion,
+          };
+        };
+
+        const med = await crearMedidor(b);
+        const tId = await crearTareaUso(planId, orden++, med, USO_250);
+
+        // Solo por uso: sin fecha
+        const sinLecturas = await estado(tId);
+        assert.deepStrictEqual(
+          [sinLecturas.estado, sinLecturas.estado_uso, sinLecturas.faltan, sinLecturas.proximo, sinLecturas.lectura],
+          ['SIN_LECTURA', 'SIN_LECTURA', null, 500, null]
+        );
+        assert.deepStrictEqual([sinLecturas.estado_fecha, sinLecturas.proxima_fecha, sinLecturas.dias], [null, null, null]);
+
+        const conLectura = async (valor: number) => {
+          const id = await crearLectura(b, med, valor);
+          return { id, e: await estado(tId) };
+        };
+        const l400 = await conLectura(400);
+        assert.deepStrictEqual([l400.e.estado, l400.e.faltan], ['AL_DIA', 100]);
+        const l475 = await conLectura(475);
+        assert.deepStrictEqual([l475.e.estado, l475.e.faltan], ['PROXIMA', 25]);
+        const l500 = await conLectura(500);
+        assert.deepStrictEqual([l500.e.estado, l500.e.faltan], ['PROXIMA', 0]);
+        const l5005 = await conLectura(500.5);
+        assert.deepStrictEqual([l5005.e.estado, l5005.e.faltan], ['VENCIDA', -0.5]);
+
+        // Anular la de 500,5: vuelve a PROXIMA
+        await client.query(
+          `UPDATE lecturas_medidor SET anulada_en = NOW(), anulada_por_usuario_id = $1, motivo_anulacion = 'Mal cargada' WHERE id = $2`,
+          [b.usuarioId, l5005.id]
+        );
+        const anulada = await estado(tId);
+        assert.deepStrictEqual([anulada.estado, anulada.faltan, anulada.lectura], ['PROXIMA', 0, 500]);
+
+        // Finalizada con la tarea hecha y valor_medidor 510
+        const iF = await crearIntervencion(client, b, planId, 'FINALIZADA', { fin: '2026-03-10 12:00:00-03' });
+        await agregarTareaUso(iF, tId, b.usuarioId, med, 510);
+        const hecha = await estado(tId);
+        assert.deepStrictEqual([hecha.ultimo, hecha.proximo], [510, 760]);
+        assert.ok(hecha.ultima_ejecucion !== null, 'ultima_ejecucion también se calcula en una tarea solo por uso');
+
+        // Cancelada, eliminada o sin la tarea hecha: no cuenta
+        const tNoCuenta = await crearTareaUso(planId, orden++, med, USO_250);
+        const iC = await crearIntervencion(client, b, planId, 'CANCELADA');
+        await agregarTareaUso(iC, tNoCuenta, b.usuarioId, med, 900);
+        const iE = await crearIntervencion(client, b, planId, 'FINALIZADA', { eliminada: true });
+        await agregarTareaUso(iE, tNoCuenta, b.usuarioId, med, 900);
+        const iS = await crearIntervencion(client, b, planId, 'FINALIZADA');
+        await agregarTareaUso(iS, tNoCuenta, b.usuarioId, med, null);
+        const noCuenta = await estado(tNoCuenta);
+        assert.deepStrictEqual([noCuenta.ultimo, noCuenta.proximo], [null, 500], 'Cancelada, eliminada o sin hacer no cuentan');
+
+        // Un valor_medidor de otro medidor no cuenta
+        const otro = await crearMedidor(b, 'Horómetro viejo');
+        const tOtro = await crearTareaUso(planId, orden++, med, USO_250);
+        const iO = await crearIntervencion(client, b, planId, 'FINALIZADA');
+        await agregarTareaUso(iO, tOtro, b.usuarioId, otro, 900);
+        assert.deepStrictEqual([(await estado(tOtro)).ultimo, (await estado(tOtro)).proximo], [null, 500], 'El de otro medidor no cuenta');
+
+        // El medidor inactivo: INACTIVA
+        const inactivo = await crearMedidor(b, 'Contador inactivo');
+        const tInactiva = await crearTareaUso(planId, orden++, inactivo, USO_250);
+        await client.query('UPDATE medidores SET activo = FALSE WHERE id = $1', [inactivo]);
+        assert.strictEqual((await estado(tInactiva)).estado, 'INACTIVA', 'El medidor inactivo');
+
+        // Combinadas: con el plan de anticipación 7 días, y un medidor con su lectura
+        const combinada = async (nombre: string, lectura: number | null, fecha: string) => {
+          const m = await crearMedidor(b, nombre);
+          if (lectura !== null) await crearLectura(b, m, lectura);
+          return estado(await crearTareaUso(planId, orden++, m, USO_250, fecha));
+        };
+        const lejos = '2099-01-01';
+        const fv = new Date(`${hoy}T00:00:00Z`);
+        fv.setUTCDate(fv.getUTCDate() - 3);
+        const vencida = fv.toISOString().slice(0, 10);
+        const fp = new Date(`${hoy}T00:00:00Z`);
+        fp.setUTCDate(fp.getUTCDate() + 3);
+        const proxima = fp.toISOString().slice(0, 10);
+
+        const c1 = await combinada('Combinada 1', 600, lejos);
+        assert.deepStrictEqual([c1.estado_fecha, c1.estado_uso, c1.estado], ['AL_DIA', 'VENCIDA', 'VENCIDA']);
+        const c2 = await combinada('Combinada 2', 100, vencida);
+        assert.deepStrictEqual([c2.estado_fecha, c2.estado_uso, c2.estado], ['VENCIDA', 'AL_DIA', 'VENCIDA']);
+        const c3 = await combinada('Combinada 3', null, proxima);
+        assert.deepStrictEqual([c3.estado_fecha, c3.estado_uso, c3.estado], ['PROXIMA', 'SIN_LECTURA', 'PROXIMA']);
+        const c4 = await combinada('Combinada 4', null, lejos);
+        assert.deepStrictEqual([c4.estado_fecha, c4.estado_uso, c4.estado], ['AL_DIA', 'SIN_LECTURA', 'SIN_LECTURA']);
+      } finally {
+        await client.query('ROLLBACK');
+      }
+    });
+
+    // =========================================================================
+    // M18-10: Reaplicar con datos
+    // =========================================================================
+    await t.test('M18-10: Reaplicar con datos', async () => {
+      // Datos guardados de verdad: el COMMIT de la migración guardaría los de una transacción
+      const b = await crearBase(client);
+      let medidorId: number | null = null;
+      try {
+        const planId = await crearPlan(client, b, 'Plan M18-10');
+        medidorId = await crearMedidor(b);
+        const l1 = await crearLectura(b, medidorId, 100);
+        const l2 = await crearLectura(b, medidorId, 200);
+        await client.query(
+          `UPDATE lecturas_medidor SET anulada_en = NOW(), anulada_por_usuario_id = $1, motivo_anulacion = 'Mal cargada' WHERE id = $2`,
+          [b.usuarioId, l2]
+        );
+        const tareaId = await crearTareaUso(planId, 1, medidorId, USO_250);
+        const intId = await crearIntervencion(client, b, planId, 'FINALIZADA');
+        const itId = await agregarTareaUso(intId, tareaId, b.usuarioId, medidorId, 150);
+
+        const foto = async () => {
+          const r = await client.query(
+            `SELECT
+               (SELECT to_jsonb(x) FROM medidores x WHERE x.id = $1) AS medidor,
+               (SELECT jsonb_agg(to_jsonb(x) ORDER BY x.id) FROM lecturas_medidor x WHERE x.medidor_id = $1) AS lecturas,
+               (SELECT to_jsonb(x) FROM plan_tareas x WHERE x.id = $2) AS tarea,
+               (SELECT to_jsonb(x) FROM intervencion_tareas x WHERE x.id = $3) AS tarea_intervencion,
+               (SELECT to_jsonb(x) - 'hoy' - 'dias' FROM v_plan_tareas_estado x WHERE x.id = $2) AS estado`,
+            [medidorId, tareaId, itId]
+          );
+          return r.rows[0];
+        };
+        const antes = await foto();
+        assert.strictEqual(antes.lecturas.length, 2);
+        assert.deepStrictEqual(
+          [Number(antes.tarea_intervencion.valor_medidor), Number(antes.estado.lectura_actual), Number(antes.estado.ultimo_uso)],
+          [150, 100, 150]
+        );
+        assert.strictEqual(antes.lecturas[0].id, l1);
+
+        await client.query(sqlContent);
+        assert.deepStrictEqual(await foto(), antes, 'Reaplicar no cambia el medidor, las lecturas ni las tareas');
+      } finally {
+        await client.query(
+          `DELETE FROM lecturas_medidor WHERE medidor_id IN (SELECT id FROM medidores WHERE maquina_id = ANY($1))`,
+          [[b.maquinaId, b.maquina2Id]]
+        );
+        await client.query(
+          `DELETE FROM intervencion_tareas WHERE intervencion_id IN (SELECT id FROM intervenciones WHERE maquina_id = ANY($1))`,
+          [[b.maquinaId, b.maquina2Id]]
+        );
+        await client.query(
+          'DELETE FROM plan_tareas WHERE plan_id IN (SELECT id FROM planes_mantenimiento WHERE maquina_id = ANY($1))',
+          [[b.maquinaId, b.maquina2Id]]
+        );
+        await client.query('DELETE FROM medidores WHERE maquina_id = ANY($1)', [[b.maquinaId, b.maquina2Id]]);
+        await borrarBase(client, b);
+      }
     });
   } finally {
     client.release();
