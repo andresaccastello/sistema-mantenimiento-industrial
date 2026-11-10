@@ -1225,3 +1225,52 @@ export interface IntervencionTareasRespuesta {
 export interface TareaIntervencionMarcada extends TareaIntervencion {
   proxima_fecha: string;
 }
+
+// ---------------------------------------------------------------------------
+// Medidores y lecturas (Etapa PV3, D-023)
+// ---------------------------------------------------------------------------
+
+/** La última lectura vigente de un medidor: la de mayor valor. */
+export interface UltimaLecturaMedidor {
+  id: number;
+  valor: number;
+  registrada_en: string;
+  registrada_por: Persona;
+}
+
+/** Un elemento de `GET /api/medidores`. */
+export interface MedidorLista {
+  id: number;
+  nombre: string;
+  unidad: string;
+  activo: boolean;
+  maquina: PlanMaquina;
+  ultima_lectura: UltimaLecturaMedidor | null;
+  /** Las tareas activas que lo usan, de cualquier plan. */
+  tareas_activas: number;
+  creado_en: string;
+  actualizado_en: string;
+}
+
+/** `GET /api/medidores/:id`, y la respuesta del alta, la edición, la baja y el alta de nuevo. */
+export interface MedidorDetalle extends MedidorLista {
+  tareas: Array<{ id: number; accion: string; plan: { id: number; nombre: string; activo: boolean } }>;
+}
+
+export type OrigenLectura = 'MANUAL' | 'TAREA';
+
+/** Una lectura de `GET /api/medidores/:id/lecturas`, también la respuesta de cargarla y de anularla. */
+export interface LecturaMedidor {
+  id: number;
+  valor: number;
+  registrada_en: string;
+  registrada_por: Persona;
+  origen: OrigenLectura;
+  /** La intervención de la tarea, con origen `TAREA`. */
+  intervencion_id: number | null;
+  observacion: string | null;
+  anulada: boolean;
+  anulada_en: string | null;
+  anulada_por: Persona | null;
+  motivo_anulacion: string | null;
+}
