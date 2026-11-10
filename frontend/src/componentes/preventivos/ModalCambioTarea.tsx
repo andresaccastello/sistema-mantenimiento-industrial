@@ -38,6 +38,8 @@ export function ModalCambioTarea({ tarea, cambio, finalizada, onConfirmar, onCer
 
   if (!tarea || !cambio) return null;
   const esObservacion = cambio.tipo === 'observacion';
+  const desmarca = cambio.tipo === 'hecha' && !cambio.hecha;
+  const anulaRepuestos = desmarca && tarea.repuestos_previstos.some((p) => p.estado === 'USADO');
 
   const confirmar = async () => {
     if (finalizada && motivo.trim().length < 5) {
@@ -61,7 +63,9 @@ export function ModalCambioTarea({ tarea, cambio, finalizada, onConfirmar, onCer
 
   const titulo = finalizada
     ? 'Corregir una tarea de una intervención finalizada'
-    : tarea.observacion
+    : desmarca
+      ? 'Desmarcar la tarea'
+      : tarea.observacion
       ? 'Editar observación'
       : 'Agregar observación';
 
@@ -73,6 +77,11 @@ export function ModalCambioTarea({ tarea, cambio, finalizada, onConfirmar, onCer
         </Text>
         {cambio.tipo === 'hecha' && (
           <Text size="sm">{cambio.hecha ? 'Se marca como hecha.' : 'Se desmarca.'}</Text>
+        )}
+        {anulaRepuestos && (
+          <Alert color="yellow" variant="light" icon={<IconInfoCircle size={16} />}>
+            Se anulan los repuestos registrados de esta tarea y vuelven al stock.
+          </Alert>
         )}
         {esObservacion && (
           <Textarea
@@ -113,7 +122,7 @@ export function ModalCambioTarea({ tarea, cambio, finalizada, onConfirmar, onCer
             Cancelar
           </Button>
           <Button color="marca" onClick={confirmar} loading={guardando}>
-            Guardar
+            {desmarca && !finalizada ? 'Desmarcar' : 'Guardar'}
           </Button>
         </Group>
       </Stack>

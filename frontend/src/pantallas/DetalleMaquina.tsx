@@ -536,7 +536,7 @@ export function DetalleMaquina() {
                     <Table.Thead>
                       <Table.Tr>
                         <Table.Th>N.º</Table.Th>
-                        <Table.Th>Estado</Table.Th>
+                        <Table.Th style={{ minWidth: 130 }}>Estado</Table.Th>
                         <Table.Th>Descripción</Table.Th>
                         <Table.Th>Reportada</Table.Th>
                         <Table.Th>Responsable</Table.Th>
@@ -562,7 +562,7 @@ export function DetalleMaquina() {
                           </Table.Td>
                           <Table.Td>
                             <Group gap={6} wrap="nowrap">
-                              {item.tipo === 'PREVENTIVO' && <Badge color="teal" variant="light" size="xs">Preventivo</Badge>}
+                              {item.tipo === 'PREVENTIVO' && <Badge color="teal" variant="light" size="xs" style={{ flexShrink: 0 }}>Preventivo</Badge>}
                               <Text size="sm" lineClamp={1} maw={260}>
                                 {item.descripcion}
                               </Text>

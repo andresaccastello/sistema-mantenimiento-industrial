@@ -22,10 +22,18 @@ import {
   sinErrorDeFila,
   textoPrevistos,
   previstosDeBorrador,
+  filasConfirmar,
+  avisoDisponible,
+  validarConfirmar,
+  cuerpoConfirmar,
+  textoBotonConfirmar,
+  textoEstadoPrevisto,
+  textoPrevistosSinConfirmar,
   BorradorTarea,
+  FilaConfirmar,
 } from './preventivos';
 import { obtenerInfoEstado, ESTADOS_TAREA_PREVENTIVA } from './estados';
-import type { TareaPlan } from '../api/tipos';
+import type { RepuestoPrevistoIntervencion, TareaPlan } from '../api/tipos';
 
 const tareaBase: TareaPlan = {
   id: 41,
@@ -432,5 +440,102 @@ describe('FE-87: sinErrorDeFila', () => {
 
   it('sin errores de filas, no queda la clave', () => {
     assert.deepEqual(sinErrorDeFila({ filas: { 0: { cantidad: 'c' } } }, 0, 'cantidad'), {});
+  });
+});
+
+const previstoBase: RepuestoPrevistoIntervencion = {
+  id: 31,
+  repuesto: { id: 2, codigo: 'AC-68', nombre: 'Aceite ISO 68', unidad: 'litro', lleva_stock: true, cantidad_disponible: 12 },
+  cantidad_prevista: 2.5,
+  estado: 'PREVISTO',
+  consumo: null,
+};
+
+const filaBase: FilaConfirmar = {
+  previstoId: 31, nombre: 'Aceite ISO 68', unidad: 'litro', usado: true, cantidad: 2.5, disponible: 12,
+};
+
+describe('FE-88: filasConfirmar', () => {
+  it('tildada, con la cantidad prevista y el disponible', () => {
+    assert.deepEqual(filasConfirmar([previstoBase]), [filaBase]);
+  });
+
+  it('sin el dato, o si no lleva stock: disponible null', () => {
+    const sinDato = { ...previstoBase, repuesto: { ...previstoBase.repuesto, cantidad_disponible: null } };
+    const sinStock = { ...previstoBase, repuesto: { ...previstoBase.repuesto, lleva_stock: false, cantidad_disponible: 0 } };
+    assert.equal(filasConfirmar([sinDato])[0].disponible, null);
+    assert.equal(filasConfirmar([sinStock])[0].disponible, null);
+  });
+});
+
+describe('FE-89: avisoDisponible', () => {
+  it('alcanza y no alcanza', () => {
+    assert.deepEqual(avisoDisponible(filaBase), { texto: 'Hay 12 litro', alcanza: true });
+    assert.deepEqual(avisoDisponible({ ...filaBase, cantidad: '2,5', disponible: 1.5 }), {
+      texto: 'No alcanza: hay 1,5 litro.', alcanza: false,
+    });
+    assert.equal(avisoDisponible({ ...filaBase, cantidad: 12 })?.alcanza, true);
+  });
+
+  it('sin disponible o destildada: null', () => {
+    assert.equal(avisoDisponible({ ...filaBase, disponible: null }), null);
+    assert.equal(avisoDisponible({ ...filaBase, usado: false }), null);
+  });
+});
+
+describe('FE-90: validarConfirmar', () => {
+  it('sin errores, y las destildadas no se validan', () => {
+    assert.deepEqual(validarConfirmar([filaBase]), {});
+    assert.deepEqual(validarConfirmar([{ ...filaBase, usado: false, cantidad: '' }]), {});
+  });
+
+  it('cantidad inválida y stock que no alcanza, por previsto', () => {
+    const errores = validarConfirmar([
+      { ...filaBase, previstoId: 1, cantidad: '' },
+      { ...filaBase, previstoId: 2, cantidad: 0 },
+      { ...filaBase, previstoId: 3, cantidad: 13 },
+    ]);
+    assert.equal(errores[1], 'Ingresá una cantidad.');
+    assert.equal(errores[2], 'Tiene que ser mayor que cero.');
+    assert.equal(errores[3], 'No alcanza: hay 12 litro.');
+  });
+});
+
+describe('FE-91: cuerpoConfirmar', () => {
+  it('solo las tildadas, con números; sin observación va null, y sin motivo no va', () => {
+    assert.deepEqual(
+      cuerpoConfirmar([{ ...filaBase, cantidad: '2,5' }, { ...filaBase, previstoId: 32, usado: false }], '  ', ''),
+      { hecha: true, repuestos: [{ id: 31, cantidad: 2.5 }], observacion: null }
+    );
+  });
+
+  it('con observación y motivo, recortados; sin tildadas va []', () => {
+    assert.deepEqual(cuerpoConfirmar([{ ...filaBase, usado: false }], ' Hecho ', ' Se cargó tarde '), {
+      hecha: true, repuestos: [], observacion: 'Hecho', motivo: 'Se cargó tarde',
+    });
+  });
+});
+
+describe('FE-92: textoBotonConfirmar', () => {
+  it('sin repuestos, uno y varios', () => {
+    assert.equal(textoBotonConfirmar(0), 'Marcar como hecha');
+    assert.equal(textoBotonConfirmar(1), 'Marcar como hecha y registrar 1 repuesto');
+    assert.equal(textoBotonConfirmar(2), 'Marcar como hecha y registrar 2 repuestos');
+  });
+});
+
+describe('FE-93: textoEstadoPrevisto', () => {
+  it('usado con la cantidad usada, no usado y previsto', () => {
+    assert.equal(textoEstadoPrevisto({ ...previstoBase, estado: 'USADO', consumo: { id: 880, cantidad: 2, anulado: false } }), 'Usado: 2 litro');
+    assert.equal(textoEstadoPrevisto({ ...previstoBase, estado: 'NO_USADO' }), 'No usado');
+    assert.equal(textoEstadoPrevisto(previstoBase), 'Previsto');
+  });
+});
+
+describe('FE-94: textoPrevistosSinConfirmar', () => {
+  it('nada con 0; singular y plural', () => {
+    assert.equal(textoPrevistosSinConfirmar(0), null);
+    assert.equal(textoPrevistosSinConfirmar(1), 'Hay 1 repuesto previsto en las tareas: se registra al marcarla como hecha.');
+    assert.equal(textoPrevistosSinConfirmar(3), 'Hay 3 repuestos previstos en las tareas: se registran al marcarlas como hechas.');
   });
 });

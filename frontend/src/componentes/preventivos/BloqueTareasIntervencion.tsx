@@ -5,22 +5,27 @@ import { notifications } from '@mantine/notifications';
 import { clienteApi } from '../../api/cliente';
 import type { IntervencionTareasRespuesta, TareaIntervencion, TareaIntervencionMarcada } from '../../api/tipos';
 import { mensajeError } from '../../lib/errores';
-import { formatCantidad, formatFechaHora } from '../../lib/formato';
+import { formatFechaHora } from '../../lib/formato';
 import { nombreCompleto } from '../../lib/personas';
-import { formatFechaDia } from '../../lib/preventivos';
+import { formatFechaDia, textoEstadoPrevisto, textoUnPrevisto } from '../../lib/preventivos';
 import { CambioTarea, ModalCambioTarea } from './ModalCambioTarea';
+import { ModalConfirmarTarea } from './ModalConfirmarTarea';
 
 interface Props {
   intervencionId: number;
   estadoIntervencion: string;
 }
 
-/** "Sugerido: Aceite ISO 68 × 2,5 litro · Proveedor X", o null sin nada sugerido. */
-function textoSugerido(t: TareaIntervencion): string | null {
-  const partes: string[] = [];
-  for (const p of t.repuestos_previstos) partes.push(`${p.repuesto.nombre} × ${formatCantidad(p.cantidad_prevista)} ${p.repuesto.unidad}`);
-  if (t.proveedor) partes.push(t.proveedor.nombre);
-  return partes.length > 0 ? `Sugerido: ${partes.join(' · ')}` : null;
+interface CuerpoPatch {
+  hecha: boolean;
+  observacion?: string | null;
+  motivo?: string;
+  repuestos?: Array<{ id: number; cantidad: number }>;
+}
+
+/** "Previsto: Aceite ISO 68 × 2,5 litro · Filtro × 1 unidad". */
+function textoPrevisto(t: TareaIntervencion): string {
+  return `Previsto: ${t.repuestos_previstos.map((p) => textoUnPrevisto(p.repuesto, p.cantidad_prevista)).join(' · ')}`;
 }
 
 /** R3: las tareas del plan de una intervención preventiva (PV2, 5.3). */
@@ -29,7 +34,10 @@ export function BloqueTareasIntervencion({ intervencionId, estadoIntervencion }:
   const finalizada = estadoIntervencion === 'FINALIZADA';
   const [abiertas, setAbiertas] = useState<number[]>([]);
   const [enDialogo, setEnDialogo] = useState<{ tarea: TareaIntervencion; cambio: CambioTarea } | null>(null);
+  const [confirmando, setConfirmando] = useState<TareaIntervencion | null>(null);
   const [marcando, setMarcando] = useState<number | null>(null);
+  /** La tarea con previstos que se quiso tildar en PENDIENTE. */
+  const [avisoPendiente, setAvisoPendiente] = useState<number | null>(null);
 
   const { data, isLoading } = useQuery<IntervencionTareasRespuesta>({
     queryKey: ['intervencion', intervencionId, 'tareas'],
@@ -37,18 +45,25 @@ export function BloqueTareasIntervencion({ intervencionId, estadoIntervencion }:
   });
 
   const refrescar = async () => {
-    for (const clave of [['intervencion', intervencionId], ['planes'], ['plan'], ['vencimientos'], ['tablero']]) {
+    for (const clave of [['intervencion', intervencionId], ['repuestos'], ['planes'], ['plan'], ['vencimientos'], ['tablero']]) {
       await queryClient.invalidateQueries({ queryKey: clave });
     }
   };
 
-  const patch = async (tareaId: number, cuerpo: { hecha: boolean; observacion?: string | null; motivo?: string }) => {
+  const patch = async (tareaId: number, cuerpo: CuerpoPatch) => {
     await clienteApi.patch<TareaIntervencionMarcada>(`/api/intervenciones/${intervencionId}/tareas/${tareaId}`, cuerpo);
     await refrescar();
   };
 
   const marcar = async (t: TareaIntervencion, hecha: boolean) => {
-    if (finalizada) {
+    setAvisoPendiente(null);
+    if (hecha && t.repuestos_previstos.length > 0) {
+      if (estadoIntervencion === 'PENDIENTE') setAvisoPendiente(t.id);
+      else setConfirmando(t);
+      return;
+    }
+    const anulaRepuestos = !hecha && t.repuestos_previstos.some((p) => p.estado === 'USADO');
+    if (finalizada || anulaRepuestos) {
       setEnDialogo({ tarea: t, cambio: { tipo: 'hecha', hecha } });
       return;
     }
@@ -83,27 +98,49 @@ export function BloqueTareasIntervencion({ intervencionId, estadoIntervencion }:
           <Loader size="sm" color="marca" />
         ) : (
           data.tareas.map((t, i) => {
-            const sugerido = textoSugerido(t);
             return (
               <Stack key={t.id} gap={4}>
                 {i > 0 && <Divider />}
-                <Checkbox
-                  checked={t.hecha}
-                  disabled={!data.puede_marcar || marcando === t.id}
-                  onChange={(e) => marcar(t, e.currentTarget.checked)}
-                  label={
-                    <Text size="sm" fw={500}>
-                      {t.accion}
+                <Group gap="xs" wrap="wrap">
+                  <Checkbox
+                    checked={t.hecha}
+                    disabled={!data.puede_marcar || marcando === t.id}
+                    onChange={(e) => marcar(t, e.currentTarget.checked)}
+                    label={
+                      <Text size="sm" fw={500}>
+                        {t.accion}
+                      </Text>
+                    }
+                  />
+                  {avisoPendiente === t.id && (
+                    <Text size="xs" c="orange.8">
+                      Iniciá el trabajo para confirmar los repuestos.
                     </Text>
-                  }
-                />
+                  )}
+                </Group>
                 <Stack gap={2} pl={32}>
                   <Text size="xs" c="dimmed">
                     Programada para {formatFechaDia(t.fecha_programada)}
                   </Text>
-                  {sugerido && (
+                  {!t.hecha && t.repuestos_previstos.length > 0 && (
                     <Text size="xs" c="dimmed">
-                      {sugerido}
+                      {textoPrevisto(t)}
+                    </Text>
+                  )}
+                  {t.hecha &&
+                    t.repuestos_previstos.map((p) => (
+                      <Text key={p.id} size="xs">
+                        <Text span inherit c="dimmed">
+                          {p.repuesto.nombre} ·{' '}
+                        </Text>
+                        <Text span inherit c={p.estado === 'USADO' ? 'green.8' : 'dimmed'}>
+                          {textoEstadoPrevisto(p)}
+                        </Text>
+                      </Text>
+                    ))}
+                  {t.proveedor && (
+                    <Text size="xs" c="dimmed">
+                      Sugerido: {t.proveedor.nombre}
                     </Text>
                   )}
                   {t.hecha && t.hecha_por && (
@@ -157,6 +194,18 @@ export function BloqueTareasIntervencion({ intervencionId, estadoIntervencion }:
           setEnDialogo(null);
         }}
         onCerrar={() => setEnDialogo(null)}
+      />
+
+      <ModalConfirmarTarea
+        tarea={confirmando}
+        finalizada={finalizada}
+        onConfirmar={async (cuerpo) => {
+          if (!confirmando) return;
+          await patch(confirmando.id, cuerpo);
+          notifications.show({ color: 'green', message: 'Tarea guardada.' });
+          setConfirmando(null);
+        }}
+        onCerrar={() => setConfirmando(null)}
       />
     </Card>
   );

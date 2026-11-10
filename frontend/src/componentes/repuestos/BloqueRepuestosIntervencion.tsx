@@ -21,20 +21,24 @@ import {
   IconAlertCircle,
 } from '@tabler/icons-react';
 import { clienteApi } from '../../api/cliente';
-import { IntervencionRepuestosRespuesta } from '../../api/tipos';
+import { IntervencionRepuestosRespuesta, IntervencionTareasRespuesta } from '../../api/tipos';
 import { formatCantidad, formatFechaHora, formatMoneda } from '../../lib/formato';
 import { nombreCompleto } from '../../lib/personas';
+import { textoPrevistosSinConfirmar } from '../../lib/preventivos';
 import { ModalConsumo } from './ModalConsumo';
 import { ModalAnularConsumo, ConsumoParaAnular } from './ModalAnularConsumo';
 
 export interface BloqueRepuestosIntervencionProps {
   intervencionId: number;
   estadoIntervencion: string;
+  /** Si la intervención viene de un plan: solo entonces hay repuestos previstos. */
+  conPlan?: boolean;
 }
 
 export function BloqueRepuestosIntervencion({
   intervencionId,
   estadoIntervencion,
+  conPlan = false,
 }: BloqueRepuestosIntervencionProps) {
   const [modalConsumoAbierto, setModalConsumoAbierto] = useState(false);
   const [consumoParaAnular, setConsumoParaAnular] = useState<ConsumoParaAnular | null>(null);
@@ -42,6 +46,12 @@ export function BloqueRepuestosIntervencion({
   const { data, isLoading, error } = useQuery<IntervencionRepuestosRespuesta>({
     queryKey: ['intervencion', intervencionId, 'repuestos'],
     queryFn: () => clienteApi.get<IntervencionRepuestosRespuesta>(`/api/intervenciones/${intervencionId}/repuestos`),
+  });
+
+  const { data: tareas } = useQuery<IntervencionTareasRespuesta>({
+    queryKey: ['intervencion', intervencionId, 'tareas'],
+    queryFn: () => clienteApi.get<IntervencionTareasRespuesta>(`/api/intervenciones/${intervencionId}/tareas`),
+    enabled: conPlan,
   });
 
   if (isLoading) {
@@ -64,6 +74,7 @@ export function BloqueRepuestosIntervencion({
   const { consumos, total_repuestos, ve_costos, puede_registrar, puede_anular } = data;
   const tieneConsumosVigentes = consumos.some((c) => !c.anulado);
   const esCancelada = estadoIntervencion === 'CANCELADA';
+  const notaPrevistos = textoPrevistosSinConfirmar(tareas?.resumen.previstos_sin_confirmar ?? 0);
 
   return (
     <Paper p="md" withBorder>
@@ -82,6 +93,12 @@ export function BloqueRepuestosIntervencion({
             </Button>
           )}
         </Group>
+
+        {notaPrevistos && (
+          <Text size="sm" c="dimmed">
+            {notaPrevistos}
+          </Text>
+        )}
 
         {esCancelada && tieneConsumosVigentes && puede_anular && (
           <Alert color="yellow" icon={<IconAlertTriangle size={16} />}>

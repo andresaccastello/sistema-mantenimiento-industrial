@@ -276,7 +276,7 @@ export function DetalleIntervencion() {
             {/* Repuestos usados y Pedidos */}
             <BloqueRepuestosIntervencion
               intervencionId={reporte.id}
-              estadoIntervencion={reporte.estado}
+              estadoIntervencion={reporte.estado} conPlan={Boolean(reporte.plan)}
             />
             <BloquePedidosIntervencion
               intervencionId={reporte.id}

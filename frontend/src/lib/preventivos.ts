@@ -6,7 +6,7 @@
  */
 import { formatCantidad, parsearId } from './formato';
 import { validarCantidad } from './repuestos';
-import type { EstadoVencimiento, FrecuenciaUnidad, TareaPlan } from '../api/tipos';
+import type { EstadoVencimiento, FrecuenciaUnidad, RepuestoPrevistoIntervencion, TareaPlan } from '../api/tipos';
 
 // ---------------------------------------------------------------------------
 // Textos
@@ -515,4 +515,90 @@ export function sinErrorDeFila(errores: ErroresTarea, indice: number, campo: 're
     if (Object.keys(copia).length > 0) nuevas[i] = copia;
   }
   return Object.keys(nuevas).length > 0 ? { ...resto, filas: nuevas } : resto;
+}
+
+// ---------------------------------------------------------------------------
+// Confirmar los repuestos al hacer una tarea (PV2.2, sección 5)
+// ---------------------------------------------------------------------------
+
+/** Una fila del diálogo "Marcar como hecha". */
+export interface FilaConfirmar {
+  previstoId: number;
+  nombre: string;
+  unidad: string;
+  usado: boolean;
+  cantidad: number | string;
+  /** null si no se puede ver el stock o el repuesto no lo lleva. */
+  disponible: number | null;
+}
+
+export interface CuerpoConfirmar {
+  hecha: true;
+  repuestos: Array<{ id: number; cantidad: number }>;
+  observacion: string | null;
+  motivo?: string;
+}
+
+/** Una fila por previsto: tildada, con la cantidad prevista. */
+export function filasConfirmar(previstos: RepuestoPrevistoIntervencion[]): FilaConfirmar[] {
+  return previstos.map((p) => ({
+    previstoId: p.id,
+    nombre: p.repuesto.nombre,
+    unidad: p.repuesto.unidad,
+    usado: true,
+    cantidad: p.cantidad_prevista,
+    disponible: p.repuesto.lleva_stock ? p.repuesto.cantidad_disponible : null,
+  }));
+}
+
+/** "Hay 12 litro", o "No alcanza: hay 1,5 litro." si se pide más. null sin dato o sin tildar. */
+export function avisoDisponible(f: FilaConfirmar): { texto: string; alcanza: boolean } | null {
+  if (!f.usado || f.disponible === null) return null;
+  const hay = `${formatCantidad(f.disponible)} ${f.unidad}`;
+  return numero(f.cantidad) > f.disponible
+    ? { texto: `No alcanza: hay ${hay}.`, alcanza: false }
+    : { texto: `Hay ${hay}`, alcanza: true };
+}
+
+/** Los errores por `previstoId`, solo de las filas tildadas; vacío si está bien. */
+export function validarConfirmar(filas: FilaConfirmar[]): Record<number, string> {
+  const errores: Record<number, string> = {};
+  for (const f of filas) {
+    if (!f.usado) continue;
+    const error = validarCantidad(f.cantidad);
+    const aviso = avisoDisponible(f);
+    if (error) errores[f.previstoId] = error;
+    else if (aviso && !aviso.alcanza) errores[f.previstoId] = aviso.texto;
+  }
+  return errores;
+}
+
+/** El cuerpo del PATCH: las filas tildadas, con su cantidad. Las otras quedan NO_USADO. */
+export function cuerpoConfirmar(filas: FilaConfirmar[], observacion: string, motivo: string): CuerpoConfirmar {
+  const cuerpo: CuerpoConfirmar = {
+    hecha: true,
+    repuestos: filas.filter((f) => f.usado).map((f) => ({ id: f.previstoId, cantidad: numero(f.cantidad) })),
+    observacion: observacion.trim() || null,
+  };
+  if (motivo.trim()) cuerpo.motivo = motivo.trim();
+  return cuerpo;
+}
+
+export function textoBotonConfirmar(n: number): string {
+  if (n === 0) return 'Marcar como hecha';
+  return `Marcar como hecha y registrar ${n} ${n === 1 ? 'repuesto' : 'repuestos'}`;
+}
+
+/** "Usado: 2 litro", "No usado" o "Previsto". */
+export function textoEstadoPrevisto(previsto: RepuestoPrevistoIntervencion): string {
+  if (previsto.estado === 'NO_USADO') return 'No usado';
+  if (previsto.estado === 'PREVISTO') return 'Previsto';
+  return `Usado: ${formatCantidad(previsto.consumo?.cantidad)} ${previsto.repuesto.unidad}`;
+}
+
+/** La nota del bloque "Repuestos usados", o null si no hay previstos sin confirmar. */
+export function textoPrevistosSinConfirmar(n: number): string | null {
+  if (n <= 0) return null;
+  if (n === 1) return 'Hay 1 repuesto previsto en las tareas: se registra al marcarla como hecha.';
+  return `Hay ${n} repuestos previstos en las tareas: se registran al marcarlas como hechas.`;
 }
