@@ -18,7 +18,7 @@ interface Props {
 /** "Sugerido: Aceite ISO 68 × 2,5 litro · Proveedor X", o null sin nada sugerido. */
 function textoSugerido(t: TareaIntervencion): string | null {
   const partes: string[] = [];
-  if (t.repuesto) partes.push(`${t.repuesto.nombre} × ${formatCantidad(t.cantidad)} ${t.repuesto.unidad}`);
+  for (const p of t.repuestos_previstos) partes.push(`${p.repuesto.nombre} × ${formatCantidad(p.cantidad_prevista)} ${p.repuesto.unidad}`);
   if (t.proveedor) partes.push(t.proveedor.nombre);
   return partes.length > 0 ? `Sugerido: ${partes.join(' · ')}` : null;
 }

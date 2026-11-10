@@ -6,20 +6,35 @@ import { TareaValida, Unidad } from './validaciones.ts';
 const SQL_TAREAS_PLAN = `
   SELECT v.id, v.orden, v.accion, v.detalle, v.frecuencia_valor, v.frecuencia_unidad,
          to_char(v.primera_fecha, 'YYYY-MM-DD') AS primera_fecha,
-         r.id AS rep_id, r.codigo AS rep_codigo, r.nombre AS rep_nombre, r.unidad AS rep_unidad,
-         v.cantidad, pr.id AS prov_id, pr.nombre AS prov_nombre, v.activo,
+         pr.id AS prov_id, pr.nombre AS prov_nombre, v.activo,
          to_char(v.ultima_ejecucion, 'YYYY-MM-DD') AS ultima_ejecucion,
          to_char(v.proxima_fecha, 'YYYY-MM-DD') AS proxima_fecha,
          v.dias, v.estado, v.intervencion_en_curso_id, v.intervencion_en_curso_estado
   FROM v_plan_tareas_estado v
-  LEFT JOIN repuestos r ON r.id = v.repuesto_id
   LEFT JOIN proveedores pr ON pr.id = v.proveedor_id
 `;
 
-export function repuestoSugerido(r: Record<string, any>) {
-  return r.rep_id === null
-    ? null
-    : { id: Number(r.rep_id), codigo: r.rep_codigo, nombre: r.rep_nombre, unidad: r.rep_unidad };
+/** Los repuestos previstos de las tareas de un plan, por tarea y en su orden. */
+async function previstosDeTareas(db: pg.Pool | pg.PoolClient, tareaIds: number[]) {
+  const porTarea = new Map<number, Array<{ repuesto: Record<string, unknown>; cantidad: number }>>();
+  if (tareaIds.length === 0) return porTarea;
+  const res = await db.query(
+    `SELECT ptr.plan_tarea_id, ptr.cantidad, r.id, r.codigo, r.nombre, r.unidad
+     FROM plan_tarea_repuestos ptr
+     JOIN repuestos r ON r.id = ptr.repuesto_id
+     WHERE ptr.plan_tarea_id = ANY($1::bigint[])
+     ORDER BY ptr.plan_tarea_id, ptr.orden`,
+    [tareaIds]
+  );
+  for (const x of res.rows) {
+    const id = Number(x.plan_tarea_id);
+    if (!porTarea.has(id)) porTarea.set(id, []);
+    porTarea.get(id)!.push({
+      repuesto: { id: Number(x.id), codigo: x.codigo, nombre: x.nombre, unidad: x.unidad },
+      cantidad: Number(x.cantidad),
+    });
+  }
+  return porTarea;
 }
 
 export function proveedorSugerido(r: Record<string, any>) {
@@ -32,7 +47,7 @@ function enCurso(r: Record<string, any>) {
     : { id: Number(r.intervencion_en_curso_id), estado: r.intervencion_en_curso_estado };
 }
 
-function tareaPlan(r: Record<string, any>) {
+function tareaPlan(r: Record<string, any>, repuestos: Array<{ repuesto: Record<string, unknown>; cantidad: number }>) {
   return {
     id: Number(r.id),
     orden: Number(r.orden),
@@ -41,8 +56,7 @@ function tareaPlan(r: Record<string, any>) {
     frecuencia_valor: Number(r.frecuencia_valor),
     frecuencia_unidad: r.frecuencia_unidad,
     primera_fecha: r.primera_fecha,
-    repuesto: repuestoSugerido(r),
-    cantidad: r.cantidad === null ? null : Number(r.cantidad),
+    repuestos,
     proveedor: proveedorSugerido(r),
     activo: Boolean(r.activo),
     ultima_ejecucion: r.ultima_ejecucion,
@@ -75,6 +89,8 @@ export async function obtenerDetallePlan(db: pg.Pool | pg.PoolClient, planId: nu
 
   const resT = await db.query(`${SQL_TAREAS_PLAN} WHERE v.plan_id = $1 ORDER BY v.orden, v.id`, [planId]);
 
+  const previstos = await previstosDeTareas(db, resT.rows.map((t) => Number(t.id)));
+
   const resI = await db.query(
     `SELECT i.id, i.estado, i.fecha_creacion, i.fecha_finalizacion, ${columnasPersona('ur', 'resp')}
      FROM intervenciones i
@@ -103,7 +119,7 @@ export async function obtenerDetallePlan(db: pg.Pool | pg.PoolClient, planId: nu
     creado_por: persona(p, 'creador'),
     creado_en: p.creado_en,
     actualizado_en: p.actualizado_en,
-    tareas: resT.rows.map(tareaPlan),
+    tareas: resT.rows.map((t) => tareaPlan(t, previstos.get(Number(t.id)) ?? [])),
     intervenciones: resI.rows.map((i) => ({
       id: Number(i.id),
       estado: i.estado,
@@ -294,13 +310,17 @@ export async function leerTareaParaCambiar(
   const r = await client.query(
     `SELECT accion, detalle, frecuencia_valor, frecuencia_unidad,
             to_char(primera_fecha, 'YYYY-MM-DD') AS primera_fecha,
-            repuesto_id, cantidad, proveedor_id, activo
+            proveedor_id, activo
      FROM plan_tareas WHERE id = $1 AND plan_id = $2
      FOR UPDATE`,
     [tareaId, planId]
   );
   if (r.rows.length === 0) return null;
   const x = r.rows[0];
+  const previstos = await client.query(
+    'SELECT repuesto_id, cantidad FROM plan_tarea_repuestos WHERE plan_tarea_id = $1 ORDER BY orden',
+    [tareaId]
+  );
   return {
     activo: Boolean(x.activo),
     tarea: {
@@ -309,8 +329,7 @@ export async function leerTareaParaCambiar(
       frecuencia_valor: Number(x.frecuencia_valor),
       frecuencia_unidad: x.frecuencia_unidad as Unidad,
       primera_fecha: x.primera_fecha,
-      repuesto_id: x.repuesto_id === null ? null : Number(x.repuesto_id),
-      cantidad: x.cantidad === null ? null : Number(x.cantidad),
+      repuestos: previstos.rows.map((p) => ({ repuesto_id: Number(p.repuesto_id), cantidad: Number(p.cantidad) })),
       proveedor_id: x.proveedor_id === null ? null : Number(x.proveedor_id),
     },
   };

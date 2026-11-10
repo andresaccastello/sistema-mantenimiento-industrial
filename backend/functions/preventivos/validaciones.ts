@@ -74,6 +74,12 @@ export function validarFrecuencia(valor: unknown, unidad: unknown): { valor: num
   return { valor, unidad: u };
 }
 
+/** Un repuesto previsto de una tarea (D-022). */
+export interface RepuestoPrevisto {
+  repuesto_id: number;
+  cantidad: number;
+}
+
 /** Una tarea validada, lista para guardar. */
 export interface TareaValida {
   accion: string;
@@ -81,8 +87,7 @@ export interface TareaValida {
   frecuencia_valor: number;
   frecuencia_unidad: Unidad;
   primera_fecha: string;
-  repuesto_id: number | null;
-  cantidad: number | null;
+  repuestos: RepuestoPrevisto[];
   proveedor_id: number | null;
 }
 
@@ -93,18 +98,48 @@ const CAMPOS_TAREA = [
   'frecuencia_valor',
   'frecuencia_unidad',
   'primera_fecha',
-  'repuesto_id',
-  'cantidad',
+  'repuestos',
   'proveedor_id',
 ] as const;
 
 /** Campos de la tarea que no se cambian por el alta ni por el PATCH. */
 const CAMPOS_TAREA_PROHIBIDOS = ['id', 'plan_id', 'orden', 'activo'];
 
+const MAXIMO_PREVISTOS = 10;
+
+function conIndiceRepuesto(err: unknown, indice: number): unknown {
+  if (err instanceof ErrorNegocio) {
+    return new ErrorNegocio(err.status, err.codigo, err.mensaje, { ...(err.detalles || {}), indice_repuesto: indice });
+  }
+  return err;
+}
+
+/** `repuestos` de una tarea: de 0 a 10, sin repetir repuesto, con las cantidades de un consumo. */
+function validarListaPrevistos(raw: unknown): RepuestoPrevisto[] {
+  if (!Array.isArray(raw) || raw.length > MAXIMO_PREVISTOS) {
+    throw invalido(`El campo repuestos debe ser una lista de hasta ${MAXIMO_PREVISTOS} elementos`);
+  }
+  const vistos = new Set<number>();
+  return raw.map((item, indice) => {
+    try {
+      if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+        throw invalido('Cada repuesto previsto debe ser un objeto');
+      }
+      const b = item as Record<string, unknown>;
+      const repuesto_id = validarIdCuerpo(b.repuesto_id, 'REPUESTO_INVALIDO', 'repuesto_id');
+      if (vistos.has(repuesto_id)) throw invalido('El repuesto está repetido en la lista');
+      vistos.add(repuesto_id);
+      return { repuesto_id, cantidad: validarCantidad(b.cantidad, 'cantidad') };
+    } catch (err) {
+      throw conIndiceRepuesto(err, indice);
+    }
+  });
+}
+
 /**
  * Valida una tarea sin tocar la base. Con `actual`, es un PATCH: los campos que no
  * vienen quedan como están, y se validan solo los que vienen; las reglas que cruzan
- * campos (frecuencia, repuesto y cantidad) se controlan sobre el resultado.
+ * campos (la frecuencia) se controlan sobre el resultado. En el PATCH, `repuestos` reemplaza la lista.
  */
 export function validarTarea(raw: unknown, hoy: Hoy, actual?: TareaValida): TareaValida {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
@@ -114,6 +149,7 @@ export function validarTarea(raw: unknown, hoy: Hoy, actual?: TareaValida): Tare
   for (const campo of CAMPOS_TAREA_PROHIBIDOS) {
     if (campo in b) throw invalido(`El campo ${campo} de una tarea no se cambia por acá`);
   }
+  if ('repuesto_id' in b || 'cantidad' in b) throw invalido('Usá repuestos.');
   const viene = (campo: (typeof CAMPOS_TAREA)[number]) => !actual || campo in b;
 
   const accion = viene('accion') ? textoObligatorio(b.accion, 'accion', 3, 200) : actual!.accion;
@@ -126,19 +162,8 @@ export function validarTarea(raw: unknown, hoy: Hoy, actual?: TareaValida): Tare
 
   const primera_fecha = viene('primera_fecha') ? validarPrimeraFecha(b.primera_fecha, hoy) : actual!.primera_fecha;
 
-  const repuesto_id = viene('repuesto_id')
-    ? presente(b.repuesto_id)
-      ? validarIdCuerpo(b.repuesto_id, 'REPUESTO_INVALIDO', 'repuesto_id')
-      : null
-    : actual!.repuesto_id;
-  const cantidad = viene('cantidad')
-    ? presente(b.cantidad)
-      ? validarCantidad(b.cantidad, 'cantidad')
-      : null
-    : actual!.cantidad;
-  if ((repuesto_id === null) !== (cantidad === null)) {
-    throw invalido('El repuesto sugerido y su cantidad van juntos');
-  }
+  const repuestos =
+    'repuestos' in b ? validarListaPrevistos(b.repuestos) : actual ? actual.repuestos : [];
 
   const proveedor_id = viene('proveedor_id')
     ? presente(b.proveedor_id)
@@ -152,27 +177,49 @@ export function validarTarea(raw: unknown, hoy: Hoy, actual?: TareaValida): Tare
     frecuencia_valor: frecuencia.valor,
     frecuencia_unidad: frecuencia.unidad,
     primera_fecha,
-    repuesto_id,
-    cantidad,
+    repuestos,
     proveedor_id,
   };
 }
 
 /**
- * El repuesto y el proveedor de una tarea: activos, leídos con FOR SHARE.
- * Con `actual`, solo los que cambian: uno que ya estaba y se desactivó después no frena el cambio.
+ * Lee los repuestos con FOR SHARE, en orden de id para no trabarse con una confirmación.
+ * Devuelve cuáles están activos.
  */
-export async function validarReferenciasTarea(
+export async function leerRepuestosActivos(client: pg.PoolClient, ids: number[]): Promise<Map<number, boolean>> {
+  const activos = new Map<number, boolean>();
+  if (ids.length === 0) return activos;
+  const r = await client.query(
+    'SELECT id, activo FROM repuestos WHERE id = ANY($1::bigint[]) ORDER BY id FOR SHARE',
+    [[...new Set(ids)]]
+  );
+  for (const x of r.rows) activos.set(Number(x.id), Boolean(x.activo));
+  return activos;
+}
+
+/**
+ * Los repuestos de una tarea, ya leídos: activos. Con `actual`, solo los que no estaban:
+ * uno que ya estaba y se desactivó después no impide guardar la misma lista.
+ */
+export function controlarRepuestosTarea(
+  tarea: TareaValida,
+  activos: Map<number, boolean>,
+  actual?: TareaValida
+): void {
+  const yaEstaban = new Set((actual?.repuestos ?? []).map((r) => r.repuesto_id));
+  tarea.repuestos.forEach((r, indice) => {
+    if (!yaEstaban.has(r.repuesto_id) && !activos.get(r.repuesto_id)) {
+      throw new ErrorNegocio(422, 'REPUESTO_INVALIDO', 'El repuesto no existe o está inactivo', { indice_repuesto: indice });
+    }
+  });
+}
+
+/** El proveedor de una tarea: activo, leído con FOR SHARE. Con `actual`, solo si cambia. */
+export async function validarProveedorTarea(
   client: pg.PoolClient,
   tarea: TareaValida,
   actual?: TareaValida
 ): Promise<void> {
-  if (tarea.repuesto_id !== null && tarea.repuesto_id !== actual?.repuesto_id) {
-    const r = await client.query('SELECT activo FROM repuestos WHERE id = $1 FOR SHARE', [tarea.repuesto_id]);
-    if (r.rows.length === 0 || !r.rows[0].activo) {
-      throw new ErrorNegocio(422, 'REPUESTO_INVALIDO', 'El repuesto no existe o está inactivo');
-    }
-  }
   if (tarea.proveedor_id !== null && tarea.proveedor_id !== actual?.proveedor_id) {
     const r = await client.query('SELECT activo FROM proveedores WHERE id = $1 FOR SHARE', [tarea.proveedor_id]);
     if (r.rows.length === 0 || !r.rows[0].activo) {

@@ -10,7 +10,15 @@ import { UsuarioVisibilidad, puedeVerIntervencion } from './intervenciones/visib
 import { registrarAuditoria } from './intervenciones/auditoria.ts';
 import { parseIdRuta } from './repuestos/validaciones.ts';
 import { columnasPersona, getUsuarioContext, persona } from './preventivos/comun.ts';
-import { proveedorSugerido, repuestoSugerido } from './preventivos/consultas.ts';
+import { proveedorSugerido } from './preventivos/consultas.ts';
+import { validarCantidad, validarIdCuerpo } from './repuestos/validaciones.ts';
+import {
+  anularConsumo,
+  autorizarAnulacionConsumo,
+  autorizarRegistroConsumo,
+  bloquearRepuestosOrdenados,
+  registrarConsumo,
+} from './repuestos/consumos.ts';
 
 /**
  * Etapa PV1, sección 6.2: las tareas de una intervención preventiva.
@@ -53,18 +61,68 @@ const SQL_TAREAS = `
   SELECT it.id, it.plan_tarea_id, it.orden, it.accion, it.detalle,
          to_char(it.fecha_programada, 'YYYY-MM-DD') AS fecha_programada,
          it.hecha, it.hecha_en, it.observacion,
-         r.id AS rep_id, r.codigo AS rep_codigo, r.nombre AS rep_nombre, r.unidad AS rep_unidad,
-         pt.cantidad, pr.id AS prov_id, pr.nombre AS prov_nombre,
+         pr.id AS prov_id, pr.nombre AS prov_nombre,
          ${columnasPersona('uh', 'hecha_por')}
   FROM intervencion_tareas it
   JOIN plan_tareas pt ON pt.id = it.plan_tarea_id
-  LEFT JOIN repuestos r ON r.id = pt.repuesto_id
   LEFT JOIN proveedores pr ON pr.id = pt.proveedor_id
   LEFT JOIN usuarios uh ON uh.id = it.hecha_por_usuario_id
 `;
 
-/** Una tarea como en el GET: el repuesto, la cantidad y el proveedor salen de la tarea del plan de hoy. */
-function tareaIntervencion(r: Record<string, any>) {
+/** Ve el stock quien puede abrir las opciones de repuestos de la intervención. */
+function veStock(usuario: UsuarioVisibilidad): boolean {
+  return ['REPUESTOS_GESTIONAR', 'INTERVENCIONES_CAMBIAR_ESTADO', 'PLANES_GESTIONAR'].some((p) => p in usuario.permisos);
+}
+
+type EstadoPrevisto = 'PREVISTO' | 'USADO' | 'NO_USADO';
+
+/** Los previstos de las tareas, por tarea y en su orden, con su consumo (D-022). */
+async function previstosDeTareas(
+  db: pg.Pool | pg.PoolClient,
+  tareas: Array<{ id: unknown; hecha: unknown }>,
+  conStock: boolean
+) {
+  const porTarea = new Map<number, Array<Record<string, unknown>>>();
+  if (tareas.length === 0) return porTarea;
+  const hechas = new Map(tareas.map((t) => [Number(t.id), Boolean(t.hecha)]));
+  const res = await db.query(
+    `SELECT itr.id, itr.intervencion_tarea_id, itr.cantidad_prevista,
+            r.id AS rep_id, r.codigo AS rep_codigo, r.nombre AS rep_nombre, r.unidad AS rep_unidad,
+            r.lleva_stock, r.cantidad_disponible,
+            ir.id AS consumo_id, ir.cantidad AS consumo_cantidad, ir.anulado_en
+     FROM intervencion_tarea_repuestos itr
+     JOIN repuestos r ON r.id = itr.repuesto_id
+     LEFT JOIN intervencion_repuestos ir ON ir.id = itr.consumo_id
+     WHERE itr.intervencion_tarea_id = ANY($1::bigint[])
+     ORDER BY itr.intervencion_tarea_id, itr.orden`,
+    [[...hechas.keys()]]
+  );
+  for (const x of res.rows) {
+    const tareaId = Number(x.intervencion_tarea_id);
+    const conConsumo = x.consumo_id !== null;
+    const anulado = conConsumo && x.anulado_en !== null;
+    const estado: EstadoPrevisto = !hechas.get(tareaId) ? 'PREVISTO' : conConsumo && !anulado ? 'USADO' : 'NO_USADO';
+    if (!porTarea.has(tareaId)) porTarea.set(tareaId, []);
+    porTarea.get(tareaId)!.push({
+      id: Number(x.id),
+      repuesto: {
+        id: Number(x.rep_id),
+        codigo: x.rep_codigo,
+        nombre: x.rep_nombre,
+        unidad: x.rep_unidad,
+        lleva_stock: Boolean(x.lleva_stock),
+        cantidad_disponible: conStock ? Number(x.cantidad_disponible) : null,
+      },
+      cantidad_prevista: Number(x.cantidad_prevista),
+      estado,
+      consumo: conConsumo ? { id: Number(x.consumo_id), cantidad: Number(x.consumo_cantidad), anulado } : null,
+    });
+  }
+  return porTarea;
+}
+
+/** Una tarea como en el GET: el proveedor sale de la tarea del plan de hoy; los previstos, de la intervención. */
+function tareaIntervencion(r: Record<string, any>, repuestosPrevistos: Array<Record<string, unknown>>) {
   return {
     id: Number(r.id),
     plan_tarea_id: Number(r.plan_tarea_id),
@@ -72,8 +130,7 @@ function tareaIntervencion(r: Record<string, any>) {
     accion: r.accion,
     detalle: r.detalle,
     fecha_programada: r.fecha_programada,
-    repuesto: repuestoSugerido(r),
-    cantidad: r.cantidad === null ? null : Number(r.cantidad),
+    repuestos_previstos: repuestosPrevistos,
     proveedor: proveedorSugerido(r),
     hecha: Boolean(r.hecha),
     hecha_por: persona(r, 'hecha_por'),
@@ -82,9 +139,51 @@ function tareaIntervencion(r: Record<string, any>) {
   };
 }
 
-async function leerTarea(db: pg.Pool | pg.PoolClient, intervencionId: number, tareaId: number) {
+async function leerTarea(db: pg.Pool | pg.PoolClient, intervencionId: number, tareaId: number, conStock: boolean) {
   const r = await db.query(`${SQL_TAREAS} WHERE it.id = $1 AND it.intervencion_id = $2`, [tareaId, intervencionId]);
-  return r.rows.length === 0 ? null : tareaIntervencion(r.rows[0]);
+  if (r.rows.length === 0) return null;
+  const previstos = await previstosDeTareas(db, r.rows, conStock);
+  return tareaIntervencion(r.rows[0], previstos.get(tareaId) ?? []);
+}
+
+function conPrevisto(err: unknown, previstoId: number): unknown {
+  if (err instanceof ErrorNegocio) {
+    return new ErrorNegocio(err.status, err.codigo, err.mensaje, { ...(err.detalles || {}), previsto_id: previstoId });
+  }
+  return err;
+}
+
+interface PrevistoFila {
+  id: number;
+  repuesto_id: number;
+  consumo_id: number | null;
+}
+
+/** `repuestos` del PATCH: los previstos que se usaron, de esta tarea, sin repetir, en el orden de la tarea. */
+function validarUsados(raw: unknown, previstos: PrevistoFila[]): Array<{ previsto: PrevistoFila; cantidad: number }> {
+  if (!Array.isArray(raw)) {
+    throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo repuestos es obligatorio al marcar una tarea con repuestos previstos');
+  }
+  const cantidades = new Map<number, number>();
+  for (const item of raw) {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'Cada repuesto usado debe ser un objeto');
+    }
+    const b = item as Record<string, unknown>;
+    const id = validarIdCuerpo(b.id, 'DATOS_INVALIDOS', 'id');
+    if (!previstos.some((p) => p.id === id)) {
+      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'Ese repuesto no está previsto en esta tarea', { previsto_id: id });
+    }
+    if (cantidades.has(id)) {
+      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El repuesto previsto está repetido', { previsto_id: id });
+    }
+    try {
+      cantidades.set(id, validarCantidad(b.cantidad, 'cantidad'));
+    } catch (err) {
+      throw conPrevisto(err, id);
+    }
+  }
+  return previstos.filter((p) => cantidades.has(p.id)).map((previsto) => ({ previsto, cantidad: cantidades.get(previsto.id)! }));
 }
 
 /**
@@ -115,12 +214,20 @@ intervencionTareasApp.get('/:id/tareas', requirePermission('INTERVENCIONES_VER')
     if (!visible) throw intervencionNoEncontrada();
 
     const resT = await pool.query(`${SQL_TAREAS} WHERE it.intervencion_id = $1 ORDER BY it.orden, it.id`, [id]);
-    const tareas = resT.rows.map(tareaIntervencion);
+    const previstos = await previstosDeTareas(pool, resT.rows, veStock(usuario));
+    const tareas = resT.rows.map((t) => tareaIntervencion(t, previstos.get(Number(t.id)) ?? []));
     const conPlan = i.plan_mantenimiento_id !== null;
+    const previstosSinConfirmar = tareas
+      .filter((t) => !t.hecha)
+      .reduce((total, t) => total + t.repuestos_previstos.length, 0);
 
     return c.json({
       tareas,
-      resumen: { total: tareas.length, hechas: tareas.filter((x) => x.hecha).length },
+      resumen: {
+        total: tareas.length,
+        hechas: tareas.filter((x) => x.hecha).length,
+        previstos_sin_confirmar: previstosSinConfirmar,
+      },
       puede_marcar: conPlan && errorAlMarcar(usuario, { estado: i.estado, responsable_usuario_id: responsableId }) === null,
     });
   } catch (error) {
@@ -197,6 +304,62 @@ intervencionTareasApp.patch('/:id/tareas/:tareaId', async (c) => {
       const cambiaObservacion = observacion !== undefined && observacion !== actual.observacion;
       if (!cambiaHecha && !cambiaObservacion) return; // El mismo valor: nada cambia, ni deja auditoría
 
+      const resPrevistos = await client.query(
+        'SELECT id, repuesto_id, consumo_id FROM intervencion_tarea_repuestos WHERE intervencion_tarea_id = $1 ORDER BY orden FOR UPDATE',
+        [tareaId]
+      );
+      const previstos: PrevistoFila[] = resPrevistos.rows.map((p) => ({
+        id: Number(p.id),
+        repuesto_id: Number(p.repuesto_id),
+        consumo_id: p.consumo_id === null ? null : Number(p.consumo_id),
+      }));
+
+      // Al marcar con previstos: se registra lo que se usó, todo o nada (D-022)
+      if (cambiaHecha && hecha && previstos.length > 0) {
+        if (intervencion.estado === 'PENDIENTE') {
+          throw new ErrorNegocio(409, 'ESTADO_NO_PERMITE_REPUESTOS', 'Iniciá el trabajo para confirmar los repuestos de esta tarea.');
+        }
+        const motivoConsumo = autorizarRegistroConsumo(usuario, intervencion, b.motivo);
+        const usados = validarUsados(b.repuestos, previstos);
+        await bloquearRepuestosOrdenados(client, usados.map((u) => u.previsto.repuesto_id));
+        for (const { previsto, cantidad } of usados) {
+          try {
+            const consumoId = await registrarConsumo(client, {
+              intervencionId: id,
+              estadoIntervencion: intervencion.estado,
+              usuarioId: usuario.id,
+              repuestoId: previsto.repuesto_id,
+              cantidad,
+              observacion: `Previsto en la tarea «${actual.accion}»`,
+              motivo: motivoConsumo,
+            });
+            await client.query('UPDATE intervencion_tarea_repuestos SET consumo_id = $1 WHERE id = $2', [consumoId, previsto.id]);
+          } catch (err) {
+            throw conPrevisto(err, previsto.id);
+          }
+        }
+      }
+
+      // Al desmarcar: se anulan sus consumos y el stock vuelve; los ya anulados se saltean
+      if (cambiaHecha && !hecha) {
+        const conConsumo = previstos.filter((p) => p.consumo_id !== null);
+        if (conConsumo.length > 0) {
+          autorizarAnulacionConsumo(usuario, intervencion);
+          await bloquearRepuestosOrdenados(client, conConsumo.map((p) => p.repuesto_id));
+          for (const p of conConsumo) {
+            await anularConsumo(client, {
+              intervencionId: id,
+              estadoIntervencion: intervencion.estado,
+              usuarioId: usuario.id,
+              consumoId: p.consumo_id as number,
+              motivo: finalizada ? motivo : `Se desmarcó la tarea «${actual.accion}»`,
+              saltearAnulado: true,
+            });
+          }
+          await client.query('UPDATE intervencion_tarea_repuestos SET consumo_id = NULL WHERE intervencion_tarea_id = $1', [tareaId]);
+        }
+      }
+
       if (cambiaHecha) {
         await client.query(
           `UPDATE intervencion_tareas
@@ -229,7 +392,7 @@ intervencionTareasApp.patch('/:id/tareas/:tareaId', async (c) => {
       }
     });
 
-    const tarea = await leerTarea(pool, id, tareaId as number);
+    const tarea = await leerTarea(pool, id, tareaId as number, veStock(usuario));
     const resP = await pool.query(
       `SELECT to_char(v.proxima_fecha, 'YYYY-MM-DD') AS proxima_fecha
        FROM intervencion_tareas it JOIN v_plan_tareas_estado v ON v.id = it.plan_tarea_id

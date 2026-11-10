@@ -133,7 +133,14 @@ export async function generarDesdePlan(
     [intervencionId, usuario.id, `Generada desde el plan «${plan.nombre}»`]
   );
 
-  // 5. Las tareas, copiadas del plan
+  // 5. Las tareas, copiadas del plan, con sus repuestos previstos (también los inactivos).
+  // Los repuestos se toman en orden de id, para no trabarse con una confirmación.
+  await client.query(
+    `SELECT r.id FROM repuestos r
+     WHERE r.id IN (SELECT repuesto_id FROM plan_tarea_repuestos WHERE plan_tarea_id = ANY($1::bigint[]))
+     ORDER BY r.id FOR KEY SHARE`,
+    [elegidas.map((e) => e.id)]
+  );
   const tareas: Generada['tareas'] = [];
   for (const e of elegidas) {
     const r = await client.query(
@@ -141,6 +148,11 @@ export async function generarDesdePlan(
        VALUES ($1, $2, $3, $4, $5, $6::date)
        RETURNING id`,
       [intervencionId, e.id, e.orden, e.accion, e.detalle, e.proxima_fecha]
+    );
+    await client.query(
+      `INSERT INTO intervencion_tarea_repuestos (intervencion_tarea_id, repuesto_id, cantidad_prevista, orden)
+       SELECT $1, repuesto_id, cantidad, orden FROM plan_tarea_repuestos WHERE plan_tarea_id = $2`,
+      [r.rows[0].id, e.id]
     );
     tareas.push({
       id: Number(r.rows[0].id),

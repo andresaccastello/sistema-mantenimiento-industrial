@@ -31,8 +31,7 @@ const tareaBase: TareaPlan = {
   frecuencia_valor: 6,
   frecuencia_unidad: 'MESES',
   primera_fecha: '2026-11-01',
-  repuesto: null,
-  cantidad: null,
+  repuestos: [],
   proveedor: null,
   activo: true,
   ultima_ejecucion: null,
@@ -159,8 +158,7 @@ describe('FE-71: cuerpoPlan y cuerpoTarea', () => {
     const original = borradorDeTarea({
       ...tareaBase,
       detalle: 'Con el equipo frío',
-      repuesto: { id: 2, codigo: 'AC-68', nombre: 'Aceite', unidad: 'litro' },
-      cantidad: 2.5,
+      repuestos: [{ repuesto: { id: 2, codigo: 'AC-68', nombre: 'Aceite', unidad: 'litro' }, cantidad: 2.5 }],
     });
     assert.deepEqual(cuerpoTarea(original, original), {});
     assert.deepEqual(cuerpoTarea({ ...original, frecuenciaValor: 3 }, original), { frecuencia_valor: 3 });

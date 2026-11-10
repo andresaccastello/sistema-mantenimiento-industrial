@@ -20,7 +20,9 @@ import {
   textoObligatorio,
   textoOpcional,
   validarAnticipacion,
-  validarReferenciasTarea,
+  controlarRepuestosTarea,
+  leerRepuestosActivos,
+  validarProveedorTarea,
   validarTarea,
   TareaValida,
 } from './preventivos/validaciones.ts';
@@ -88,14 +90,25 @@ async function controlarNombre(client: pg.PoolClient, maquinaId: number, nombre:
 }
 
 async function insertarTarea(client: pg.PoolClient, planId: number, orden: number, t: TareaValida) {
-  await client.query(
+  const res = await client.query(
     `INSERT INTO plan_tareas (
-       plan_id, orden, accion, detalle, frecuencia_valor, frecuencia_unidad, primera_fecha,
-       repuesto_id, cantidad, proveedor_id
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7::date, $8, $9, $10)`,
-    [planId, orden, t.accion, t.detalle, t.frecuencia_valor, t.frecuencia_unidad, t.primera_fecha,
-      t.repuesto_id, t.cantidad, t.proveedor_id]
+       plan_id, orden, accion, detalle, frecuencia_valor, frecuencia_unidad, primera_fecha, proveedor_id
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7::date, $8)
+     RETURNING id`,
+    [planId, orden, t.accion, t.detalle, t.frecuencia_valor, t.frecuencia_unidad, t.primera_fecha, t.proveedor_id]
   );
+  await guardarPrevistos(client, Number(res.rows[0].id), t);
+}
+
+/** Reemplaza la lista de repuestos previstos de la tarea (D-022). */
+async function guardarPrevistos(client: pg.PoolClient, tareaId: number, t: TareaValida) {
+  await client.query('DELETE FROM plan_tarea_repuestos WHERE plan_tarea_id = $1', [tareaId]);
+  for (let i = 0; i < t.repuestos.length; i++) {
+    await client.query(
+      'INSERT INTO plan_tarea_repuestos (plan_tarea_id, repuesto_id, cantidad, orden) VALUES ($1, $2, $3, $4)',
+      [tareaId, t.repuestos[i].repuesto_id, t.repuestos[i].cantidad, i + 1]
+    );
+  }
 }
 
 async function tocarPlan(client: pg.PoolClient, planId: number) {
@@ -247,9 +260,11 @@ planesApp.post('/', async (c) => {
       }
       await controlarNombre(client, maquinaId, nombre);
 
+      const activos = await leerRepuestosActivos(client, tareas.flatMap((t) => t.repuestos.map((r) => r.repuesto_id)));
       for (let indice = 0; indice < tareas.length; indice++) {
         try {
-          await validarReferenciasTarea(client, tareas[indice]);
+          controlarRepuestosTarea(tareas[indice], activos);
+          await validarProveedorTarea(client, tareas[indice]);
         } catch (err) {
           throw conIndice(err, indice);
         }
@@ -379,7 +394,8 @@ planesApp.post('/:id/tareas', async (c) => {
       const plan = await bloquearPlan(client, id, sectores);
       const hoy = await obtenerHoy(client);
       const tarea = validarTarea(leido.body, hoy);
-      await validarReferenciasTarea(client, tarea);
+      controlarRepuestosTarea(tarea, await leerRepuestosActivos(client, tarea.repuestos.map((r) => r.repuesto_id)));
+      await validarProveedorTarea(client, tarea);
 
       // Al final del orden, con el plan bloqueado
       const resOrden = await client.query(
@@ -412,16 +428,17 @@ planesApp.patch('/:id/tareas/:tareaId', async (c) => {
 
       const hoy = await obtenerHoy(client);
       const t = validarTarea(leido.body, hoy, actual.tarea);
-      await validarReferenciasTarea(client, t, actual.tarea);
+      controlarRepuestosTarea(t, await leerRepuestosActivos(client, t.repuestos.map((r) => r.repuesto_id)), actual.tarea);
+      await validarProveedorTarea(client, t, actual.tarea);
 
       await client.query(
         `UPDATE plan_tareas SET
            accion = $1, detalle = $2, frecuencia_valor = $3, frecuencia_unidad = $4, primera_fecha = $5::date,
-           repuesto_id = $6, cantidad = $7, proveedor_id = $8, actualizado_en = NOW()
-         WHERE id = $9`,
-        [t.accion, t.detalle, t.frecuencia_valor, t.frecuencia_unidad, t.primera_fecha,
-          t.repuesto_id, t.cantidad, t.proveedor_id, tareaId]
+           proveedor_id = $6, actualizado_en = NOW()
+         WHERE id = $7`,
+        [t.accion, t.detalle, t.frecuencia_valor, t.frecuencia_unidad, t.primera_fecha, t.proveedor_id, tareaId]
       );
+      if ('repuestos' in leido.body) await guardarPrevistos(client, tareaId, t);
       await tocarPlan(client, plan.id);
     });
 

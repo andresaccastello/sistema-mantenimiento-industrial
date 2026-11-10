@@ -277,3 +277,16 @@ Sobre las máquinas activas de la selección y el período elegido:
 6. **"Hoy" es el de la instalación,** según su zona horaria (`configuracion_sistema.zona_horaria`), no el del servidor.
 
 **Motivo:** cumplir los requisitos 5 y 8 con lo mínimo que funciona de punta a punta, y dejar el modelo listo para los medidores (PV3).
+
+## D-022 — Repuestos previstos en las tareas preventivas
+
+**Estado:** Aceptada
+
+1. **Una tarea del plan tiene una lista de repuestos previstos,** cada uno con su cantidad, hasta 10. Reemplaza al repuesto sugerido único de la PV1. El proveedor sugerido sigue igual.
+2. **Al generar la intervención, los previstos se copian a cada tarea.** Cambiar el plan después no cambia la intervención.
+3. **Un previsto no mueve stock.** Se registra como consumo recién cuando el técnico marca la tarea como hecha y confirma qué usó y cuánto. Puede bajar o subir la cantidad, o dejar uno sin usar.
+4. **Desmarcar la tarea anula esos consumos,** y el stock vuelve.
+5. **Se confirman con las reglas de cualquier consumo:** en `EN_PROCESO` o `EN_ESPERA_REPUESTOS` lo hace el responsable o quien tenga `INTERVENCIONES_ASIGNAR`; en `FINALIZADA`, solo `INTERVENCIONES_CORREGIR`, con motivo. **En `PENDIENTE` no se registran repuestos,** así que una tarea con previstos se marca después de iniciar el trabajo. Las tareas sin previstos se siguen marcando en `PENDIENTE`.
+6. **Todo o nada:** si un repuesto no alcanza (`STOCK_INSUFICIENTE`) o está inactivo, no se marca la tarea ni se registra ningún consumo.
+
+**Motivo:** no cargar dos veces lo que el plan ya sabe, sin descontar stock de algo que quizás no se usó.

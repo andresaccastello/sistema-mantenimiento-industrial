@@ -4,18 +4,21 @@ import { requirePermission } from './middleware.ts';
 import { ErrorNegocio, responderError } from './intervenciones/errores.ts';
 import { bloquearIntervencion } from './intervenciones/bloqueos.ts';
 import { UsuarioVisibilidad, puedeVerIntervencion } from './intervenciones/visibilidad.ts';
-import { registrarAuditoria } from './intervenciones/auditoria.ts';
-import { recalcularCostosIntervencion } from './intervenciones/costos.ts';
 import { veCostos, puedeCargarCostos } from './repuestos/permisos.ts';
 import {
   validarCantidad,
   validarCosto,
-  formatearCantidad,
   parseIdRuta,
   validarIdCuerpo,
   validarBooleano,
 } from './repuestos/validaciones.ts';
 import { moverStock, cambiarCosto } from './repuestos/stock.ts';
+import {
+  autorizarRegistroConsumo,
+  autorizarAnulacionConsumo,
+  registrarConsumo,
+  anularConsumo,
+} from './repuestos/consumos.ts';
 
 const intervencionRepuestosApp = new Hono();
 
@@ -308,32 +311,7 @@ intervencionRepuestosApp.post('/:id/repuestos', async (c) => {
     const { intervencion } = await bloquearIntervencion(client, id, usuario);
 
     // 2. Control de permisos según el estado
-    if (intervencion.estado === 'PENDIENTE' || intervencion.estado === 'CANCELADA') {
-      throw new ErrorNegocio(409, 'ESTADO_NO_PERMITE_REPUESTOS', 'El estado de la intervención no permite registrar repuestos');
-    }
-
-    if (intervencion.estado === 'EN_PROCESO' || intervencion.estado === 'EN_ESPERA_REPUESTOS') {
-      const tieneCambiarEstado = 'INTERVENCIONES_CAMBIAR_ESTADO' in usuario.permisos;
-      if (!tieneCambiarEstado) {
-        throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No tiene permiso para cambiar el estado de intervenciones');
-      }
-      const esResponsable =
-        intervencion.responsable_usuario_id !== null &&
-        Number(intervencion.responsable_usuario_id) === usuario.id;
-      const tieneAsignar = 'INTERVENCIONES_ASIGNAR' in usuario.permisos;
-      if (!esResponsable && !tieneAsignar) {
-        throw new ErrorNegocio(403, 'NO_ES_RESPONSABLE', 'No es el responsable asignado ni tiene permiso de asignación');
-      }
-    } else if (intervencion.estado === 'FINALIZADA') {
-      const tieneCorregir = 'INTERVENCIONES_CORREGIR' in usuario.permisos;
-      if (!tieneCorregir) {
-        throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No tiene permiso para corregir intervenciones finalizadas');
-      }
-      const motivoTrim = typeof body.motivo === 'string' ? body.motivo.trim() : '';
-      if (motivoTrim.length < 5) {
-        throw new ErrorNegocio(422, 'MOTIVO_REQUERIDO', 'Debe indicar un motivo de al menos 5 caracteres');
-      }
-    }
+    const motivo = autorizarRegistroConsumo(usuario, intervencion, body.motivo);
 
     // 3. Validar campos del consumo
     const repuestoId = validarIdCuerpo(body.repuesto_id, 'DATOS_INVALIDOS', 'repuesto_id');
@@ -347,78 +325,18 @@ intervencionRepuestosApp.post('/:id/repuestos', async (c) => {
       throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'La observación no puede superar los 500 caracteres');
     }
 
-    // Bloquear repuesto
-    const repRes = await client.query(
-      'SELECT id, nombre, codigo, unidad, activo, lleva_stock, cantidad_disponible, costo_unitario FROM repuestos WHERE id = $1 FOR UPDATE',
-      [repuestoId]
-    );
-    if (repRes.rows.length === 0) {
-      throw new ErrorNegocio(404, 'REPUESTO_NO_ENCONTRADO', 'Repuesto no encontrado');
-    }
-    const repuesto = repRes.rows[0];
-    if (!repuesto.activo) {
-      throw new ErrorNegocio(409, 'REPUESTO_INACTIVO', 'El repuesto está inactivo');
-    }
-
-    let costoAplicado = Number(repuesto.costo_unitario);
-    let movimientoId: number | null = null;
-
-    if (repuesto.lleva_stock) {
-      if (body.costo_unitario !== undefined && body.costo_unitario !== null) {
-        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'No se puede definir costo unitario en repuestos con control de stock');
-      }
-
-      // Mover stock: EGRESO delta = -cantidad
-      const mov = await moverStock(client, {
-        repuestoId,
-        tipo: 'EGRESO',
-        delta: -cantidad,
-        usuarioId: usuario.id,
-        intervencionId: id,
-        observacion: `Intervención N.º ${id}`,
-      });
-      movimientoId = mov.id;
-    } else {
-      if (body.costo_unitario !== undefined && body.costo_unitario !== null) {
-        if (!puedeCargarCostos(c)) {
-          throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No tiene permiso para registrar costos');
-        }
-        const nuevoCosto = validarCosto(body.costo_unitario, 'costo_unitario');
-        costoAplicado = nuevoCosto;
-        await cambiarCosto(client, {
-          repuestoId,
-          costo: nuevoCosto,
-          origen: 'CONSUMO',
-          usuarioId: usuario.id,
-        });
-      }
-    }
-
-    // 4. Insertar consumo
-    const insConsumo = await client.query(
-      `INSERT INTO intervencion_repuestos (
-         intervencion_id, repuesto_id, cantidad, costo_unitario_aplicado, observacion,
-         movimiento_id, registrado_por_usuario_id, creado_en
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-       RETURNING id`,
-      [id, repuestoId, cantidad, costoAplicado, observacion, movimientoId, usuario.id]
-    );
-    const consumoId = Number(insConsumo.rows[0].id);
-
-    // 5. Recalcular costos de la intervención
-    await recalcularCostosIntervencion(client, id);
-
-    // 6. Si está FINALIZADA: auditoría CORRECCION_COSTO
-    if (intervencion.estado === 'FINALIZADA') {
-      await registrarAuditoria(client, {
-        intervencionId: id,
-        tipoEvento: 'CORRECCION_COSTO',
-        campo: 'repuestos',
-        valorNuevo: `Se agregó: ${repuesto.nombre} × ${formatearCantidad(cantidad)} ${repuesto.unidad || 'unidad'}`,
-        motivo: body.motivo.trim(),
-        usuarioId: usuario.id,
-      });
-    }
+    // 4. Registrar el consumo: stock, costos y auditoría
+    const consumoId = await registrarConsumo(client, {
+      intervencionId: id,
+      estadoIntervencion: intervencion.estado,
+      usuarioId: usuario.id,
+      repuestoId,
+      cantidad,
+      observacion,
+      motivo,
+      costoUnitario: body.costo_unitario,
+      puedeCargarCostos: puedeCargarCostos(c),
+    });
 
     await client.query('COMMIT');
 
@@ -466,91 +384,16 @@ intervencionRepuestosApp.post('/:id/repuestos/:consumoId/anular', async (c) => {
     const { intervencion } = await bloquearIntervencion(client, id, usuario);
 
     // 2. Control de permisos
-    if (intervencion.estado === 'PENDIENTE') {
-      throw new ErrorNegocio(409, 'ESTADO_NO_PERMITE_REPUESTOS', 'El estado de la intervención no permite anular repuestos');
-    }
+    autorizarAnulacionConsumo(usuario, intervencion);
 
-    if (intervencion.estado === 'EN_PROCESO' || intervencion.estado === 'EN_ESPERA_REPUESTOS') {
-      const tieneCambiarEstado = 'INTERVENCIONES_CAMBIAR_ESTADO' in usuario.permisos;
-      if (!tieneCambiarEstado) {
-        throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No tiene permiso para cambiar el estado de intervenciones');
-      }
-      const esResponsable =
-        intervencion.responsable_usuario_id !== null &&
-        Number(intervencion.responsable_usuario_id) === usuario.id;
-      const tieneAsignar = 'INTERVENCIONES_ASIGNAR' in usuario.permisos;
-      if (!esResponsable && !tieneAsignar) {
-        throw new ErrorNegocio(403, 'NO_ES_RESPONSABLE', 'No es el responsable asignado ni tiene permiso de asignación');
-      }
-    } else if (intervencion.estado === 'FINALIZADA' || intervencion.estado === 'CANCELADA') {
-      const tieneCorregir = 'INTERVENCIONES_CORREGIR' in usuario.permisos;
-      if (!tieneCorregir) {
-        throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No tiene permiso para corregir intervenciones cerradas');
-      }
-    }
-
-    // 3. Bloqueo del consumo
-    const conRes = await client.query(
-      `SELECT ir.*, r.nombre AS repuesto_nombre, r.codigo AS repuesto_codigo, r.unidad AS repuesto_unidad, r.lleva_stock
-       FROM intervencion_repuestos ir
-       JOIN repuestos r ON r.id = ir.repuesto_id
-       WHERE ir.id = $1 FOR UPDATE`,
-      [consumoId]
-    );
-    if (conRes.rows.length === 0 || Number(conRes.rows[0].intervencion_id) !== id) {
-      throw new ErrorNegocio(404, 'CONSUMO_NO_ENCONTRADO', 'Consumo no encontrado en esta intervención');
-    }
-    const consumo = conRes.rows[0];
-
-    if (consumo.anulado_en !== null) {
-      throw new ErrorNegocio(409, 'CONSUMO_YA_ANULADO', 'El consumo ya fue anulado');
-    }
-
-    // 4. Devolución de stock si movió stock y el repuesto todavía lleva stock
-    let devolucionMovimientoId: number | null = null;
-    if (consumo.movimiento_id !== null) {
-      const repLock = await client.query(
-        'SELECT lleva_stock FROM repuestos WHERE id = $1 FOR UPDATE',
-        [consumo.repuesto_id]
-      );
-      if (repLock.rows[0]?.lleva_stock) {
-        const movDev = await moverStock(client, {
-          repuestoId: Number(consumo.repuesto_id),
-          tipo: 'DEVOLUCION',
-          delta: Number(consumo.cantidad),
-          usuarioId: usuario.id,
-          intervencionId: id,
-          observacion: `Devolución por anulación de consumo en intervención N.º ${id}`,
-        });
-        devolucionMovimientoId = movDev.id;
-      }
-    }
-
-    // 5. Completar datos de anulación
-    await client.query(
-      `UPDATE intervencion_repuestos
-       SET anulado_en = NOW(),
-           anulado_por_usuario_id = $1,
-           motivo_anulacion = $2,
-           devolucion_movimiento_id = $3
-       WHERE id = $4`,
-      [usuario.id, motivoTrim, devolucionMovimientoId, consumoId]
-    );
-
-    // 6. Recalcular costos
-    await recalcularCostosIntervencion(client, id);
-
-    // 7. Si está FINALIZADA o CANCELADA: auditoría CORRECCION_COSTO
-    if (intervencion.estado === 'FINALIZADA' || intervencion.estado === 'CANCELADA') {
-      await registrarAuditoria(client, {
-        intervencionId: id,
-        tipoEvento: 'CORRECCION_COSTO',
-        campo: 'repuestos',
-        valorNuevo: `Se anuló: ${consumo.repuesto_nombre} × ${formatearCantidad(consumo.cantidad)} ${consumo.repuesto_unidad || 'unidad'}`,
-        motivo: motivoTrim,
-        usuarioId: usuario.id,
-      });
-    }
+    // 3. Anular: devolución de stock, costos y auditoría
+    await anularConsumo(client, {
+      intervencionId: id,
+      estadoIntervencion: intervencion.estado,
+      usuarioId: usuario.id,
+      consumoId,
+      motivo: motivoTrim,
+    });
 
     await client.query('COMMIT');
 

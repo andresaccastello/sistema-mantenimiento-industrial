@@ -101,8 +101,8 @@ export function borradorDeTarea(t: TareaPlan): BorradorTarea {
     frecuenciaValor: t.frecuencia_valor,
     frecuenciaUnidad: t.frecuencia_unidad,
     primeraFecha: t.primera_fecha,
-    repuestoId: t.repuesto ? String(t.repuesto.id) : null,
-    cantidad: t.cantidad ?? '',
+    repuestoId: t.repuestos[0] ? String(t.repuestos[0].repuesto.id) : null,
+    cantidad: t.repuestos[0]?.cantidad ?? '',
     proveedorId: t.proveedor ? String(t.proveedor.id) : null,
   };
 }

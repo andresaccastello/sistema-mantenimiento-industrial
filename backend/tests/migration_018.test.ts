@@ -248,15 +248,12 @@ test('Migración 018 — Preventivos por calendario', async (t) => {
       assert.deepStrictEqual(
         Object.keys(tareas).sort(),
         [
-          'accion', 'activo', 'actualizado_en', 'cantidad', 'creado_en', 'detalle', 'frecuencia_unidad',
-          'frecuencia_valor', 'id', 'orden', 'plan_id', 'primera_fecha', 'proveedor_id', 'repuesto_id',
+          'accion', 'activo', 'actualizado_en', 'creado_en', 'detalle', 'frecuencia_unidad',
+          'frecuencia_valor', 'id', 'orden', 'plan_id', 'primera_fecha', 'proveedor_id',
         ]
       );
       assert.strictEqual(tareas.accion.character_maximum_length, 200);
       assert.strictEqual(tareas.primera_fecha.data_type, 'date');
-      assert.strictEqual(tareas.cantidad.data_type, 'numeric');
-      assert.strictEqual(Number(tareas.cantidad.numeric_precision), 14);
-      assert.strictEqual(Number(tareas.cantidad.numeric_scale), 3);
       assert.strictEqual(tareas.activo.column_default, 'true');
 
       // intervencion_tareas
@@ -322,11 +319,11 @@ test('Migración 018 — Preventivos por calendario', async (t) => {
         )).rows[0].id);
         let orden = 10;
 
-        const insertarTarea = (campos: { valor: number; unidad: string; repuesto_id?: number | null; cantidad?: number | null }) =>
+        const insertarTarea = (campos: { valor: number; unidad: string }) =>
           client.query(
-            `INSERT INTO plan_tareas (plan_id, orden, accion, frecuencia_valor, frecuencia_unidad, primera_fecha, repuesto_id, cantidad)
-             VALUES ($1, $2, 'Tarea M18-03', $3, $4, '2026-01-01', $5, $6) RETURNING id`,
-            [planId, orden++, campos.valor, campos.unidad, campos.repuesto_id ?? null, campos.cantidad ?? null]
+            `INSERT INTO plan_tareas (plan_id, orden, accion, frecuencia_valor, frecuencia_unidad, primera_fecha)
+             VALUES ($1, $2, 'Tarea M18-03', $3, $4, '2026-01-01') RETURNING id`,
+            [planId, orden++, campos.valor, campos.unidad]
           );
 
         const rechaza = async (nombre: string, hacer: () => Promise<unknown>, regex: RegExp) => {
@@ -341,10 +338,6 @@ test('Migración 018 — Preventivos por calendario', async (t) => {
         await rechaza('121 meses', () => insertarTarea({ valor: 121, unidad: 'MESES' }), /ck_plan_tareas_frecuencia/);
         await rechaza('11 años', () => insertarTarea({ valor: 11, unidad: 'ANIOS' }), /ck_plan_tareas_frecuencia/);
         await rechaza('unidad HORAS', () => insertarTarea({ valor: 10, unidad: 'HORAS' }), /ck_plan_tareas_unidad/);
-
-        // Repuesto y cantidad
-        await rechaza('repuesto sin cantidad', () => insertarTarea({ valor: 1, unidad: 'MESES', repuesto_id: repuestoId }), /ck_plan_tareas_repuesto_cantidad/);
-        await rechaza('cantidad sin repuesto', () => insertarTarea({ valor: 1, unidad: 'MESES', cantidad: 2 }), /ck_plan_tareas_repuesto_cantidad/);
 
         // hecha, quién y cuándo
         const tareaId = Number((await insertarTarea({ valor: 1, unidad: 'MESES' })).rows[0].id);
@@ -361,6 +354,40 @@ test('Migración 018 — Preventivos por calendario', async (t) => {
         // La misma tarea dos veces en una intervención
         await insertarHecha(false, null, null);
         await rechaza('la misma tarea dos veces', () => insertarHecha(false, null, null), /uq_intervencion_tareas_tarea/);
+
+        // Los previstos del plan (PV2.2, 2.1)
+        const insertarPrevistoPlan = (repId: number, cantidad: number) =>
+          client.query(
+            'INSERT INTO plan_tarea_repuestos (plan_tarea_id, repuesto_id, cantidad, orden) VALUES ($1, $2, $3, 1)',
+            [tareaId, repId, cantidad]
+          );
+        await rechaza('previsto del plan con cantidad 0', () => insertarPrevistoPlan(repuestoId, 0), /ck_plan_tarea_repuestos_cantidad/);
+        await insertarPrevistoPlan(repuestoId, 2);
+        await rechaza('el mismo repuesto dos veces en la tarea', () => insertarPrevistoPlan(repuestoId, 1), /uq_plan_tarea_repuestos_repuesto/);
+
+        // Los previstos de la intervención (PV2.2, 2.3)
+        const repuesto2Id = Number((await client.query(
+          `INSERT INTO repuestos (nombre, codigo) VALUES ('Repuesto M18 B', $1) RETURNING id`,
+          [`R2_M18_${Date.now()}`]
+        )).rows[0].id);
+        const intTareaId = Number((await client.query(
+          'SELECT id FROM intervencion_tareas WHERE intervencion_id = $1 AND plan_tarea_id = $2', [intId, tareaId]
+        )).rows[0].id);
+        const consumoId = Number((await client.query(
+          `INSERT INTO intervencion_repuestos (intervencion_id, repuesto_id, cantidad, costo_unitario_aplicado, registrado_por_usuario_id)
+           VALUES ($1, $2, 1, 0, $3) RETURNING id`,
+          [intId, repuestoId, b.usuarioId]
+        )).rows[0].id);
+        const insertarPrevistoInt = (repId: number, cantidad: number, consumo: number | null) =>
+          client.query(
+            `INSERT INTO intervencion_tarea_repuestos (intervencion_tarea_id, repuesto_id, cantidad_prevista, orden, consumo_id)
+             VALUES ($1, $2, $3, 1, $4)`,
+            [intTareaId, repId, cantidad, consumo]
+          );
+        await rechaza('previsto de la intervención con cantidad 0', () => insertarPrevistoInt(repuestoId, 0, null), /ck_intervencion_tarea_repuestos_cantidad/);
+        await insertarPrevistoInt(repuestoId, 2, consumoId);
+        await rechaza('el mismo repuesto dos veces en la tarea de la intervención', () => insertarPrevistoInt(repuestoId, 1, null), /uq_intervencion_tarea_repuestos_repuesto/);
+        await rechaza('el mismo consumo en dos previstos', () => insertarPrevistoInt(repuesto2Id, 1, consumoId), /uq_intervencion_tarea_repuestos_consumo/);
 
         // Nombre repetido en la máquina, sin importar mayúsculas
         await rechaza('"lubricación" en la misma máquina', () => crearPlan(client, b, 'lubricación'), /uq_planes_maquina_nombre/);
@@ -556,6 +583,67 @@ test('Migración 018 — Preventivos por calendario', async (t) => {
       } finally {
         await client.query('ROLLBACK');
       }
+    });
+
+    // =========================================================================
+    // M18-06: Con el formato de la PV1
+    // =========================================================================
+    await t.test('M18-06: Una tarea con el formato de la PV1 pasa a la lista de previstos', async () => {
+      // La migración trae su BEGIN y su COMMIT: sin ellos corre dentro del ROLLBACK de la prueba
+      const sinTransaccion = sqlContent.replace(/^BEGIN;\s*$/m, '').replace(/^COMMIT;\s*$/m, '');
+      assert.ok(!/^COMMIT;/m.test(sinTransaccion), 'Sin COMMIT');
+
+      const columnasViejas = async () =>
+        (await client.query(
+          `SELECT column_name FROM information_schema.columns
+           WHERE table_schema = current_schema() AND table_name = 'plan_tareas' AND column_name IN ('repuesto_id', 'cantidad')`
+        )).rows.length;
+
+      let tareaCon = 0;
+      await client.query('BEGIN');
+      try {
+        const b = await crearBase(client);
+        const planId = await crearPlan(client, b, 'Plan formato PV1');
+        const repuestoId = Number((await client.query(
+          `INSERT INTO repuestos (nombre, codigo) VALUES ('Repuesto M18-06', $1) RETURNING id`,
+          [`R_M1806_${Date.now()}`]
+        )).rows[0].id);
+
+        await client.query(
+          `ALTER TABLE plan_tareas
+             ADD COLUMN repuesto_id BIGINT NULL REFERENCES repuestos(id),
+             ADD COLUMN cantidad NUMERIC(14,3) NULL,
+             ADD CONSTRAINT ck_plan_tareas_cantidad CHECK (cantidad IS NULL OR cantidad > 0),
+             ADD CONSTRAINT ck_plan_tareas_repuesto_cantidad CHECK ((repuesto_id IS NULL) = (cantidad IS NULL))`
+        );
+        tareaCon = await crearTarea(client, planId, 1, '2026-01-15');
+        const tareaSin = await crearTarea(client, planId, 2, '2026-01-15');
+        await client.query('UPDATE plan_tareas SET repuesto_id = $1, cantidad = 2.5 WHERE id = $2', [repuestoId, tareaCon]);
+
+        await client.query(sinTransaccion);
+
+        const previstos = await client.query(
+          'SELECT plan_tarea_id, repuesto_id, cantidad, orden FROM plan_tarea_repuestos WHERE plan_tarea_id = ANY($1)',
+          [[tareaCon, tareaSin]]
+        );
+        assert.deepStrictEqual(previstos.rows, [
+          { plan_tarea_id: String(tareaCon), repuesto_id: String(repuestoId), cantidad: '2.500', orden: 1 },
+        ]);
+        assert.strictEqual(await columnasViejas(), 0, 'Sin las dos columnas');
+        const ck = await client.query(
+          `SELECT conname FROM pg_constraint
+           WHERE conrelid = 'plan_tareas'::regclass AND conname IN ('ck_plan_tareas_cantidad', 'ck_plan_tareas_repuesto_cantidad')`
+        );
+        assert.strictEqual(ck.rows.length, 0, 'Sin sus restricciones');
+        const vista = await client.query('SELECT id FROM v_plan_tareas_estado WHERE id = ANY($1)', [[tareaCon, tareaSin]]);
+        assert.strictEqual(vista.rows.length, 2, 'La vista se volvió a crear');
+      } finally {
+        await client.query('ROLLBACK');
+      }
+
+      const queda = await client.query('SELECT 1 FROM plan_tareas WHERE id = $1', [tareaCon]);
+      assert.strictEqual(queda.rows.length, 0, 'El ROLLBACK sacó los datos');
+      assert.strictEqual(await columnasViejas(), 0);
     });
   } finally {
     client.release();

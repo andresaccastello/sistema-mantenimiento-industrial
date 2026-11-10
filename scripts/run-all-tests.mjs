@@ -62,6 +62,8 @@ const TABLAS_CONTROL = [
   'planes_mantenimiento',
   'plan_tareas',
   'intervencion_tareas',
+  'plan_tarea_repuestos',
+  'intervencion_tarea_repuestos',
 ];
 
 async function contarFilas() {

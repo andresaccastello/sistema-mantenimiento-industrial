@@ -73,8 +73,6 @@ CREATE TABLE IF NOT EXISTS plan_tareas (
     frecuencia_valor INTEGER NOT NULL,
     frecuencia_unidad VARCHAR(10) NOT NULL,
     primera_fecha DATE NOT NULL,
-    repuesto_id BIGINT NULL REFERENCES repuestos(id),
-    cantidad NUMERIC(14,3) NULL,
     proveedor_id BIGINT NULL REFERENCES proveedores(id),
     activo BOOLEAN NOT NULL DEFAULT TRUE,
     creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -105,20 +103,53 @@ ALTER TABLE plan_tareas
         END
     );
 
-ALTER TABLE plan_tareas
-    DROP CONSTRAINT IF EXISTS ck_plan_tareas_cantidad;
+-- 3.1 La vista usa t.*: se saca antes de tocar las columnas de plan_tareas, y se vuelve
+-- a crear al final (sección 7)
+DROP VIEW IF EXISTS v_plan_tareas_estado;
 
-ALTER TABLE plan_tareas
-    ADD CONSTRAINT ck_plan_tareas_cantidad
-    CHECK (cantidad IS NULL OR cantidad > 0);
+-- 3.2 plan_tarea_repuestos: los repuestos previstos de una tarea (D-022)
+CREATE TABLE IF NOT EXISTS plan_tarea_repuestos (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    plan_tarea_id BIGINT NOT NULL REFERENCES plan_tareas(id),
+    repuesto_id BIGINT NOT NULL REFERENCES repuestos(id),
+    cantidad NUMERIC(14,3) NOT NULL,
+    orden INTEGER NOT NULL,
+    CONSTRAINT uq_plan_tarea_repuestos_repuesto UNIQUE (plan_tarea_id, repuesto_id)
+);
 
--- La cantidad va si y solo si va el repuesto
-ALTER TABLE plan_tareas
-    DROP CONSTRAINT IF EXISTS ck_plan_tareas_repuesto_cantidad;
+ALTER TABLE plan_tarea_repuestos
+    DROP CONSTRAINT IF EXISTS ck_plan_tarea_repuestos_cantidad;
 
-ALTER TABLE plan_tareas
-    ADD CONSTRAINT ck_plan_tareas_repuesto_cantidad
-    CHECK ((repuesto_id IS NULL) = (cantidad IS NULL));
+ALTER TABLE plan_tarea_repuestos
+    ADD CONSTRAINT ck_plan_tarea_repuestos_cantidad
+    CHECK (cantidad > 0);
+
+-- 3.3 Con el formato de la PV1: el repuesto de cada tarea pasa a la lista, con orden 1,
+-- y se sacan las dos columnas y sus restricciones
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'plan_tareas'
+          AND column_name = 'repuesto_id'
+    ) THEN
+        INSERT INTO plan_tarea_repuestos (plan_tarea_id, repuesto_id, cantidad, orden)
+        SELECT t.id, t.repuesto_id, t.cantidad, 1
+        FROM plan_tareas t
+        WHERE t.repuesto_id IS NOT NULL
+        ON CONFLICT (plan_tarea_id, repuesto_id) DO NOTHING;
+
+        ALTER TABLE plan_tareas
+            DROP CONSTRAINT IF EXISTS ck_plan_tareas_cantidad,
+            DROP CONSTRAINT IF EXISTS ck_plan_tareas_repuesto_cantidad;
+
+        ALTER TABLE plan_tareas
+            DROP COLUMN repuesto_id,
+            DROP COLUMN IF EXISTS cantidad;
+    END IF;
+END
+$$;
 
 -- 4. intervencion_tareas: las tareas de una intervención preventiva, copiadas del plan
 CREATE TABLE IF NOT EXISTS intervencion_tareas (
@@ -150,6 +181,25 @@ ALTER TABLE intervencion_tareas
         OR (NOT hecha AND hecha_por_usuario_id IS NULL AND hecha_en IS NULL)
     );
 
+-- 4.1 intervencion_tarea_repuestos: los previstos de una tarea en la intervención (D-022)
+CREATE TABLE IF NOT EXISTS intervencion_tarea_repuestos (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    intervencion_tarea_id BIGINT NOT NULL REFERENCES intervencion_tareas(id),
+    repuesto_id BIGINT NOT NULL REFERENCES repuestos(id),
+    cantidad_prevista NUMERIC(14,3) NOT NULL,
+    orden INTEGER NOT NULL,
+    consumo_id BIGINT NULL REFERENCES intervencion_repuestos(id),
+    CONSTRAINT uq_intervencion_tarea_repuestos_repuesto UNIQUE (intervencion_tarea_id, repuesto_id),
+    CONSTRAINT uq_intervencion_tarea_repuestos_consumo UNIQUE (consumo_id)
+);
+
+ALTER TABLE intervencion_tarea_repuestos
+    DROP CONSTRAINT IF EXISTS ck_intervencion_tarea_repuestos_cantidad;
+
+ALTER TABLE intervencion_tarea_repuestos
+    ADD CONSTRAINT ck_intervencion_tarea_repuestos_cantidad
+    CHECK (cantidad_prevista > 0);
+
 -- 5. Auditoría: CORRECCION_TAREA (la lista es la de la 007, que también la incluye)
 ALTER TABLE intervencion_auditoria
     DROP CONSTRAINT IF EXISTS ck_intervencion_auditoria_evento;
@@ -179,9 +229,7 @@ AS $$
 $$;
 
 -- 7. El estado de una tarea (D-021). Es el único lugar donde se calcula:
--- lo usan la API, la generación y las pruebas.
-DROP VIEW IF EXISTS v_plan_tareas_estado;
-
+-- lo usan la API, la generación y las pruebas. Se sacó en la 3.1.
 CREATE VIEW v_plan_tareas_estado AS
 SELECT
     t.*,

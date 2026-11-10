@@ -1047,6 +1047,28 @@ export interface RepuestoSugerido {
   unidad: string;
 }
 
+/** Un repuesto previsto de una tarea del plan. */
+export interface RepuestoPrevistoPlan {
+  repuesto: RepuestoSugerido;
+  cantidad: number;
+}
+
+export type EstadoPrevisto = 'PREVISTO' | 'USADO' | 'NO_USADO';
+
+/** Un repuesto previsto de una tarea en la intervención. */
+export interface RepuestoPrevistoIntervencion {
+  id: number;
+  repuesto: RepuestoSugerido & {
+    lleva_stock: boolean;
+    /** null si el usuario no puede ver el stock. */
+    cantidad_disponible: number | null;
+  };
+  cantidad_prevista: number;
+  estado: EstadoPrevisto;
+  /** El consumo que se registró al confirmar, o null. */
+  consumo: { id: number; cantidad: number; anulado: boolean } | null;
+}
+
 export interface ProveedorSugerido {
   id: number;
   nombre: string;
@@ -1074,8 +1096,8 @@ export interface TareaPlan {
   frecuencia_valor: number;
   frecuencia_unidad: FrecuenciaUnidad;
   primera_fecha: string;
-  repuesto: RepuestoSugerido | null;
-  cantidad: number | null;
+  /** Los repuestos previstos, hasta 10 (D-022). */
+  repuestos: RepuestoPrevistoPlan[];
   proveedor: ProveedorSugerido | null;
   activo: boolean;
   ultima_ejecucion: string | null;
@@ -1174,8 +1196,8 @@ export interface GeneracionRespuesta {
 }
 
 /**
- * Una tarea de una intervención preventiva. El repuesto, la cantidad y el proveedor
- * son la sugerencia de la tarea del plan de hoy, no lo que se usó.
+ * Una tarea de una intervención preventiva. El proveedor es la sugerencia de la tarea del
+ * plan de hoy; los repuestos previstos se copiaron al generarla.
  */
 export interface TareaIntervencion {
   id: number;
@@ -1184,8 +1206,7 @@ export interface TareaIntervencion {
   accion: string;
   detalle: string | null;
   fecha_programada: string;
-  repuesto: RepuestoSugerido | null;
-  cantidad: number | null;
+  repuestos_previstos: RepuestoPrevistoIntervencion[];
   proveedor: ProveedorSugerido | null;
   hecha: boolean;
   hecha_por: Persona | null;
@@ -1196,7 +1217,7 @@ export interface TareaIntervencion {
 /** `GET /api/intervenciones/:id/tareas`. Sin plan: sin tareas y `puede_marcar` en false. */
 export interface IntervencionTareasRespuesta {
   tareas: TareaIntervencion[];
-  resumen: { total: number; hechas: number };
+  resumen: { total: number; hechas: number; previstos_sin_confirmar: number };
   puede_marcar: boolean;
 }
 

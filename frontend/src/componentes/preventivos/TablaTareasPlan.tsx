@@ -64,9 +64,9 @@ export function TablaTareasPlan({ tareas, onEditar, onCambiarActivo }: Props) {
               </Table.Td>
               <Table.Td>
                 <Stack gap={0}>
-                  {t.repuesto && (
+                  {t.repuestos[0] && (
                     <Text size="sm">
-                      {t.repuesto.nombre} × {formatCantidad(t.cantidad)} {t.repuesto.unidad}
+                      {t.repuestos[0].repuesto.nombre} × {formatCantidad(t.repuestos[0].cantidad)} {t.repuestos[0].repuesto.unidad}
                     </Text>
                   )}
                   {t.proveedor && (
@@ -74,7 +74,7 @@ export function TablaTareasPlan({ tareas, onEditar, onCambiarActivo }: Props) {
                       {t.proveedor.nombre}
                     </Text>
                   )}
-                  {!t.repuesto && !t.proveedor && (
+                  {!t.repuestos[0] && !t.proveedor && (
                     <Text size="sm" c="dimmed">
                       —
                     </Text>

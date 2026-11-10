@@ -79,7 +79,7 @@ function sumarAnios(fecha: string, anios: number): string {
   return `${Number(fecha.slice(0, 4)) + anios}${fecha.slice(4)}`;
 }
 
-test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-14)', async (t) => {
+test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-21)', async (t) => {
   const client = await pool.connect();
 
   const createdPlantaIds: number[] = [];
@@ -318,7 +318,7 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-14)', async (t) => {
         descripcion: 'Plan de la prueba',
         responsable_usuario_id: R.id,
         tareas: [
-          tarea(primera, { accion: 'Cambiar el aceite', repuesto_id: repId, cantidad: 2.5, proveedor_id: provId, detalle: 'Con el equipo frío' }),
+          tarea(primera, { accion: 'Cambiar el aceite', repuestos: [{ repuesto_id: repId, cantidad: 2.5 }], proveedor_id: provId, detalle: 'Con el equipo frío' }),
           tarea(sumarDias(hoy, 30), { accion: 'Ajustar la correa', frecuencia_valor: 2, frecuencia_unidad: 'SEMANAS' }),
         ],
       });
@@ -349,8 +349,7 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-14)', async (t) => {
           frecuencia_valor: 1,
           frecuencia_unidad: 'MESES',
           primera_fecha: primera,
-          repuesto: { id: repId, codigo: `PV_R1_${suf}`, nombre: `PV Aceite ${suf}`, unidad: 'litro' },
-          cantidad: 2.5,
+          repuestos: [{ repuesto: { id: repId, codigo: `PV_R1_${suf}`, nombre: `PV Aceite ${suf}`, unidad: 'litro' }, cantidad: 2.5 }],
           proveedor: { id: provId, nombre: `PV Proveedor ${suf}` },
           activo: true,
           ultima_ejecucion: null,
@@ -361,8 +360,8 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-14)', async (t) => {
         }
       );
       assert.deepStrictEqual(
-        [t1.orden, t1.repuesto, t1.cantidad, t1.proveedor, t1.estado, t1.frecuencia_unidad],
-        [2, null, null, null, 'AL_DIA', 'SEMANAS']
+        [t1.orden, t1.repuestos, t1.proveedor, t1.estado, t1.frecuencia_unidad],
+        [2, [], null, 'AL_DIA', 'SEMANAS']
       );
 
       // 422, sin guardar nada
@@ -378,8 +377,8 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-14)', async (t) => {
         ['2026-02-30', { tareas: [tarea('2026-02-30')] }, 'DATOS_INVALIDOS', 0],
         ['2026-2-1', { tareas: [tarea('2026-2-1')] }, 'DATOS_INVALIDOS', 0],
         ['a 11 años', { tareas: [tarea(sumarAnios(hoy, 11))] }, 'DATOS_INVALIDOS', 0],
-        ['repuesto sin cantidad', { tareas: [tarea(hoy, { repuesto_id: repId })] }, 'DATOS_INVALIDOS', 0],
-        ['repuesto inactivo', { tareas: [tarea(hoy), tarea(hoy, { repuesto_id: repInactivo, cantidad: 1 })] }, 'REPUESTO_INVALIDO', 1],
+        ['repuesto sin cantidad', { tareas: [tarea(hoy, { repuestos: [{ repuesto_id: repId }] })] }, 'DATOS_INVALIDOS', 0],
+        ['repuesto inactivo', { tareas: [tarea(hoy), tarea(hoy, { repuestos: [{ repuesto_id: repInactivo, cantidad: 1 }] })] }, 'REPUESTO_INVALIDO', 1],
         ['proveedor inactivo', { tareas: [tarea(hoy, { proveedor_id: provInactivo })] }, 'PROVEEDOR_INVALIDO', 0],
         ['maquina_id: true', { maquina_id: true }, 'DATOS_INVALIDOS'],
         ['máquina inactiva', { maquina_id: mInactiva }, 'MAQUINA_INACTIVA'],
@@ -1055,7 +1054,7 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-14)', async (t) => {
       // Una intervención sin plan: sin tareas y sin marcar
       const rFalla = await pedir('POST', '/api/intervenciones', O.token, { maquina_id: m1, descripcion: 'Falla prueba PV-11' });
       const sinPlan = await tareasDe(rFalla.cuerpo.id);
-      assert.deepStrictEqual(sinPlan.cuerpo, { tareas: [], resumen: { total: 0, hechas: 0 }, puede_marcar: false });
+      assert.deepStrictEqual(sinPlan.cuerpo, { tareas: [], resumen: { total: 0, hechas: 0, previstos_sin_confirmar: 0 }, puede_marcar: false });
     });
 
     // =========================================================================
@@ -1063,10 +1062,17 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-14)', async (t) => {
     // =========================================================================
     await t.test('PV-12: Contrato', async () => {
       const p = await crearPlan(m1, [
-        tarea(sumarDias(hoy, -3), { accion: 'Cambiar el aceite', detalle: 'Con el equipo frío', repuesto_id: repId, cantidad: 2.5, proveedor_id: provId }),
+        tarea(sumarDias(hoy, -3), { accion: 'Cambiar el aceite', detalle: 'Con el equipo frío', repuestos: [{ repuesto_id: repId, cantidad: 2.5 }], proveedor_id: provId }),
       ], { responsable_usuario_id: R.id, descripcion: 'Plan del contrato' });
       const g = await generarOk(p.id);
-      assert.strictEqual((await marcar(g.intervencion.id, g.tareas[0].id, { hecha: true, observacion: 'Sin novedades' })).status, 200);
+      await iniciar(g.intervencion.id);
+      const [previstoContrato] = (await tareasDe(g.intervencion.id)).cuerpo.tareas[0].repuestos_previstos;
+      const marcada = await marcar(g.intervencion.id, g.tareas[0].id, {
+        hecha: true,
+        observacion: 'Sin novedades',
+        repuestos: [{ id: previstoContrato.id, cantidad: 2 }],
+      });
+      assert.strictEqual(marcada.status, 200, JSON.stringify(marcada.cuerpo));
 
       const detalle = await detallePlan(p.id);
       const lista = (await pedir('GET', `/api/planes?maquina_id=${m1}`, A.token)).cuerpo.find((x: any) => x.id === p.id);
@@ -1160,12 +1166,455 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-14)', async (t) => {
         assert.deepStrictEqual([sinExcepcion.status, sinExcepcion.cuerpo.codigo], [403, 'PERMISO_INSUFICIENTE'], ruta);
       }
     });
+
+    // -------------------------------------------------------------------------
+    // Helpers de los repuestos previstos (PV-15 a PV-21)
+    // -------------------------------------------------------------------------
+    let numeroRepuesto = 0;
+    async function crearRepuesto(stock: number | null, costo = 100) {
+      numeroRepuesto++;
+      const r = await pedir('POST', '/api/repuestos', R.token, {
+        codigo: `PV_P${numeroRepuesto}_${suf}`,
+        nombre: `PV Previsto ${numeroRepuesto}`,
+        unidad: 'litro',
+        lleva_stock: stock !== null,
+        ...(stock !== null ? { stock_inicial: stock } : {}),
+        costo_unitario: costo,
+      });
+      assert.strictEqual(r.status, 201, JSON.stringify(r.cuerpo));
+      const id = Number(r.cuerpo.id);
+      createdRepuestoIds.push(id);
+      return id;
+    }
+    const stockDe = async (id: number) =>
+      Number((await client.query('SELECT cantidad_disponible FROM repuestos WHERE id = $1', [id])).rows[0].cantidad_disponible);
+    const consumosDe = async (intId: number) =>
+      (await client.query(
+        `SELECT id, repuesto_id, cantidad, observacion, movimiento_id, anulado_en, motivo_anulacion
+         FROM intervencion_repuestos WHERE intervencion_id = $1 ORDER BY id`,
+        [intId]
+      )).rows;
+    const movimientosDe = async (intId: number) =>
+      Number((await client.query('SELECT count(*)::int AS n FROM movimientos_stock WHERE intervencion_id = $1', [intId])).rows[0].n);
+    const tareaInt = async (intId: number, tareaId: number) =>
+      (await tareasDe(intId)).cuerpo.tareas.find((x: any) => x.id === tareaId);
+    const previsto = (repuesto_id: number, cantidad: number) => ({ repuesto_id, cantidad });
+    /** Un plan con esas tareas vencidas, generado, con R de responsable. */
+    async function generarConPrevistos(maquinaId: number, listas: Array<Array<{ repuesto_id: number; cantidad: number }>>) {
+      const p = await crearPlan(
+        maquinaId,
+        listas.map((repuestos, i) => tarea(sumarDias(hoy, -1), { accion: `Tarea ${i + 1}`, repuestos })),
+        { responsable_usuario_id: R.id }
+      );
+      const g = await generarOk(p.id);
+      return { plan: p, intId: g.intervencion.id as number, tareas: g.tareas as any[] };
+    }
+    /** Los ids de los previstos de una tarea, en su orden. */
+    const idsPrevistos = async (intId: number, tareaId: number): Promise<number[]> =>
+      (await tareaInt(intId, tareaId)).repuestos_previstos.map((x: any) => x.id);
+
+    // =========================================================================
+    // PV-15: Previstos en el plan
+    // =========================================================================
+    await t.test('PV-15: Previstos en el plan', async () => {
+      const a = await crearRepuesto(10);
+      const b = await crearRepuesto(10);
+      const c = await crearRepuesto(10);
+
+      // Una tarea con dos previstos
+      const p = await crearPlan(m1, [tarea(hoy, { accion: 'Con dos', repuestos: [previsto(a, 2.5), previsto(b, 1)] })]);
+      assert.deepStrictEqual(
+        p.tareas[0].repuestos.map((x: any) => [x.repuesto.id, x.cantidad]),
+        [[a, 2.5], [b, 1]]
+      );
+      assert.deepStrictEqual(Object.keys(p.tareas[0].repuestos[0].repuesto).sort(), ['codigo', 'id', 'nombre', 'unidad']);
+      assert.ok(!('repuesto' in p.tareas[0]) && !('cantidad' in p.tareas[0]), 'Sin los campos viejos');
+      const tareaId = p.tareas[0].id;
+
+      // Errores del alta, sin guardar nada
+      const antes = await planesDeMaquina(m1);
+      const once = Array.from({ length: 11 }, () => previsto(a, 1));
+      const casos: Array<[string, Record<string, unknown>, string, number, number | undefined, string?]> = [
+        ['el mismo repuesto dos veces', { repuestos: [previsto(a, 1), previsto(a, 2)] }, 'DATOS_INVALIDOS', 1, 1],
+        ['11 previstos', { repuestos: once }, 'DATOS_INVALIDOS', 1, undefined],
+        ['cantidad 0', { repuestos: [previsto(a, 0)] }, 'DATOS_INVALIDOS', 1, 0],
+        ['repuesto inactivo', { repuestos: [previsto(a, 1), previsto(repInactivo, 1)] }, 'REPUESTO_INVALIDO', 1, 1],
+        ['repuesto_id suelto', { repuesto_id: a }, 'DATOS_INVALIDOS', 1, undefined, 'Usá repuestos.'],
+        ['cantidad suelta', { cantidad: 2 }, 'DATOS_INVALIDOS', 1, undefined, 'Usá repuestos.'],
+      ];
+      for (const [nombre, cambios, codigo, indice, indiceRepuesto, mensaje] of casos) {
+        const rr = await pedir('POST', '/api/planes', A.token, {
+          maquina_id: m1,
+          nombre: 'Plan con previsto mal',
+          tareas: [tarea(hoy), tarea(hoy, cambios)],
+        });
+        assert.strictEqual(rr.status, 422, `${nombre}: ${JSON.stringify(rr.cuerpo)}`);
+        assert.strictEqual(rr.cuerpo.codigo, codigo, nombre);
+        assert.strictEqual(rr.cuerpo.indice, indice, `${nombre}: indice`);
+        assert.strictEqual(rr.cuerpo.indice_repuesto, indiceRepuesto, `${nombre}: indice_repuesto`);
+        if (mensaje) assert.strictEqual(rr.cuerpo.error, mensaje, nombre);
+      }
+      assert.strictEqual(await planesDeMaquina(m1), antes, 'No se guardó ningún plan');
+
+      // Una tarea más, con indice_repuesto y sin indice
+      const rMas = await pedir('POST', `/api/planes/${p.id}/tareas`, A.token, tarea(hoy, { repuestos: [previsto(repInactivo, 1)] }));
+      assert.deepStrictEqual(
+        [rMas.status, rMas.cuerpo.codigo, rMas.cuerpo.indice_repuesto, rMas.cuerpo.indice],
+        [422, 'REPUESTO_INVALIDO', 0, undefined]
+      );
+
+      // El PATCH con repuestos reemplaza la lista; sin repuestos no la toca
+      const parche = (cuerpo: unknown) => pedir('PATCH', `/api/planes/${p.id}/tareas/${tareaId}`, A.token, cuerpo);
+      const listaDe = (r: Respuesta) =>
+        r.cuerpo.tareas.find((x: any) => x.id === tareaId).repuestos.map((x: any) => [x.repuesto.id, x.cantidad]);
+      const r1 = await parche({ repuestos: [previsto(c, 4), previsto(a, 1)] });
+      assert.strictEqual(r1.status, 200, JSON.stringify(r1.cuerpo));
+      assert.deepStrictEqual(listaDe(r1), [[c, 4], [a, 1]]);
+      const r2 = await parche({ accion: 'Con dos, otra acción' });
+      assert.deepStrictEqual(listaDe(r2), [[c, 4], [a, 1]], 'Sin repuestos no cambia');
+      const suelto = await parche({ repuesto_id: a, cantidad: 1 });
+      assert.deepStrictEqual([suelto.status, suelto.cuerpo.codigo, suelto.cuerpo.error], [422, 'DATOS_INVALIDOS', 'Usá repuestos.']);
+
+      // Uno que ya estaba y se desactivó no impide guardar la misma lista; uno nuevo inactivo, sí
+      await client.query('UPDATE repuestos SET activo = FALSE WHERE id = $1', [c]);
+      const r3 = await parche({ repuestos: [previsto(c, 5), previsto(a, 1)] });
+      assert.strictEqual(r3.status, 200, JSON.stringify(r3.cuerpo));
+      assert.deepStrictEqual(listaDe(r3), [[c, 5], [a, 1]]);
+      const r4 = await parche({ repuestos: [previsto(c, 5), previsto(repInactivo, 1)] });
+      assert.deepStrictEqual([r4.status, r4.cuerpo.codigo, r4.cuerpo.indice_repuesto], [422, 'REPUESTO_INVALIDO', 1]);
+
+      const r5 = await parche({ repuestos: [] });
+      assert.deepStrictEqual(listaDe(r5), [], 'La lista vacía la deja sin previstos');
+    });
+
+    // =========================================================================
+    // PV-16: Generar copia los previstos
+    // =========================================================================
+    await t.test('PV-16: Generar copia los previstos', async () => {
+      const a = await crearRepuesto(10);
+      const inactivo = await crearRepuesto(10);
+
+      const p = await crearPlan(m1, [
+        tarea(sumarDias(hoy, -1), { accion: 'Uno', repuestos: [previsto(a, 2.5), previsto(inactivo, 1)] }),
+        tarea(sumarDias(hoy, -1), { accion: 'Dos', repuestos: [previsto(a, 3)] }),
+        tarea(sumarDias(hoy, -1), { accion: 'Tres' }),
+      ]);
+      await client.query('UPDATE repuestos SET activo = FALSE WHERE id = $1', [inactivo]);
+      const g = await generarOk(p.id);
+      const id = g.intervencion.id;
+
+      const d = (await tareasDe(id)).cuerpo;
+      assert.deepStrictEqual(d.resumen, { total: 3, hechas: 0, previstos_sin_confirmar: 3 });
+      assert.deepStrictEqual(
+        d.tareas.map((x: any) => x.repuestos_previstos.map((y: any) => [y.repuesto.id, y.cantidad_prevista, y.estado, y.consumo])),
+        [
+          [[a, 2.5, 'PREVISTO', null], [inactivo, 1, 'PREVISTO', null]],
+          [[a, 3, 'PREVISTO', null]],
+          [],
+        ]
+      );
+      assert.ok(!('repuesto' in d.tareas[0]) && !('cantidad' in d.tareas[0]), 'Sin los campos viejos');
+      assert.deepStrictEqual(
+        Object.keys(d.tareas[0].repuestos_previstos[0].repuesto).sort(),
+        ['cantidad_disponible', 'codigo', 'id', 'lleva_stock', 'nombre', 'unidad']
+      );
+      assert.strictEqual(d.tareas[0].repuestos_previstos[0].repuesto.cantidad_disponible, 10);
+      assert.strictEqual(await stockDe(a), 10, 'Un previsto no mueve stock');
+
+      // Cambiar el plan después no cambia la intervención
+      const r = await pedir('PATCH', `/api/planes/${p.id}/tareas/${p.tareas[0].id}`, A.token, { repuestos: [] });
+      assert.strictEqual(r.status, 200, JSON.stringify(r.cuerpo));
+      const despues = (await tareasDe(id)).cuerpo;
+      assert.deepStrictEqual(
+        despues.tareas[0].repuestos_previstos.map((y: any) => [y.repuesto.id, y.cantidad_prevista]),
+        [[a, 2.5], [inactivo, 1]]
+      );
+
+      // Sin permiso para ver el stock: cantidad_disponible en null
+      const Vista = await crearUsuario('Vista', 'SoloVer', 'CONSULTA', []);
+      const conVista = (await tareasDe(id, Vista.token)).cuerpo;
+      assert.strictEqual(conVista.tareas[0].repuestos_previstos[0].repuesto.cantidad_disponible, null);
+    });
+
+    // =========================================================================
+    // PV-17: Confirmar
+    // =========================================================================
+    await t.test('PV-17: Confirmar', async () => {
+      const a = await crearRepuesto(10, 100);
+      const b = await crearRepuesto(10, 50);
+      const sinStock = await crearRepuesto(null, 70);
+      const { intId, tareas } = await generarConPrevistos(m1, [
+        [previsto(a, 2.5), previsto(b, 1)],
+        [previsto(b, 1)],
+        [previsto(b, 2)],
+        [previsto(sinStock, 3)],
+      ]);
+      await iniciar(intId);
+      const [t1, t2, t3, t4] = tareas;
+      const [pa, pb] = await idsPrevistos(intId, t1.id);
+
+      // Sin repuestos: 422. Un id de otra tarea: 422.
+      const sinLista = await marcar(intId, t1.id, { hecha: true });
+      assert.deepStrictEqual([sinLista.status, sinLista.cuerpo.codigo], [422, 'DATOS_INVALIDOS']);
+      const [otroPrevisto] = await idsPrevistos(intId, t2.id);
+      const ajeno = await marcar(intId, t1.id, { hecha: true, repuestos: [{ id: otroPrevisto, cantidad: 1 }] });
+      assert.deepStrictEqual([ajeno.status, ajeno.cuerpo.codigo], [422, 'DATOS_INVALIDOS']);
+      const repetido = await marcar(intId, t1.id, { hecha: true, repuestos: [{ id: pa, cantidad: 1 }, { id: pa, cantidad: 2 }] });
+      assert.deepStrictEqual([repetido.status, repetido.cuerpo.codigo], [422, 'DATOS_INVALIDOS']);
+      const cero = await marcar(intId, t1.id, { hecha: true, repuestos: [{ id: pa, cantidad: 0 }] });
+      assert.deepStrictEqual([cero.status, cero.cuerpo.previsto_id], [422, pa]);
+      assert.strictEqual((await consumosDe(intId)).length, 0);
+
+      // Un previsto usado con otra cantidad y otro sin usar
+      const r = await marcar(intId, t1.id, { hecha: true, repuestos: [{ id: pa, cantidad: 2 }] });
+      assert.strictEqual(r.status, 200, JSON.stringify(r.cuerpo));
+      const consumos = await consumosDe(intId);
+      assert.strictEqual(consumos.length, 1);
+      assert.deepStrictEqual(
+        [Number(consumos[0].repuesto_id), Number(consumos[0].cantidad), consumos[0].observacion],
+        [a, 2, 'Previsto en la tarea «Tarea 1»']
+      );
+      assert.ok(consumos[0].movimiento_id !== null, 'Movió stock');
+      assert.strictEqual(await stockDe(a), 8);
+      assert.strictEqual(await stockDe(b), 10);
+      const costo = (await client.query('SELECT costo_repuestos FROM intervenciones WHERE id = $1', [intId])).rows[0].costo_repuestos;
+      assert.strictEqual(Number(costo), 200, 'El costo de repuestos se recalcula');
+      assert.strictEqual(r.cuerpo.hecha, true);
+      assert.deepStrictEqual(
+        r.cuerpo.repuestos_previstos.map((x: any) => [x.id, x.estado, x.consumo]),
+        [
+          [pa, 'USADO', { id: Number(consumos[0].id), cantidad: 2, anulado: false }],
+          [pb, 'NO_USADO', null],
+        ]
+      );
+
+      // Marcarla otra vez, aunque venga repuestos: 200 sin cambios
+      const otra = await marcar(intId, t1.id, { hecha: true, repuestos: [{ id: pb, cantidad: 1 }] });
+      assert.strictEqual(otra.status, 200);
+      assert.strictEqual((await consumosDe(intId)).length, 1);
+
+      // repuestos: []: hecha y sin consumos
+      const vacia = await marcar(intId, t2.id, { hecha: true, repuestos: [] });
+      assert.deepStrictEqual([vacia.status, vacia.cuerpo.hecha], [200, true]);
+      assert.strictEqual(vacia.cuerpo.repuestos_previstos[0].estado, 'NO_USADO');
+      assert.strictEqual((await consumosDe(intId)).length, 1);
+
+      // Se puede usar más de lo previsto
+      const [pt3] = await idsPrevistos(intId, t3.id);
+      const mas = await marcar(intId, t3.id, { hecha: true, repuestos: [{ id: pt3, cantidad: 3.5 }] });
+      assert.strictEqual(mas.status, 200, JSON.stringify(mas.cuerpo));
+      assert.strictEqual(await stockDe(b), 6.5);
+
+      // Un repuesto que no lleva stock: consumo sin movimiento
+      const [pt4] = await idsPrevistos(intId, t4.id);
+      const movAntes = await movimientosDe(intId);
+      const sin = await marcar(intId, t4.id, { hecha: true, repuestos: [{ id: pt4, cantidad: 3 }] });
+      assert.strictEqual(sin.status, 200, JSON.stringify(sin.cuerpo));
+      const ultimo = (await consumosDe(intId)).at(-1);
+      assert.deepStrictEqual([Number(ultimo.repuesto_id), Number(ultimo.cantidad), ultimo.movimiento_id], [sinStock, 3, null]);
+      assert.strictEqual(await movimientosDe(intId), movAntes, 'Sin movimiento de stock');
+      assert.strictEqual((await tareasDe(intId)).cuerpo.resumen.previstos_sin_confirmar, 0);
+    });
+
+    // =========================================================================
+    // PV-18: Todo o nada
+    // =========================================================================
+    await t.test('PV-18: Todo o nada', async () => {
+      const con = await crearRepuesto(10);
+      const poco = await crearRepuesto(1);
+      const baja = await crearRepuesto(10);
+      const { intId, tareas } = await generarConPrevistos(m1, [
+        [previsto(con, 2), previsto(poco, 5)],
+        [previsto(con, 2), previsto(baja, 1)],
+      ]);
+      await iniciar(intId);
+      const [pc, pp] = await idsPrevistos(intId, tareas[0].id);
+
+      const r = await marcar(intId, tareas[0].id, { hecha: true, repuestos: [{ id: pc, cantidad: 2 }, { id: pp, cantidad: 5 }] });
+      assert.deepStrictEqual([r.status, r.cuerpo.codigo, r.cuerpo.previsto_id, r.cuerpo.disponible], [409, 'STOCK_INSUFICIENTE', pp, 1]);
+      assert.strictEqual((await consumosDe(intId)).length, 0, 'Ningún consumo');
+      assert.strictEqual(await movimientosDe(intId), 0, 'Ningún movimiento');
+      assert.strictEqual(await stockDe(con), 10, 'El stock de los otros no cambia');
+      assert.strictEqual(await stockDe(poco), 1);
+      assert.strictEqual((await tareaInt(intId, tareas[0].id)).hecha, false);
+
+      // Un repuesto que se desactivó: 409 REPUESTO_INACTIVO, con previsto_id
+      const [pc2, pb2] = await idsPrevistos(intId, tareas[1].id);
+      await client.query('UPDATE repuestos SET activo = FALSE WHERE id = $1', [baja]);
+      const ri = await marcar(intId, tareas[1].id, { hecha: true, repuestos: [{ id: pc2, cantidad: 2 }, { id: pb2, cantidad: 1 }] });
+      assert.deepStrictEqual([ri.status, ri.cuerpo.codigo, ri.cuerpo.previsto_id], [409, 'REPUESTO_INACTIVO', pb2]);
+      assert.strictEqual((await consumosDe(intId)).length, 0);
+      assert.strictEqual(await stockDe(con), 10);
+
+      // Dejándolo sin usar, se puede
+      const ok = await marcar(intId, tareas[1].id, { hecha: true, repuestos: [{ id: pc2, cantidad: 2 }] });
+      assert.strictEqual(ok.status, 200, JSON.stringify(ok.cuerpo));
+    });
+
+    // =========================================================================
+    // PV-19: Desmarcar
+    // =========================================================================
+    await t.test('PV-19: Desmarcar', async () => {
+      const a = await crearRepuesto(10);
+      const b = await crearRepuesto(10);
+      const { intId, tareas } = await generarConPrevistos(m1, [[previsto(a, 2), previsto(b, 1)]]);
+      await iniciar(intId);
+      const tareaId = tareas[0].id;
+      const [pa, pb] = await idsPrevistos(intId, tareaId);
+      const usar = { hecha: true, repuestos: [{ id: pa, cantidad: 2 }, { id: pb, cantidad: 1 }] };
+
+      assert.strictEqual((await marcar(intId, tareaId, usar)).status, 200);
+      assert.deepStrictEqual([await stockDe(a), await stockDe(b)], [8, 9]);
+
+      // Anula los consumos y el stock vuelve
+      const d1 = await marcar(intId, tareaId, { hecha: false });
+      assert.strictEqual(d1.status, 200, JSON.stringify(d1.cuerpo));
+      assert.deepStrictEqual([await stockDe(a), await stockDe(b)], [10, 10]);
+      const anulados = await consumosDe(intId);
+      assert.strictEqual(anulados.length, 2);
+      for (const c of anulados) {
+        assert.ok(c.anulado_en !== null);
+        assert.strictEqual(c.motivo_anulacion, 'Se desmarcó la tarea «Tarea 1»');
+      }
+      assert.deepStrictEqual(
+        d1.cuerpo.repuestos_previstos.map((x: any) => [x.estado, x.consumo]),
+        [['PREVISTO', null], ['PREVISTO', null]]
+      );
+      const costo = (await client.query('SELECT costo_repuestos FROM intervenciones WHERE id = $1', [intId])).rows[0].costo_repuestos;
+      assert.strictEqual(Number(costo), 0);
+
+      // Se vuelve a marcar; un consumo anulado antes desde el bloque deja el previsto NO_USADO
+      const m2Res = await marcar(intId, tareaId, usar);
+      assert.strictEqual(m2Res.status, 200, JSON.stringify(m2Res.cuerpo));
+      assert.deepStrictEqual([await stockDe(a), await stockDe(b)], [8, 9]);
+      const consumoA = m2Res.cuerpo.repuestos_previstos[0].consumo.id;
+      const an = await pedir('POST', `/api/intervenciones/${intId}/repuestos/${consumoA}/anular`, R.token, { motivo: 'Se cargó de más' });
+      assert.strictEqual(an.status, 200, JSON.stringify(an.cuerpo));
+      assert.strictEqual(await stockDe(a), 10);
+      const con = await tareaInt(intId, tareaId);
+      assert.deepStrictEqual(
+        [con.repuestos_previstos[0].estado, con.repuestos_previstos[0].consumo.anulado],
+        ['NO_USADO', true]
+      );
+
+      // Al desmarcar se saltea: el stock no vuelve dos veces, y su motivo no cambia
+      const d2 = await marcar(intId, tareaId, { hecha: false });
+      assert.strictEqual(d2.status, 200, JSON.stringify(d2.cuerpo));
+      assert.deepStrictEqual([await stockDe(a), await stockDe(b)], [10, 10]);
+      const fila = (await consumosDe(intId)).find((c) => Number(c.id) === consumoA);
+      assert.strictEqual(fila.motivo_anulacion, 'Se cargó de más');
+    });
+
+    // =========================================================================
+    // PV-20: Estados y permisos
+    // =========================================================================
+    await t.test('PV-20: Estados y permisos', async () => {
+      const a = await crearRepuesto(10);
+      const p = await crearPlan(m1, [
+        tarea(sumarDias(hoy, -1), { accion: 'Con previsto', repuestos: [previsto(a, 2)] }),
+        tarea(sumarDias(hoy, -1), { accion: 'Sin previsto' }),
+      ], { responsable_usuario_id: R.id });
+      const g = await generarOk(p.id);
+      const intId = g.intervencion.id;
+      const [conP, sinP] = g.tareas;
+      const [pa] = await idsPrevistos(intId, conP.id);
+      const usar = { hecha: true, repuestos: [{ id: pa, cantidad: 2 }] };
+
+      // En PENDIENTE
+      const r1 = await marcar(intId, conP.id, usar);
+      assert.deepStrictEqual(
+        [r1.status, r1.cuerpo.codigo, r1.cuerpo.error],
+        [409, 'ESTADO_NO_PERMITE_REPUESTOS', 'Iniciá el trabajo para confirmar los repuestos de esta tarea.']
+      );
+      assert.strictEqual((await marcar(intId, sinP.id, { hecha: true })).status, 200, 'Sin previstos se marca');
+
+      await iniciar(intId);
+
+      // R2: 403
+      const r2 = await marcar(intId, conP.id, usar, R2.token);
+      assert.strictEqual(r2.status, 403, JSON.stringify(r2.cuerpo));
+
+      // En FINALIZADA: R, 403; A con motivo registra los consumos con ese motivo
+      await finalizar(intId);
+      const r3 = await marcar(intId, conP.id, { ...usar, motivo: 'Se usó y no se cargó' }, R.token);
+      assert.deepStrictEqual([r3.status, r3.cuerpo.codigo], [403, 'PERMISO_INSUFICIENTE']);
+      const sinMotivo = await marcar(intId, conP.id, usar, A.token);
+      assert.deepStrictEqual([sinMotivo.status, sinMotivo.cuerpo.codigo], [422, 'MOTIVO_REQUERIDO']);
+      assert.strictEqual(await stockDe(a), 10);
+
+      const r4 = await marcar(intId, conP.id, { ...usar, motivo: 'Se usó y no se cargó' }, A.token);
+      assert.strictEqual(r4.status, 200, JSON.stringify(r4.cuerpo));
+      assert.strictEqual(await stockDe(a), 8);
+      const auditoria = async () =>
+        (await client.query(
+          `SELECT tipo_evento, valor_nuevo, motivo FROM intervencion_auditoria
+           WHERE intervencion_id = $1 AND tipo_evento IN ('CORRECCION_COSTO', 'CORRECCION_TAREA') ORDER BY id`,
+          [intId]
+        )).rows;
+      const nombreA = `PV Previsto ${numeroRepuesto}`;
+      assert.deepStrictEqual(await auditoria(), [
+        { tipo_evento: 'CORRECCION_COSTO', valor_nuevo: `Se agregó: ${nombreA} × 2 litro`, motivo: 'Se usó y no se cargó' },
+        { tipo_evento: 'CORRECCION_TAREA', valor_nuevo: 'Se marcó como hecha: Con previsto', motivo: 'Se usó y no se cargó' },
+      ]);
+
+      // Desmarcar en FINALIZADA: anula con el motivo del pedido
+      const r5 = await marcar(intId, conP.id, { hecha: false, motivo: 'Corrección del pañol' }, A.token);
+      assert.strictEqual(r5.status, 200, JSON.stringify(r5.cuerpo));
+      assert.strictEqual(await stockDe(a), 10);
+      const consumo = (await consumosDe(intId))[0];
+      assert.strictEqual(consumo.motivo_anulacion, 'Corrección del pañol');
+
+      // En CANCELADA: 409
+      const { intId: intC, tareas: tC } = await generarConPrevistos(m1, [[previsto(a, 1)]]);
+      await accionOk(intC, 'cancelar', { estado_esperado: 'PENDIENTE', motivo: 'Se reprograma' }, A.token);
+      const [pc] = await idsPrevistos(intC, tC[0].id);
+      const r6 = await marcar(intC, tC[0].id, { hecha: true, repuestos: [{ id: pc, cantidad: 1 }] }, A.token);
+      assert.deepStrictEqual([r6.status, r6.cuerpo.codigo], [409, 'ESTADO_NO_PERMITE_TAREAS']);
+    });
+
+    // =========================================================================
+    // PV-21: Concurrencia
+    // =========================================================================
+    await t.test('PV-21: Concurrencia', async () => {
+      for (let vuelta = 1; vuelta <= 10; vuelta++) {
+        // Dos confirmaciones de la misma tarea a la vez: un solo juego de consumos
+        const a = await crearRepuesto(10);
+        const uno = await generarConPrevistos(m1, [[previsto(a, 2)]]);
+        await iniciar(uno.intId);
+        const [pa] = await idsPrevistos(uno.intId, uno.tareas[0].id);
+        const cuerpo = { hecha: true, repuestos: [{ id: pa, cantidad: 2 }] };
+        const [c1, c2] = await Promise.all([marcar(uno.intId, uno.tareas[0].id, cuerpo), marcar(uno.intId, uno.tareas[0].id, cuerpo)]);
+        assert.deepStrictEqual([c1.status, c2.status], [200, 200], `Vuelta ${vuelta}: ${JSON.stringify([c1.cuerpo, c2.cuerpo])}`);
+        assert.strictEqual((await consumosDe(uno.intId)).length, 1, `Vuelta ${vuelta}: un solo consumo`);
+        assert.strictEqual(await stockDe(a), 8, `Vuelta ${vuelta}`);
+
+        // Dos tareas de máquinas distintas que comparten repuesto, con stock para una sola
+        const z = await crearRepuesto(1);
+        const t1 = await generarConPrevistos(m1, [[previsto(z, 1)]]);
+        const t2 = await generarConPrevistos(m2, [[previsto(z, 1)]]);
+        await iniciar(t1.intId);
+        await iniciar(t2.intId);
+        const [p1] = await idsPrevistos(t1.intId, t1.tareas[0].id);
+        const [p2] = await idsPrevistos(t2.intId, t2.tareas[0].id);
+        const [r1, r2] = await Promise.all([
+          marcar(t1.intId, t1.tareas[0].id, { hecha: true, repuestos: [{ id: p1, cantidad: 1 }] }),
+          marcar(t2.intId, t2.tareas[0].id, { hecha: true, repuestos: [{ id: p2, cantidad: 1 }] }),
+        ]);
+        assert.deepStrictEqual([r1.status, r2.status].sort(), [200, 409], `Vuelta ${vuelta}: ${JSON.stringify([r1.cuerpo, r2.cuerpo])}`);
+        assert.strictEqual((r1.status === 409 ? r1 : r2).cuerpo.codigo, 'STOCK_INSUFICIENTE');
+        assert.strictEqual(await stockDe(z), 0, `Vuelta ${vuelta}: nunca negativo`);
+      }
+    });
   } finally {
     // Limpieza: solo lo que creó esta prueba
     try {
       const maquinas = createdMaquinaIds;
       const intIds = (await client.query('SELECT id FROM intervenciones WHERE maquina_id = ANY($1)', [maquinas])).rows.map((r) => Number(r.id));
       if (intIds.length > 0) {
+        await client.query(
+          'DELETE FROM intervencion_tarea_repuestos WHERE intervencion_tarea_id IN (SELECT id FROM intervencion_tareas WHERE intervencion_id = ANY($1))',
+          [intIds]
+        );
         await client.query('DELETE FROM intervencion_tareas WHERE intervencion_id = ANY($1)', [intIds]);
         await client.query('DELETE FROM intervencion_costos WHERE intervencion_id = ANY($1)', [intIds]);
         await client.query('DELETE FROM pedidos_repuesto WHERE intervencion_id = ANY($1)', [intIds]);
@@ -1181,6 +1630,12 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-14)', async (t) => {
         await client.query('DELETE FROM intervenciones WHERE id = ANY($1)', [intIds]);
       }
       if (maquinas.length > 0) {
+        await client.query(
+          `DELETE FROM plan_tarea_repuestos WHERE plan_tarea_id IN (
+             SELECT t.id FROM plan_tareas t JOIN planes_mantenimiento p ON p.id = t.plan_id WHERE p.maquina_id = ANY($1)
+           )`,
+          [maquinas]
+        );
         await client.query(
           'DELETE FROM plan_tareas WHERE plan_id IN (SELECT id FROM planes_mantenimiento WHERE maquina_id = ANY($1))',
           [maquinas]
