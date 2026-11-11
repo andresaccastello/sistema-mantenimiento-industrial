@@ -24,6 +24,7 @@ export const planDetalleEjemplo: PlanDetalle = {
   descripcion: 'Plan del contrato',
   activo: true,
   anticipacion_dias: 7,
+  generacion_automatica: false,
   hoy: '2026-11-09',
   maquina: {
     id: 4629,
@@ -126,6 +127,7 @@ export const planListaEjemplo: PlanLista = {
   nombre: 'Plan PV 38',
   activo: true,
   anticipacion_dias: 7,
+  generacion_automatica: false,
   maquina: {
     id: 4553,
     codigo: 'PV_M1_1794200445308',

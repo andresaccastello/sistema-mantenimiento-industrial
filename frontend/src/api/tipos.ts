@@ -1159,6 +1159,8 @@ export interface PlanDetalle {
   descripcion: string | null;
   activo: boolean;
   anticipacion_dias: number;
+  /** PV5: genera la intervención sola cuando una tarea vence o está por vencer. */
+  generacion_automatica: boolean;
   hoy: string;
   maquina: PlanMaquina;
   responsable: Persona | null;
@@ -1175,6 +1177,8 @@ export interface PlanLista {
   nombre: string;
   activo: boolean;
   anticipacion_dias: number;
+  /** PV5: genera la intervención sola cuando una tarea vence o está por vencer. */
+  generacion_automatica: boolean;
   maquina: PlanMaquina;
   responsable: Persona | null;
   tareas_activas: number;

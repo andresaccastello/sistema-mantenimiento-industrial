@@ -54,6 +54,7 @@ export async function usuariosConPermiso(
     LEFT JOIN perfil_permiso pp ON pp.perfil_id = u.perfil_id AND pp.permiso_id = perm.id
     LEFT JOIN usuario_permiso exc ON exc.usuario_id = u.id AND exc.permiso_id = perm.id
     WHERE u.activo = TRUE
+      AND NOT u.es_sistema
       AND (
         exc.efecto = 'CONCEDER'
         OR (pp.perfil_id IS NOT NULL AND (exc.efecto IS NULL OR exc.efecto <> 'DENEGAR'))
@@ -104,6 +105,8 @@ export const REGLAS_EVENTOS_NOTIFICACION = [
   'INTERVENCION_CANCELADA',
   'INTERVENCION_REABIERTA',
   'DETENCION_PENDIENTE_CONFIRMACION',
+  // PV5: lo genera procesarVencimientos, no una intervención
+  'PREVENTIVO_VENCIMIENTO',
 ] as const;
 
 export type TipoEventoNotificable = (typeof REGLAS_EVENTOS_NOTIFICACION)[number];
@@ -441,20 +444,27 @@ export async function registrarNotificaciones(
   );
 
   const insertedIds = resIns.rows.map((r: any) => Number(r.id));
+  await encolarEnvios(client, insertedIds);
+}
 
-  // Inserción en lote de envíos de avisos por email según canal activo y reglas (Etapa N1a)
-  if (insertedIds.length > 0) {
-    await client.query(
-      `INSERT INTO notificacion_envios (
-         notificacion_id, canal, estado, intentos, creado_en
-       )
-       SELECT n.id, c.canal, 'PENDIENTE', 0, NOW()
-       FROM notificaciones n
-       JOIN notificacion_canales c ON c.canal = 'EMAIL' AND c.activo = TRUE
-       JOIN notificacion_reglas r ON r.canal = c.canal AND r.tipo_evento = n.tipo_evento
-       WHERE n.id = ANY($1::bigint[])
-         AND (r.modo = 'SIEMPRE' OR (r.modo = 'SOLO_ALTA' AND n.prioridad = 'ALTA'))`,
-      [insertedIds]
-    );
+/**
+ * Inserción en lote de envíos de avisos por email según canal activo y reglas (Etapa N1a).
+ * La usan las notificaciones de una intervención y los avisos de vencimiento (PV5).
+ */
+export async function encolarEnvios(client: pg.PoolClient, notificacionIds: number[]): Promise<void> {
+  if (notificacionIds.length === 0) {
+    return;
   }
+  await client.query(
+    `INSERT INTO notificacion_envios (
+       notificacion_id, canal, estado, intentos, creado_en
+     )
+     SELECT n.id, c.canal, 'PENDIENTE', 0, NOW()
+     FROM notificaciones n
+     JOIN notificacion_canales c ON c.canal = 'EMAIL' AND c.activo = TRUE
+     JOIN notificacion_reglas r ON r.canal = c.canal AND r.tipo_evento = n.tipo_evento
+     WHERE n.id = ANY($1::bigint[])
+       AND (r.modo = 'SIEMPRE' OR (r.modo = 'SOLO_ALTA' AND n.prioridad = 'ALTA'))`,
+    [notificacionIds]
+  );
 }

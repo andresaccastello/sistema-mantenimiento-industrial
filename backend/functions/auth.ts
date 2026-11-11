@@ -23,7 +23,7 @@ authApp.post('/login', async (c) => {
 
     // Buscar usuario por legajo y verificar estado propio y de su perfil
     const { rows } = await pool.query(
-      `SELECT u.id, u.legajo, u.password_hash, u.nombre, u.apellido, u.activo AS usuario_activo,
+      `SELECT u.id, u.legajo, u.password_hash, u.nombre, u.apellido, u.activo AS usuario_activo, u.es_sistema,
               u.debe_cambiar_password, u.password_actualizado_en, u.sesion_version,
               p.id AS perfil_id, p.nombre AS perfil_nombre, p.activo AS perfil_activo
        FROM usuarios u
@@ -33,7 +33,8 @@ authApp.post('/login', async (c) => {
     );
 
     const user = rows[0];
-    if (!user || !user.password_hash || !user.usuario_activo || !user.perfil_activo) {
+    // PV5, 2.1: el usuario del sistema no inicia sesión, aunque esté activo o tenga contraseña
+    if (!user || !user.password_hash || !user.usuario_activo || !user.perfil_activo || user.es_sistema) {
       return c.json({ error: 'Credenciales inválidas', codigo: 'CREDENCIALES_INVALIDAS' }, 401);
     }
 

@@ -3,6 +3,7 @@ import { pool } from '../db.ts';
 import { jwtVerify, dbVerify, requirePermission } from '../middleware.ts';
 import { estadoEmail, obtenerTransporteEmail, sanitizarError } from './transporteEmail.ts';
 import { procesarEnvios } from './procesarEnvios.ts';
+import { procesarVencimientos, ResultadoVencimientos } from '../preventivos/vencimientos.ts';
 import { REGLAS_EVENTOS_NOTIFICACION } from '../intervenciones/notificaciones.ts';
 import { parseEnteroTexto } from '../validations.ts';
 
@@ -28,8 +29,17 @@ avisosTriggerApp.post('/procesar', async (c) => {
     return c.json({ error: 'Permiso insuficiente', codigo: 'PERMISO_INSUFICIENTE' }, 403);
   }
 
-  const resultado = await procesarEnvios();
-  return c.json(resultado);
+  // PV5, 4: primero los vencimientos, una vez por día; si fallan, los envíos se procesan igual
+  let vencimientos: ResultadoVencimientos | { error: string };
+  try {
+    vencimientos = await procesarVencimientos();
+  } catch (err) {
+    console.error('Error al procesar los vencimientos:', err);
+    vencimientos = { error: 'No se pudieron procesar los vencimientos' };
+  }
+
+  const envios = await procesarEnvios();
+  return c.json({ vencimientos, envios });
 });
 
 /* =====================================================================

@@ -38,6 +38,7 @@ import {
 } from './preventivos/consultas.ts';
 import { generarDesdePlan, validarTareaIds } from './preventivos/generar.ts';
 import { responsablesHabilitados } from './intervenciones/responsables.ts';
+import { procesarVencimientos } from './preventivos/vencimientos.ts';
 
 /**
  * Etapa PV1, secciones 4, 5 y 6.1: planes preventivos, sus tareas, los vencimientos
@@ -55,6 +56,12 @@ function invalido(mensaje: string): ErrorNegocio {
 
 function presente(val: unknown): boolean {
   return val !== undefined && val !== null;
+}
+
+/** generacion_automatica (PV5, 4): un booleano de verdad; "false" o 1 no lo son. */
+function validarAutomatica(val: unknown): boolean {
+  if (typeof val !== 'boolean') throw invalido('generacion_automatica debe ser un booleano');
+  return val;
 }
 
 /** Un filtro de id en la consulta, como en la lista de intervenciones: vacío es sin filtro. */
@@ -191,6 +198,18 @@ planesApp.get('/responsables-habilitados', async (c) => {
 });
 
 // -------------------------------------------------------------
+// PV5, 4 Revisar los vencimientos a mano (antes de /:id)
+// -------------------------------------------------------------
+
+planesApp.post('/procesar-vencimientos', async (c) => {
+  try {
+    return c.json(await procesarVencimientos({ forzar: true }));
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+// -------------------------------------------------------------
 // 4.2 Planes
 // -------------------------------------------------------------
 
@@ -227,6 +246,7 @@ planesApp.post('/', async (c) => {
     const nombre = textoObligatorio(b.nombre, 'nombre', 3, 150);
     const descripcion = textoOpcional(b.descripcion, 'descripcion', 2000);
     const anticipacion = b.anticipacion_dias === undefined ? 7 : validarAnticipacion(b.anticipacion_dias);
+    const automatica = b.generacion_automatica === undefined ? false : validarAutomatica(b.generacion_automatica);
     const responsableId = presente(b.responsable_usuario_id)
       ? validarIdCuerpo(b.responsable_usuario_id, 'DATOS_INVALIDOS', 'responsable_usuario_id')
       : null;
@@ -280,9 +300,10 @@ planesApp.post('/', async (c) => {
 
       const resP = await client.query(
         `INSERT INTO planes_mantenimiento (
-           maquina_id, responsable_usuario_id, nombre, descripcion, anticipacion_dias, creado_por_usuario_id
-         ) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-        [maquinaId, responsableId, nombre, descripcion, anticipacion, usuario.id]
+           maquina_id, responsable_usuario_id, nombre, descripcion, anticipacion_dias, creado_por_usuario_id,
+           generacion_automatica
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+        [maquinaId, responsableId, nombre, descripcion, anticipacion, usuario.id, automatica]
       );
       const id = Number(resP.rows[0].id);
       for (let i = 0; i < tareas.length; i++) {
@@ -312,6 +333,7 @@ planesApp.patch('/:id', async (c) => {
     const nombre = 'nombre' in b ? textoObligatorio(b.nombre, 'nombre', 3, 150) : undefined;
     const descripcion = 'descripcion' in b ? textoOpcional(b.descripcion, 'descripcion', 2000) : undefined;
     const anticipacion = 'anticipacion_dias' in b ? validarAnticipacion(b.anticipacion_dias) : undefined;
+    const automatica = 'generacion_automatica' in b ? validarAutomatica(b.generacion_automatica) : undefined;
     const responsableId =
       'responsable_usuario_id' in b
         ? b.responsable_usuario_id === null
@@ -337,6 +359,7 @@ planesApp.patch('/:id', async (c) => {
       }
       if (descripcion !== undefined) poner('descripcion', descripcion);
       if (anticipacion !== undefined) poner('anticipacion_dias', anticipacion);
+      if (automatica !== undefined) poner('generacion_automatica', automatica);
       if (responsableId !== undefined) {
         if (responsableId !== null && responsableId !== plan.responsable_usuario_id) {
           await validarResponsableHabilitado(client, responsableId, plan.sector_id);

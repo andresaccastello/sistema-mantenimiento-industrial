@@ -232,7 +232,7 @@ test('Migración 018 — Preventivos por calendario', async (t) => {
         Object.keys(planes).sort(),
         [
           'activo', 'actualizado_en', 'anticipacion_dias', 'creado_en', 'creado_por_usuario_id',
-          'descripcion', 'id', 'maquina_id', 'nombre', 'responsable_usuario_id',
+          'descripcion', 'generacion_automatica', 'id', 'maquina_id', 'nombre', 'responsable_usuario_id',
         ]
       );
       for (const vieja of ['criterio', 'frecuencia_valor', 'frecuencia_unidad', 'proxima_fecha', 'proximo_valor_objetivo', 'observaciones']) {

@@ -228,7 +228,7 @@ test('Etapa N1a — Avisos por email configurables', async (t) => {
     });
 
     // AV-02: Lectura
-    await t.test('AV-02: Forma de GET /, WhatsApp disponible false, 8 tipos en orden y sin secretos', async () => {
+    await t.test('AV-02: Forma de GET /, WhatsApp disponible false, 9 tipos en orden y sin secretos', async () => {
       // Simular variables secretas en entorno
       process.env.SMTP_PASSWORD = 'super-secret-password-xyz';
       process.env.SMTP_USUARIO = 'secret-user-abc';
@@ -251,8 +251,8 @@ test('Etapa N1a — Avisos por email configurables', async (t) => {
       assert.strictEqual(chWa.disponible, false);
 
       assert.ok(Array.isArray(data.reglas));
-      assert.strictEqual(data.reglas.length, 8);
-      for (let i = 0; i < 8; i++) {
+      assert.strictEqual(data.reglas.length, 9);
+      for (let i = 0; i < 9; i++) {
         assert.strictEqual(data.reglas[i].tipo_evento, REGLAS_EVENTOS_NOTIFICACION[i]);
       }
       assert.strictEqual(typeof data.pendientes, 'number');

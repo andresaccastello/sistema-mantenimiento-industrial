@@ -45,7 +45,7 @@ export async function responsablesHabilitados(
 
   const ordenSql = orden === 'apellido' ? 'apellido ASC NULLS LAST, nombre ASC, id ASC' : 'nombre ASC';
   const res = await db.query(
-    `SELECT id, legajo, nombre, apellido FROM usuarios WHERE id = ANY($1::int[]) ORDER BY ${ordenSql}`,
+    `SELECT id, legajo, nombre, apellido FROM usuarios WHERE id = ANY($1::int[]) AND NOT es_sistema ORDER BY ${ordenSql}`,
     [ids]
   );
 

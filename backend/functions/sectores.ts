@@ -59,7 +59,7 @@ async function consultarSectorDetalle(id: number) {
        p.id AS planta_id,
        p.nombre AS planta_nombre,
        (SELECT COUNT(*)::integer FROM maquinas m WHERE m.sector_id = s.id AND m.activo = TRUE) AS maquinas_activas,
-       (SELECT COUNT(*)::integer FROM usuario_sector us JOIN usuarios u ON us.usuario_id = u.id WHERE us.sector_id = s.id AND u.activo = TRUE) AS usuarios_activos
+       (SELECT COUNT(*)::integer FROM usuario_sector us JOIN usuarios u ON us.usuario_id = u.id WHERE us.sector_id = s.id AND u.activo = TRUE AND NOT u.es_sistema) AS usuarios_activos
      FROM sectores s
      LEFT JOIN plantas p ON s.planta_id = p.id
      WHERE s.id = $1`,
@@ -105,7 +105,7 @@ sectoresApp.get('/', async (c) => {
           p.id AS planta_id,
           p.nombre AS planta_nombre,
           (SELECT COUNT(*)::integer FROM maquinas m WHERE m.sector_id = s.id AND m.activo = TRUE) AS maquinas_activas,
-          (SELECT COUNT(*)::integer FROM usuario_sector us JOIN usuarios u ON us.usuario_id = u.id WHERE us.sector_id = s.id AND u.activo = TRUE) AS usuarios_activos
+          (SELECT COUNT(*)::integer FROM usuario_sector us JOIN usuarios u ON us.usuario_id = u.id WHERE us.sector_id = s.id AND u.activo = TRUE AND NOT u.es_sistema) AS usuarios_activos
         FROM sectores s
         LEFT JOIN plantas p ON s.planta_id = p.id
         ORDER BY s.nombre ASC
@@ -254,7 +254,7 @@ sectoresApp.put('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) => {
         const resUso = await pool.query(
           `SELECT
              (SELECT COUNT(*)::integer FROM maquinas WHERE sector_id = $1 AND activo = TRUE) AS maquinas_activas,
-             (SELECT COUNT(*)::integer FROM usuario_sector us JOIN usuarios u ON us.usuario_id = u.id WHERE us.sector_id = $1 AND u.activo = TRUE) AS usuarios_activos`,
+             (SELECT COUNT(*)::integer FROM usuario_sector us JOIN usuarios u ON us.usuario_id = u.id WHERE us.sector_id = $1 AND u.activo = TRUE AND NOT u.es_sistema) AS usuarios_activos`,
           [id]
         );
         const maquinas_activas = Number(resUso.rows[0].maquinas_activas);
@@ -319,7 +319,7 @@ sectoresApp.delete('/:id', requirePermission('MAQUINAS_GESTIONAR'), async (c) =>
     const resUso = await pool.query(
       `SELECT
          (SELECT COUNT(*)::integer FROM maquinas WHERE sector_id = $1 AND activo = TRUE) AS maquinas_activas,
-         (SELECT COUNT(*)::integer FROM usuario_sector us JOIN usuarios u ON us.usuario_id = u.id WHERE us.sector_id = $1 AND u.activo = TRUE) AS usuarios_activos`,
+         (SELECT COUNT(*)::integer FROM usuario_sector us JOIN usuarios u ON us.usuario_id = u.id WHERE us.sector_id = $1 AND u.activo = TRUE AND NOT u.es_sistema) AS usuarios_activos`,
       [id]
     );
     const maquinas_activas = Number(resUso.rows[0].maquinas_activas);

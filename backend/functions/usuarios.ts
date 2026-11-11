@@ -22,6 +22,23 @@ perfilesApp.use('*', jwtVerify, dbVerify, requirePermission('USUARIOS_GESTIONAR'
 permisosApp.use('*', jwtVerify, dbVerify, requirePermission('USUARIOS_GESTIONAR'));
 
 /**
+ * PV5, 2.1: el usuario del sistema no es un usuario de la lista. Su detalle, y cualquier
+ * cambio por /:id, da 404 como si no existiera.
+ */
+async function ocultarUsuarioSistema(c: any, next: () => Promise<void>) {
+  const id = parseId(c.req.param('id'));
+  if (id) {
+    const r = await pool.query('SELECT 1 FROM usuarios WHERE id = $1 AND es_sistema', [id]);
+    if (r.rows.length > 0) {
+      return c.json({ error: 'Usuario no encontrado', codigo: 'USUARIO_NO_ENCONTRADO' }, 404);
+    }
+  }
+  await next();
+}
+usuariosApp.use('/:id', ocultarUsuarioSistema);
+usuariosApp.use('/:id/*', ocultarUsuarioSistema);
+
+/**
  * Valida que el actor posea todos los permisos del perfil a asignar
  * con alcance igual o superior (D-42, RN-57, Regla 2 sección 5.3)
  */
@@ -107,7 +124,7 @@ async function bloquearUsuarioYAdministradores(
     FROM usuarios u
     LEFT JOIN perfiles p ON u.perfil_id = p.id
     WHERE u.id = $1 
-       OR (p.nombre = 'ADMINISTRADOR' AND u.activo = TRUE)
+       OR (p.nombre = 'ADMINISTRADOR' AND u.activo = TRUE AND NOT u.es_sistema)
     ORDER BY u.id ASC
     FOR UPDATE OF u
   `, [targetUserId]);
@@ -156,7 +173,7 @@ perfilesApp.get('/', async (c) => {
         (
           SELECT COUNT(*)::integer
           FROM usuarios u
-          WHERE u.perfil_id = p.id AND u.activo = TRUE
+          WHERE u.perfil_id = p.id AND u.activo = TRUE AND NOT u.es_sistema
         ) AS usuarios_activos,
         (
           SELECT COALESCE(json_agg(
@@ -223,7 +240,8 @@ usuariosApp.get('/', async (c) => {
     const perfilIdParam = c.req.query('perfil_id');
     const textoParam = c.req.query('texto');
 
-    const conditions: string[] = [];
+    // PV5, 2.1: nunca el usuario del sistema
+    const conditions: string[] = ['NOT u.es_sistema'];
     const values: any[] = [];
 
     if (activoParam !== undefined && activoParam !== '') {
@@ -327,7 +345,7 @@ export async function obtenerDetalleUsuario(
       ) AS sectores
     FROM usuarios u
     JOIN perfiles p ON u.perfil_id = p.id
-    WHERE u.id = $1
+    WHERE u.id = $1 AND NOT u.es_sistema
   `, [userId]);
 
   if (resUser.rows.length === 0) {

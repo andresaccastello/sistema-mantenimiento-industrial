@@ -66,6 +66,7 @@ const TABLAS_CONTROL = [
   'intervencion_tarea_repuestos',
   'medidores',
   'lecturas_medidor',
+  'avisos_vencimiento',
 ];
 
 async function contarFilas() {

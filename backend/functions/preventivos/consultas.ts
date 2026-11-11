@@ -101,7 +101,7 @@ function tareaPlan(r: Record<string, any>, repuestos: Array<{ repuesto: Record<s
 /** El detalle de un plan (4.3). Lanza PLAN_NO_ENCONTRADO si no existe. */
 export async function obtenerDetallePlan(db: pg.Pool | pg.PoolClient, planId: number) {
   const resP = await db.query(
-    `SELECT p.id, p.nombre, p.descripcion, p.activo, p.anticipacion_dias, p.creado_en, p.actualizado_en,
+    `SELECT p.id, p.nombre, p.descripcion, p.activo, p.anticipacion_dias, p.generacion_automatica, p.creado_en, p.actualizado_en,
             to_char(${SQL_HOY}, 'YYYY-MM-DD') AS hoy,
             m.id AS maquina_id, m.codigo AS maquina_codigo, m.nombre AS maquina_nombre, m.activo AS maquina_activo,
             s.id AS sector_id, s.nombre AS sector_nombre,
@@ -138,6 +138,7 @@ export async function obtenerDetallePlan(db: pg.Pool | pg.PoolClient, planId: nu
     descripcion: p.descripcion,
     activo: Boolean(p.activo),
     anticipacion_dias: Number(p.anticipacion_dias),
+    generacion_automatica: Boolean(p.generacion_automatica),
     hoy: p.hoy,
     maquina: {
       id: Number(p.maquina_id),
@@ -199,7 +200,7 @@ export async function listarPlanes(db: pg.Pool, filtros: FiltrosMaquina, todos: 
 
   const res = await db.query(
     `SELECT x.*, to_char(x.proxima, 'YYYY-MM-DD') AS proxima_texto FROM (
-       SELECT p.id, p.nombre, p.activo, p.anticipacion_dias,
+       SELECT p.id, p.nombre, p.activo, p.anticipacion_dias, p.generacion_automatica,
               m.id AS maquina_id, m.codigo AS maquina_codigo, m.nombre AS maquina_nombre, m.activo AS maquina_activo,
               s.id AS sector_id, s.nombre AS sector_nombre,
               ${columnasPersona('ur', 'resp')},
@@ -226,6 +227,7 @@ export async function listarPlanes(db: pg.Pool, filtros: FiltrosMaquina, todos: 
     nombre: r.nombre,
     activo: Boolean(r.activo),
     anticipacion_dias: Number(r.anticipacion_dias),
+    generacion_automatica: Boolean(r.generacion_automatica),
     maquina: {
       id: Number(r.maquina_id),
       codigo: r.maquina_codigo,

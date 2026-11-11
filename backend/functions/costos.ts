@@ -16,7 +16,7 @@ costosApp.get('/personas', requirePermission('COSTOS_REGISTRAR'), async (c) => {
     const res = await pool.query(
       `SELECT id, nombre, apellido, legajo
        FROM usuarios
-       WHERE activo = TRUE
+       WHERE activo = TRUE AND NOT es_sistema
        ORDER BY lower(apellido) ASC NULLS LAST, lower(nombre) ASC, id ASC`
     );
     return c.json(
