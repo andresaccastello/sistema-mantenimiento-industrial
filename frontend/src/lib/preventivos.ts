@@ -5,8 +5,19 @@
  * y `proxima_fecha` tal como los manda la API (D-021).
  */
 import { formatCantidad, parsearId } from './formato';
+import { leerValorMedidor, textoValorMedidor } from './medidores';
 import { validarCantidad } from './repuestos';
-import type { EstadoVencimiento, FrecuenciaUnidad, RepuestoPrevistoIntervencion, TareaPlan } from '../api/tipos';
+import type {
+  EstadoFechaTarea,
+  EstadoVencimiento,
+  FrecuenciaUnidad,
+  RepuestoPrevistoIntervencion,
+  TareaPlan,
+  UsoTareaIntervencion,
+  UsoTareaPlan,
+} from '../api/tipos';
+
+export { textoValorMedidor };
 
 // ---------------------------------------------------------------------------
 // Textos
@@ -46,6 +57,83 @@ export function formatFechaDia(fecha: string | null | undefined): string {
 }
 
 // ---------------------------------------------------------------------------
+// Textos del uso (Etapa PV4, 2.1)
+// ---------------------------------------------------------------------------
+
+/** Lo que hace falta de una tarea, del plan o de los vencimientos, para sus textos. */
+export interface TareaParaTexto {
+  frecuencia_valor: number | null;
+  frecuencia_unidad: FrecuenciaUnidad | null;
+  dias: number | null;
+  estado_fecha: EstadoFechaTarea | null;
+  uso: UsoTareaPlan | null;
+}
+
+/** "Cada 6 meses", "Cada 250 horas" o "Cada 6 meses o 250 horas". */
+export function textoFrecuenciaTarea(
+  t: Pick<TareaParaTexto, 'frecuencia_valor' | 'frecuencia_unidad'> & {
+    uso: { cada: number; medidor: { unidad: string } } | null;
+  }
+): string {
+  const porFecha =
+    t.frecuencia_valor !== null && t.frecuencia_unidad !== null ? textoFrecuencia(t.frecuencia_valor, t.frecuencia_unidad) : null;
+  const porUso = t.uso ? textoValorMedidor(t.uso.cada, t.uso.medidor.unidad) : null;
+  if (porFecha && porUso) return `${porFecha} o ${porUso}`;
+  if (porFecha) return porFecha;
+  if (porUso) return `Cada ${porUso}`;
+  return '—';
+}
+
+/** "Sin lecturas del Horómetro", "Faltan 25 horas", "Toca ahora" o "Se pasó por 12,5 horas". */
+export function textoUso(uso: UsoTareaPlan): string {
+  if (uso.estado === 'SIN_LECTURA' || uso.faltan === null) return `Sin lecturas del ${uso.medidor.nombre}`;
+  if (uso.faltan > 0) return `Faltan ${textoValorMedidor(uso.faltan, uso.medidor.unidad)}`;
+  if (uso.faltan === 0) return 'Toca ahora';
+  return `Se pasó por ${textoValorMedidor(-uso.faltan, uso.medidor.unidad)}`;
+}
+
+/** "A las 500 horas". */
+export function textoProximoUso(uso: UsoTareaPlan): string {
+  return `A las ${textoValorMedidor(uso.proximo, uso.medidor.unidad)}`;
+}
+
+/**
+ * El texto del criterio que apura: la fecha si está vencida o próxima; si no, el uso si
+ * está vencido, próximo o sin lectura; si no, el de la fecha, y sin fecha, el del uso.
+ */
+export function textoVenceTarea(t: TareaParaTexto): string {
+  if ((t.estado_fecha === 'VENCIDA' || t.estado_fecha === 'PROXIMA') && t.dias !== null) return textoVencimiento(t.dias);
+  if (t.uso && ['VENCIDA', 'PROXIMA', 'SIN_LECTURA'].includes(t.uso.estado)) return textoUso(t.uso);
+  if (t.dias !== null) return textoVencimiento(t.dias);
+  if (t.uso) return textoUso(t.uso);
+  return '';
+}
+
+/**
+ * "Programada para el 10/12/2026", "Programada a las 500 horas" o las dos, unidas con "o".
+ * Sin fecha ni uso: null.
+ */
+export function textoProgramada(fecha: string | null, uso: Pick<UsoTareaIntervencion, 'programado' | 'medidor'> | null): string | null {
+  const porFecha = fecha ? `para el ${formatFechaDia(fecha)}` : null;
+  const porUso = uso ? `a las ${textoValorMedidor(uso.programado, uso.medidor.unidad)}` : null;
+  if (porFecha && porUso) return `Programada ${porFecha} o ${porUso}`;
+  if (porFecha) return `Programada ${porFecha}`;
+  if (porUso) return `Programada ${porUso}`;
+  return null;
+}
+
+/** "Con el Horómetro en 512,5 horas", o null si no hay valor. */
+export function textoValorAlHacer(uso: Pick<UsoTareaIntervencion, 'valor' | 'medidor'> | null): string | null {
+  if (!uso || uso.valor === null) return null;
+  return `Con el ${uso.medidor.nombre} en ${textoValorMedidor(uso.valor, uso.medidor.unidad)}`;
+}
+
+/** La primera vez sugerida: la última lectura más `cada`, o `cada` si no hay lecturas. */
+export function primeraUsoSugerida(ultima: number | null, cada: number): number {
+  return Math.round(((ultima ?? 0) + cada) * 100) / 100;
+}
+
+// ---------------------------------------------------------------------------
 // Borrador de una tarea y del plan
 // ---------------------------------------------------------------------------
 
@@ -64,15 +152,33 @@ export const MAXIMO_FRECUENCIA: Record<FrecuenciaUnidad, number> = {
   ANIOS: 10,
 };
 
+/** Por qué vence una tarea: "Vence por" en el diálogo. */
+export type CriterioTarea = 'FECHA' | 'USO' | 'AMBOS';
+
 export interface BorradorTarea {
   accion: string;
   detalle: string;
+  criterio: CriterioTarea;
   frecuenciaValor: number | string;
   frecuenciaUnidad: FrecuenciaUnidad;
   /** YYYY-MM-DD, o null sin elegir. */
   primeraFecha: string | null;
+  /** El id del medidor como texto, como el de un Select, o null. */
+  medidorId: string | null;
+  usoCada: number | string;
+  usoPrimera: number | string;
+  /** Vacía: la API usa el 10 % de `cada`. */
+  usoAnticipacion: number | string;
   repuestos: FilaPrevisto[];
   proveedorId: string | null;
+}
+
+export function conFecha(criterio: CriterioTarea): boolean {
+  return criterio !== 'USO';
+}
+
+export function conUso(criterio: CriterioTarea): boolean {
+  return criterio !== 'FECHA';
 }
 
 /** Una fila de "Repuestos previstos". El nombre y la unidad son solo para mostrarla. */
@@ -87,7 +193,17 @@ export interface FilaPrevisto {
 /** Hasta 10 repuestos previstos por tarea (PV2.2, 3.1). */
 export const MAXIMO_PREVISTOS = 10;
 
-export type CampoTarea = 'accion' | 'frecuencia' | 'primeraFecha' | 'repuesto' | 'cantidad' | 'proveedor';
+export type CampoTarea =
+  | 'accion'
+  | 'frecuencia'
+  | 'primeraFecha'
+  | 'medidor'
+  | 'usoCada'
+  | 'usoPrimera'
+  | 'usoAnticipacion'
+  | 'repuesto'
+  | 'cantidad'
+  | 'proveedor';
 export interface ErrorFilaPrevisto {
   repuesto?: string;
   cantidad?: string;
@@ -99,22 +215,38 @@ export function borradorTareaVacio(): BorradorTarea {
   return {
     accion: '',
     detalle: '',
+    criterio: 'FECHA',
     frecuenciaValor: 1,
     frecuenciaUnidad: 'MESES',
     primeraFecha: null,
+    medidorId: null,
+    usoCada: '',
+    usoPrimera: '',
+    usoAnticipacion: '',
     repuestos: [],
     proveedorId: null,
   };
 }
 
-/** El borrador de una tarea del plan, para editarla. */
+/**
+ * El borrador de una tarea del plan, para editarla. El criterio sale de la tarea: con
+ * fecha y con uso, 'AMBOS'. Lo que no tiene queda como en una tarea vacía.
+ */
 export function borradorDeTarea(t: TareaPlan): BorradorTarea {
+  const vacia = borradorTareaVacio();
+  const tieneFecha = t.frecuencia_valor !== null && t.frecuencia_unidad !== null;
+  const criterio: CriterioTarea = tieneFecha && t.uso ? 'AMBOS' : t.uso ? 'USO' : 'FECHA';
   return {
     accion: t.accion,
     detalle: t.detalle ?? '',
-    frecuenciaValor: t.frecuencia_valor,
-    frecuenciaUnidad: t.frecuencia_unidad,
+    criterio,
+    frecuenciaValor: t.frecuencia_valor ?? vacia.frecuenciaValor,
+    frecuenciaUnidad: t.frecuencia_unidad ?? vacia.frecuenciaUnidad,
     primeraFecha: t.primera_fecha,
+    medidorId: t.uso ? String(t.uso.medidor.id) : null,
+    usoCada: t.uso ? t.uso.cada : '',
+    usoPrimera: t.uso ? t.uso.primera : '',
+    usoAnticipacion: t.uso ? t.uso.anticipacion : '',
     repuestos: t.repuestos.map((r) => ({
       repuestoId: String(r.repuesto.id),
       cantidad: r.cantidad,
@@ -153,7 +285,10 @@ function validarFilasPrevistos(filas: FilaPrevisto[]): Record<number, ErrorFilaP
   return errores;
 }
 
-/** Los mismos límites que la API (PV1, 4.4). Devuelve los errores por campo; vacío si está bien. */
+/**
+ * Los mismos límites que la API (PV1, 4.4, y PV3, 4.1). Valida solo lo del criterio
+ * elegido. Devuelve los errores por campo; vacío si está bien.
+ */
 export function validarTareaBorrador(b: BorradorTarea): ErroresTarea {
   const errores: ErroresTarea = {};
 
@@ -162,14 +297,31 @@ export function validarTareaBorrador(b: BorradorTarea): ErroresTarea {
     errores.accion = 'Escribí qué hay que hacer (de 3 a 200 caracteres).';
   }
 
-  const maximo = MAXIMO_FRECUENCIA[b.frecuenciaUnidad];
-  const valor = vacio(b.frecuenciaValor) ? NaN : Number(String(b.frecuenciaValor).replace(',', '.'));
-  if (!Number.isInteger(valor) || valor < 1 || valor > maximo) {
-    errores.frecuencia = `Ingresá un número entero de 1 a ${maximo}.`;
+  if (conFecha(b.criterio)) {
+    const maximo = MAXIMO_FRECUENCIA[b.frecuenciaUnidad];
+    const valor = vacio(b.frecuenciaValor) ? NaN : Number(String(b.frecuenciaValor).replace(',', '.'));
+    if (!Number.isInteger(valor) || valor < 1 || valor > maximo) {
+      errores.frecuencia = `Ingresá un número entero de 1 a ${maximo}.`;
+    }
+
+    if (vacio(b.primeraFecha)) {
+      errores.primeraFecha = 'Elegí la fecha.';
+    }
   }
 
-  if (vacio(b.primeraFecha)) {
-    errores.primeraFecha = 'Elegí la fecha.';
+  if (conUso(b.criterio)) {
+    if (parsearId(b.medidorId) === null) errores.medidor = 'Elegí el medidor.';
+    const cada = leerValorMedidor(b.usoCada);
+    if (cada === null || cada === 0) errores.usoCada = 'Ingresá un número mayor que 0, con hasta 2 decimales.';
+    if (leerValorMedidor(b.usoPrimera) === null) errores.usoPrimera = 'Ingresá un número desde 0, con hasta 2 decimales.';
+    if (!vacio(b.usoAnticipacion)) {
+      const anticipacion = leerValorMedidor(b.usoAnticipacion);
+      if (anticipacion === null) {
+        errores.usoAnticipacion = 'Ingresá un número desde 0, con hasta 2 decimales.';
+      } else if (cada !== null && anticipacion > cada) {
+        errores.usoAnticipacion = `No puede ser mayor que «Cada» (${formatCantidad(cada)}).`;
+      }
+    }
   }
 
   const filas = validarFilasPrevistos(b.repuestos);
@@ -186,13 +338,22 @@ function numero(valor: number | string): number {
   return Number(String(valor).trim().replace(',', '.'));
 }
 
-/** Los campos de una tarea, como los manda la API. */
+/** `uso` de una tarea, como lo manda la API (PV3, 4.1). Sin anticipación, la API usa el 10 % de `cada`. */
+export interface CuerpoUso {
+  medidor_id: number;
+  cada: number;
+  primera: number;
+  anticipacion?: number;
+}
+
+/** Los campos de una tarea, como los manda la API. En el PATCH, null saca la fecha o el uso. */
 export interface CuerpoTarea {
   accion?: string;
   detalle?: string | null;
-  frecuencia_valor?: number;
-  frecuencia_unidad?: FrecuenciaUnidad;
-  primera_fecha?: string;
+  frecuencia_valor?: number | null;
+  frecuencia_unidad?: FrecuenciaUnidad | null;
+  primera_fecha?: string | null;
+  uso?: CuerpoUso | null;
   repuestos?: Array<{ repuesto_id: number; cantidad: number }>;
   proveedor_id?: number | null;
 }
@@ -207,13 +368,25 @@ function previstosDeFilas(filas: FilaPrevisto[]): Array<{ repuesto_id: number; c
   return previstos;
 }
 
+/** El uso del borrador, o null si el criterio no lo lleva o falta el medidor. */
+function usoDeBorrador(b: BorradorTarea): CuerpoUso | null {
+  const medidorId = parsearId(b.medidorId);
+  if (!conUso(b.criterio) || medidorId === null) return null;
+  const uso: CuerpoUso = { medidor_id: medidorId, cada: numero(b.usoCada), primera: numero(b.usoPrimera) };
+  if (!vacio(b.usoAnticipacion)) uso.anticipacion = numero(b.usoAnticipacion);
+  return uso;
+}
+
+/** Todo lo del borrador. La fecha y el uso, solo si el criterio los lleva. */
 function cuerpoCompleto(b: BorradorTarea): CuerpoTarea {
-  const cuerpo: CuerpoTarea = {
-    accion: b.accion.trim(),
-    frecuencia_valor: numero(b.frecuenciaValor),
-    frecuencia_unidad: b.frecuenciaUnidad,
-  };
-  if (b.primeraFecha) cuerpo.primera_fecha = b.primeraFecha;
+  const cuerpo: CuerpoTarea = { accion: b.accion.trim() };
+  if (conFecha(b.criterio)) {
+    cuerpo.frecuencia_valor = numero(b.frecuenciaValor);
+    cuerpo.frecuencia_unidad = b.frecuenciaUnidad;
+    if (b.primeraFecha) cuerpo.primera_fecha = b.primeraFecha;
+  }
+  const uso = usoDeBorrador(b);
+  if (uso) cuerpo.uso = uso;
   const detalle = b.detalle.trim();
   if (detalle) cuerpo.detalle = detalle;
   const repuestos = previstosDeFilas(b.repuestos);
@@ -224,9 +397,12 @@ function cuerpoCompleto(b: BorradorTarea): CuerpoTarea {
 }
 
 /**
- * El cuerpo de una tarea. Sin `original`, para el alta: los campos vacíos no van.
- * Con `original`, para el PATCH: solo lo que cambió; lo que se vació va en null.
- * `repuestos` va entero si cambió, porque el PATCH reemplaza la lista; vaciada, va [].
+ * El cuerpo de una tarea. Sin `original`, para el alta: los campos vacíos no van; sin
+ * fecha no van los tres campos de la fecha, y sin uso no va `uso`.
+ * Con `original`, para el PATCH: solo lo que cambió; lo que se vació va en null. La fecha
+ * que no va cuenta como null, así que sacarla manda los tres en null.
+ * `repuestos` y `uso` van enteros si cambiaron, porque el PATCH los reemplaza: la lista
+ * vaciada va [], y el uso que se sacó, null.
  */
 export function cuerpoTarea(b: BorradorTarea, original?: BorradorTarea): CuerpoTarea {
   const nuevo = cuerpoCompleto(b);
@@ -251,6 +427,9 @@ export function cuerpoTarea(b: BorradorTarea, original?: BorradorTarea): CuerpoT
   }
   if (JSON.stringify(nuevo.repuestos ?? []) !== JSON.stringify(antes.repuestos ?? [])) {
     cambios.repuestos = nuevo.repuestos ?? [];
+  }
+  if (JSON.stringify(nuevo.uso ?? null) !== JSON.stringify(antes.uso ?? null)) {
+    cambios.uso = nuevo.uso ?? null;
   }
   return cambios;
 }
@@ -371,8 +550,9 @@ export function avisoTareasSinMarcar(resumen: { total: number; hechas: number })
 
 export type VistaPreventivos = 'vencimientos' | 'planes';
 
-export const ESTADOS_POR_OMISION: EstadoVencimiento[] = ['VENCIDA', 'PROXIMA', 'EN_CURSO'];
-const ESTADOS_VALIDOS: EstadoVencimiento[] = ['VENCIDA', 'PROXIMA', 'EN_CURSO', 'AL_DIA'];
+/** Los de la API por omisión (PV3, 4.2): el front manda la lista, y sin SIN_LECTURA esas tareas no aparecen. */
+export const ESTADOS_POR_OMISION: EstadoVencimiento[] = ['VENCIDA', 'PROXIMA', 'SIN_LECTURA', 'EN_CURSO'];
+const ESTADOS_VALIDOS: EstadoVencimiento[] = ['VENCIDA', 'PROXIMA', 'SIN_LECTURA', 'EN_CURSO', 'AL_DIA'];
 
 export const TAMANIO_PAGINA_VENCIMIENTOS = 100;
 
@@ -442,11 +622,12 @@ export function alternarEstado(actual: EstadoVencimiento | null, tocado: EstadoV
   return actual === tocado ? null : tocado;
 }
 
-/** "2 vencidas · 1 próxima", con las que haya; si no hay ninguna, "—". */
-export function textoPendientes(plan: { vencidas: number; proximas: number; en_curso?: number }): string {
+/** "2 vencidas · 1 próxima · 1 sin lectura", con las que haya; si no hay ninguna, "—". */
+export function textoPendientes(plan: { vencidas: number; proximas: number; en_curso?: number; sin_lectura?: number }): string {
   const partes: string[] = [];
   if (plan.vencidas > 0) partes.push(`${plan.vencidas} ${plan.vencidas === 1 ? 'vencida' : 'vencidas'}`);
   if (plan.proximas > 0) partes.push(`${plan.proximas} ${plan.proximas === 1 ? 'próxima' : 'próximas'}`);
+  if (plan.sin_lectura && plan.sin_lectura > 0) partes.push(`${plan.sin_lectura} sin lectura`);
   return partes.length > 0 ? partes.join(' · ') : '—';
 }
 
@@ -476,6 +657,9 @@ export interface ErrorTareaApi {
 function campoDeErrorApi(codigo: string, mensaje: string): ErrorTareaApi | null {
   if (codigo === 'REPUESTO_INVALIDO') return { campo: 'repuesto', mensaje: 'El repuesto no existe o está inactivo.' };
   if (codigo === 'PROVEEDOR_INVALIDO') return { campo: 'proveedor', mensaje: 'El proveedor no existe o está inactivo.' };
+  if (codigo === 'MEDIDOR_INVALIDO') {
+    return { campo: 'medidor', mensaje: 'Elegí un medidor activo de esta máquina.' };
+  }
   if (codigo !== 'DATOS_INVALIDOS') return null;
 
   if (mensaje.includes('accion')) {

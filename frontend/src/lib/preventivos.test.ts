@@ -29,11 +29,20 @@ import {
   textoBotonConfirmar,
   textoEstadoPrevisto,
   textoPrevistosSinConfirmar,
+  textoValorMedidor,
+  textoFrecuenciaTarea,
+  textoUso,
+  textoProximoUso,
+  textoVenceTarea,
+  textoProgramada,
+  textoValorAlHacer,
+  primeraUsoSugerida,
+  ESTADOS_POR_OMISION,
   BorradorTarea,
   FilaConfirmar,
 } from './preventivos';
 import { obtenerInfoEstado, ESTADOS_TAREA_PREVENTIVA } from './estados';
-import type { RepuestoPrevistoIntervencion, TareaPlan } from '../api/tipos';
+import type { RepuestoPrevistoIntervencion, TareaPlan, UsoTareaPlan } from '../api/tipos';
 
 const tareaBase: TareaPlan = {
   id: 41,
@@ -289,7 +298,7 @@ describe('FE-75: filtros de Preventivos en la dirección', () => {
 
   it('los parámetros de la API', () => {
     const f = leerFiltrosPreventivos(new URLSearchParams('planta=3&pagina=3'));
-    assert.deepEqual(paramsVencimientos(f), { estado: 'VENCIDA,PROXIMA,EN_CURSO', limit: 100, offset: 200, planta_id: 3 });
+    assert.deepEqual(paramsVencimientos(f), { estado: 'VENCIDA,PROXIMA,SIN_LECTURA,EN_CURSO', limit: 100, offset: 200, planta_id: 3 });
     assert.deepEqual(paramsVencimientos({ ...f, estado: 'AL_DIA', pagina: 1 }), {
       estado: 'AL_DIA', limit: 100, offset: 0, planta_id: 3,
     });
@@ -539,5 +548,269 @@ describe('FE-94: textoPrevistosSinConfirmar', () => {
     assert.equal(textoPrevistosSinConfirmar(0), null);
     assert.equal(textoPrevistosSinConfirmar(1), 'Hay 1 repuesto previsto en las tareas: se registra al marcarla como hecha.');
     assert.equal(textoPrevistosSinConfirmar(3), 'Hay 3 repuestos previstos en las tareas: se registran al marcarlas como hechas.');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Etapa PV4: medidores y tareas por uso
+// ---------------------------------------------------------------------------
+
+const usoBase: UsoTareaPlan = {
+  medidor: { id: 3, nombre: 'Horómetro', unidad: 'horas', activo: true },
+  cada: 250,
+  primera: 500,
+  anticipacion: 25,
+  lectura_actual: { valor: 512.5, registrada_en: '2026-11-10T11:00:00.000Z' },
+  ultimo: null,
+  proximo: 500,
+  faltan: -12.5,
+  estado: 'VENCIDA',
+};
+
+const tareaSoloUso: TareaPlan = {
+  ...tareaBase,
+  frecuencia_valor: null,
+  frecuencia_unidad: null,
+  primera_fecha: null,
+  proxima_fecha: null,
+  dias: null,
+  estado_fecha: null,
+  uso: usoBase,
+};
+
+const borradorUso = (cambios: Partial<BorradorTarea> = {}): BorradorTarea =>
+  borrador({ criterio: 'USO', primeraFecha: null, medidorId: '3', usoCada: 250, usoPrimera: 500, ...cambios });
+
+describe('FE-95: textoValorMedidor', () => {
+  it('el número con formatCantidad y la unidad', () => {
+    assert.equal(textoValorMedidor(512.5, 'horas'), '512,5 horas');
+    assert.equal(textoValorMedidor(1240, 'km'), '1.240 km');
+    assert.equal(textoValorMedidor(0, 'ciclos'), '0 ciclos');
+    assert.equal(textoValorMedidor(999999999999.99, 'horas'), '999.999.999.999,99 horas');
+  });
+});
+
+describe('FE-96: textoFrecuenciaTarea', () => {
+  it('por fecha, por uso y por las dos', () => {
+    assert.equal(textoFrecuenciaTarea(tareaBase), 'Cada 6 meses');
+    assert.equal(textoFrecuenciaTarea(tareaSoloUso), 'Cada 250 horas');
+    assert.equal(textoFrecuenciaTarea({ ...tareaBase, uso: usoBase }), 'Cada 6 meses o 250 horas');
+    assert.equal(textoFrecuenciaTarea({ ...tareaBase, frecuencia_valor: 1, uso: { ...usoBase, cada: 12.5 } }), 'Cada mes o 12,5 horas');
+  });
+});
+
+describe('FE-97: textoUso', () => {
+  it('sin lectura, faltan, toca ahora y se pasó', () => {
+    assert.equal(textoUso({ ...usoBase, lectura_actual: null, faltan: null, estado: 'SIN_LECTURA' }), 'Sin lecturas del Horómetro');
+    assert.equal(textoUso({ ...usoBase, faltan: 25, estado: 'PROXIMA' }), 'Faltan 25 horas');
+    assert.equal(textoUso({ ...usoBase, faltan: 0.01, estado: 'PROXIMA' }), 'Faltan 0,01 horas');
+    assert.equal(textoUso({ ...usoBase, faltan: 0 }), 'Toca ahora');
+    assert.equal(textoUso(usoBase), 'Se pasó por 12,5 horas');
+  });
+});
+
+describe('FE-98: textoProximoUso', () => {
+  it('a cuánto vence', () => {
+    assert.equal(textoProximoUso(usoBase), 'A las 500 horas');
+    assert.equal(textoProximoUso({ ...usoBase, proximo: 1240.5 }), 'A las 1.240,5 horas');
+  });
+});
+
+describe('FE-99: textoVenceTarea', () => {
+  const alDia: UsoTareaPlan = { ...usoBase, faltan: 100, estado: 'AL_DIA' };
+  const fechaAlDia: TareaPlan = { ...tareaBase, dias: 40, estado_fecha: 'AL_DIA' };
+
+  it('la fecha vencida o próxima apura primero', () => {
+    assert.equal(textoVenceTarea({ ...tareaBase, uso: usoBase }), 'Venció hace 8 días');
+    assert.equal(textoVenceTarea({ ...tareaBase, dias: 3, estado_fecha: 'PROXIMA', uso: usoBase }), 'Vence en 3 días');
+  });
+
+  it('si la fecha está al día, el uso vencido, próximo o sin lectura', () => {
+    assert.equal(textoVenceTarea({ ...fechaAlDia, uso: usoBase }), 'Se pasó por 12,5 horas');
+    assert.equal(textoVenceTarea({ ...fechaAlDia, uso: { ...usoBase, faltan: 10, estado: 'PROXIMA' } }), 'Faltan 10 horas');
+    assert.equal(
+      textoVenceTarea({ ...fechaAlDia, uso: { ...usoBase, faltan: null, lectura_actual: null, estado: 'SIN_LECTURA' } }),
+      'Sin lecturas del Horómetro'
+    );
+    assert.equal(textoVenceTarea({ ...fechaAlDia, uso: alDia }), 'Vence en 40 días');
+  });
+
+  it('sin fecha, el del uso; sin uso, el de la fecha', () => {
+    assert.equal(textoVenceTarea({ ...tareaSoloUso, uso: alDia }), 'Faltan 100 horas');
+    assert.equal(textoVenceTarea(fechaAlDia), 'Vence en 40 días');
+  });
+});
+
+const medidorIntervencion = { id: 3, nombre: 'Horómetro', unidad: 'horas', activo: true, ultima_lectura: null };
+
+describe('FE-100: textoProgramada', () => {
+  it('por fecha, por uso y por las dos', () => {
+    const uso = { medidor: medidorIntervencion, programado: 500 };
+    assert.equal(textoProgramada('2026-12-10', null), 'Programada para el 10/12/2026');
+    assert.equal(textoProgramada(null, uso), 'Programada a las 500 horas');
+    assert.equal(textoProgramada('2026-12-10', uso), 'Programada para el 10/12/2026 o a las 500 horas');
+    assert.equal(textoProgramada(null, null), null);
+  });
+});
+
+describe('FE-101: textoValorAlHacer', () => {
+  it('con el valor, y null sin él', () => {
+    assert.equal(textoValorAlHacer({ medidor: medidorIntervencion, valor: 512.5 }), 'Con el Horómetro en 512,5 horas');
+    assert.equal(textoValorAlHacer({ medidor: medidorIntervencion, valor: 0 }), 'Con el Horómetro en 0 horas');
+    assert.equal(textoValorAlHacer({ medidor: medidorIntervencion, valor: null }), null);
+    assert.equal(textoValorAlHacer(null), null);
+  });
+});
+
+describe('FE-102: textoPendientes y los estados por omisión con SIN_LECTURA', () => {
+  it('suma las sin lectura', () => {
+    assert.equal(textoPendientes({ vencidas: 2, proximas: 1, sin_lectura: 1 }), '2 vencidas · 1 próxima · 1 sin lectura');
+    assert.equal(textoPendientes({ vencidas: 0, proximas: 0, sin_lectura: 2 }), '2 sin lectura');
+    assert.equal(textoPendientes({ vencidas: 0, proximas: 0, sin_lectura: 0 }), '—');
+  });
+
+  it('SIN_LECTURA va en el filtro por omisión, y se puede elegir con una tarjeta', () => {
+    assert.deepEqual(ESTADOS_POR_OMISION, ['VENCIDA', 'PROXIMA', 'SIN_LECTURA', 'EN_CURSO']);
+    assert.equal(leerFiltrosPreventivos(new URLSearchParams('estado=SIN_LECTURA')).estado, 'SIN_LECTURA');
+  });
+});
+
+describe('FE-103: borradorTareaVacio y borradorDeTarea con el criterio', () => {
+  it('vacío: por fecha, y lo del uso vacío', () => {
+    const b = borradorTareaVacio();
+    assert.equal(b.criterio, 'FECHA');
+    assert.deepEqual([b.medidorId, b.usoCada, b.usoPrimera, b.usoAnticipacion], [null, '', '', '']);
+  });
+
+  it('el criterio sale de la tarea', () => {
+    assert.equal(borradorDeTarea(tareaBase).criterio, 'FECHA');
+    const soloUso = borradorDeTarea(tareaSoloUso);
+    assert.equal(soloUso.criterio, 'USO');
+    assert.deepEqual([soloUso.medidorId, soloUso.usoCada, soloUso.usoPrimera, soloUso.usoAnticipacion], ['3', 250, 500, 25]);
+    assert.deepEqual([soloUso.frecuenciaValor, soloUso.frecuenciaUnidad, soloUso.primeraFecha], [1, 'MESES', null]);
+    assert.equal(borradorDeTarea({ ...tareaBase, uso: usoBase }).criterio, 'AMBOS');
+  });
+});
+
+describe('FE-104: validarTareaBorrador según el criterio', () => {
+  it('por uso no valida la fecha, y por fecha no valida el uso', () => {
+    assert.deepEqual(validarTareaBorrador(borradorUso({ frecuenciaValor: '' })), {});
+    assert.deepEqual(validarTareaBorrador(borrador({ medidorId: null, usoCada: 'x' })), {});
+  });
+
+  it('las dos valida todo', () => {
+    const errores = validarTareaBorrador(borradorUso({ criterio: 'AMBOS', medidorId: null }));
+    assert.equal(errores.primeraFecha, 'Elegí la fecha.');
+    assert.equal(errores.medidor, 'Elegí el medidor.');
+  });
+
+  it('cada: mayor que 0, hasta el máximo, con hasta 2 decimales', () => {
+    const msg = 'Ingresá un número mayor que 0, con hasta 2 decimales.';
+    assert.equal(validarTareaBorrador(borradorUso({ usoCada: 0 })).usoCada, msg);
+    assert.equal(validarTareaBorrador(borradorUso({ usoCada: '' })).usoCada, msg);
+    assert.equal(validarTareaBorrador(borradorUso({ usoCada: 12.345 })).usoCada, msg);
+    assert.equal(validarTareaBorrador(borradorUso({ usoCada: 1000000000000 })).usoCada, msg);
+    assert.equal(validarTareaBorrador(borradorUso({ usoCada: 0.01 })).usoCada, undefined);
+    assert.equal(validarTareaBorrador(borradorUso({ usoCada: '12,25' })).usoCada, undefined);
+    assert.equal(validarTareaBorrador(borradorUso({ usoCada: 999999999999.99, usoPrimera: 0 })).usoCada, undefined);
+  });
+
+  it('primera: desde 0, con hasta 2 decimales', () => {
+    const msg = 'Ingresá un número desde 0, con hasta 2 decimales.';
+    assert.equal(validarTareaBorrador(borradorUso({ usoPrimera: 0 })).usoPrimera, undefined);
+    assert.equal(validarTareaBorrador(borradorUso({ usoPrimera: '' })).usoPrimera, msg);
+    assert.equal(validarTareaBorrador(borradorUso({ usoPrimera: -1 })).usoPrimera, msg);
+    assert.equal(validarTareaBorrador(borradorUso({ usoPrimera: 1.005 })).usoPrimera, msg);
+  });
+
+  it('anticipación: vacía, o de 0 a cada', () => {
+    assert.equal(validarTareaBorrador(borradorUso({ usoAnticipacion: '' })).usoAnticipacion, undefined);
+    assert.equal(validarTareaBorrador(borradorUso({ usoAnticipacion: 0 })).usoAnticipacion, undefined);
+    assert.equal(validarTareaBorrador(borradorUso({ usoAnticipacion: 250 })).usoAnticipacion, undefined);
+    assert.equal(validarTareaBorrador(borradorUso({ usoAnticipacion: 250.01 })).usoAnticipacion, 'No puede ser mayor que «Cada» (250).');
+    assert.equal(
+      validarTareaBorrador(borradorUso({ usoAnticipacion: 2.555 })).usoAnticipacion,
+      'Ingresá un número desde 0, con hasta 2 decimales.'
+    );
+  });
+});
+
+describe('FE-105: cuerpoTarea en el alta, según el criterio', () => {
+  it('por uso: sin los tres campos de la fecha', () => {
+    assert.deepEqual(cuerpoTarea(borradorUso({ primeraFecha: '2026-12-01' })), {
+      accion: 'Cambiar el aceite',
+      uso: { medidor_id: 3, cada: 250, primera: 500 },
+    });
+  });
+
+  it('por fecha: sin uso; las dos: todo, con la anticipación si se escribió', () => {
+    assert.equal('uso' in cuerpoTarea(borrador({ medidorId: '3', usoCada: 250, usoPrimera: 500 })), false);
+    assert.deepEqual(
+      cuerpoTarea(borradorUso({ criterio: 'AMBOS', primeraFecha: '2026-12-01', usoCada: '12,5', usoAnticipacion: '2,5' })),
+      {
+        accion: 'Cambiar el aceite',
+        frecuencia_valor: 1,
+        frecuencia_unidad: 'MESES',
+        primera_fecha: '2026-12-01',
+        uso: { medidor_id: 3, cada: 12.5, primera: 500, anticipacion: 2.5 },
+      }
+    );
+  });
+});
+
+describe('FE-106: cuerpoTarea en el PATCH, al cambiar el criterio', () => {
+  const porFecha = borradorDeTarea(tareaBase);
+  const porUso = borradorDeTarea(tareaSoloUso);
+  const ambas = borradorDeTarea({ ...tareaBase, uso: usoBase });
+
+  it('Fecha → Uso: la fecha va en null y el uso entero', () => {
+    assert.deepEqual(cuerpoTarea({ ...porFecha, criterio: 'USO', medidorId: '3', usoCada: 250, usoPrimera: 500 }, porFecha), {
+      frecuencia_valor: null,
+      frecuencia_unidad: null,
+      primera_fecha: null,
+      uso: { medidor_id: 3, cada: 250, primera: 500 },
+    });
+  });
+
+  it('Uso → Ambos: solo los tres de la fecha', () => {
+    assert.deepEqual(cuerpoTarea({ ...porUso, criterio: 'AMBOS', frecuenciaValor: 6, primeraFecha: '2026-12-01' }, porUso), {
+      frecuencia_valor: 6,
+      frecuencia_unidad: 'MESES',
+      primera_fecha: '2026-12-01',
+    });
+  });
+
+  it('Ambos → Fecha: uso en null, y lo del uso queda en el borrador', () => {
+    const b: BorradorTarea = { ...ambas, criterio: 'FECHA' };
+    assert.deepEqual(cuerpoTarea(b, ambas), { uso: null });
+    assert.equal(b.medidorId, '3');
+  });
+
+  it('el uso se compara entero: sin cambios no va, y con uno va todo', () => {
+    assert.deepEqual(cuerpoTarea(porUso, porUso), {});
+    assert.deepEqual(cuerpoTarea({ ...porUso, usoCada: '300' }, porUso), {
+      uso: { medidor_id: 3, cada: 300, primera: 500, anticipacion: 25 },
+    });
+    assert.deepEqual(cuerpoTarea({ ...porUso, usoAnticipacion: '' }, porUso), {
+      uso: { medidor_id: 3, cada: 250, primera: 500 },
+    });
+  });
+});
+
+describe('FE-107: errorTareaDeApi con MEDIDOR_INVALIDO', () => {
+  it('va al campo del medidor', () => {
+    assert.deepEqual(errorTareaDeApi('MEDIDOR_INVALIDO', 'El medidor no existe, está inactivo o es de otra máquina'), {
+      campo: 'medidor',
+      mensaje: 'Elegí un medidor activo de esta máquina.',
+    });
+  });
+});
+
+describe('FE-108: primeraUsoSugerida', () => {
+  it('la última más cada, o cada sin lecturas', () => {
+    assert.equal(primeraUsoSugerida(1240, 250), 1490);
+    assert.equal(primeraUsoSugerida(512.5, 0.1), 512.6);
+    assert.equal(primeraUsoSugerida(0, 250), 250);
+    assert.equal(primeraUsoSugerida(null, 250), 250);
   });
 });

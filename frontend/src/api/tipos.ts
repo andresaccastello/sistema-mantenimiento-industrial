@@ -1067,7 +1067,7 @@ export interface UsoTareaIntervencion {
 }
 
 /** El estado de una tarea, calculado por la vista `v_plan_tareas_estado`. */
-export type EstadoTareaPlan = 'INACTIVA' | 'EN_CURSO' | 'VENCIDA' | 'PROXIMA' | 'AL_DIA';
+export type EstadoTareaPlan = 'INACTIVA' | 'EN_CURSO' | 'VENCIDA' | 'PROXIMA' | 'SIN_LECTURA' | 'AL_DIA';
 
 /** Los estados que se piden en `GET /api/planes/vencimientos`. */
 export type EstadoVencimiento = Exclude<EstadoTareaPlan, 'INACTIVA'>;
@@ -1125,17 +1125,18 @@ export interface TareaPlan {
   orden: number;
   accion: string;
   detalle: string | null;
-  frecuencia_valor: number;
-  frecuencia_unidad: FrecuenciaUnidad;
-  primera_fecha: string;
+  /** Sin fecha (solo por uso), la frecuencia y las fechas van en null (PV3). */
+  frecuencia_valor: number | null;
+  frecuencia_unidad: FrecuenciaUnidad | null;
+  primera_fecha: string | null;
   /** Los repuestos previstos, hasta 10 (D-022). */
   repuestos: RepuestoPrevistoPlan[];
   proveedor: ProveedorSugerido | null;
   activo: boolean;
   ultima_ejecucion: string | null;
-  proxima_fecha: string;
+  proxima_fecha: string | null;
   /** Negativo si está vencida. */
-  dias: number;
+  dias: number | null;
   estado_fecha: EstadoFechaTarea | null;
   uso: UsoTareaPlan | null;
   estado: EstadoTareaPlan;
@@ -1189,11 +1190,12 @@ export interface PlanLista {
 export interface VencimientoTarea {
   tarea_id: number;
   accion: string;
-  frecuencia_valor: number;
-  frecuencia_unidad: FrecuenciaUnidad;
+  /** Sin fecha (solo por uso), la frecuencia y las fechas van en null (PV3). */
+  frecuencia_valor: number | null;
+  frecuencia_unidad: FrecuenciaUnidad | null;
   ultima_ejecucion: string | null;
-  proxima_fecha: string;
-  dias: number;
+  proxima_fecha: string | null;
+  dias: number | null;
   estado_fecha: EstadoFechaTarea | null;
   uso: UsoTareaPlan | null;
   estado: EstadoVencimiento;
@@ -1228,7 +1230,8 @@ export interface GeneracionRespuesta {
     plan_tarea_id: number;
     orden: number;
     accion: string;
-    fecha_programada: string;
+    /** null en una tarea solo por uso. */
+    fecha_programada: string | null;
   }>;
 }
 
@@ -1242,7 +1245,8 @@ export interface TareaIntervencion {
   orden: number;
   accion: string;
   detalle: string | null;
-  fecha_programada: string;
+  /** null en una tarea solo por uso. */
+  fecha_programada: string | null;
   repuestos_previstos: RepuestoPrevistoIntervencion[];
   uso: UsoTareaIntervencion | null;
   proveedor: ProveedorSugerido | null;
@@ -1261,7 +1265,8 @@ export interface IntervencionTareasRespuesta {
 
 /** `PATCH /api/intervenciones/:id/tareas/:tareaId`: la tarea, con la próxima fecha de la del plan. */
 export interface TareaIntervencionMarcada extends TareaIntervencion {
-  proxima_fecha: string;
+  /** null si la tarea del plan no vence por fecha. */
+  proxima_fecha: string | null;
   /** La próxima por uso de la tarea del plan, o null. */
   proximo_uso: number | null;
 }
