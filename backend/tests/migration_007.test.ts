@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,7 +23,7 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 }
 
 test('Migración 007 — Reapertura, edición y permisos de operario', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
   let sectorId = 0;
 
   try {
@@ -102,6 +103,7 @@ test('Migración 007 — Reapertura, edición y permisos de operario', async (t)
     });
 
   } finally {
+    client = await clienteSano(client);
     if (sectorId) {
       await client.query(`
         DELETE FROM intervencion_auditoria WHERE intervencion_id IN (

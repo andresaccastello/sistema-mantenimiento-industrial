@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import bcrypt from 'bcryptjs';
 import { sign } from 'hono/jwt';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 import app from '../functions/api.ts';
 import { JWT_SECRET } from '../functions/config.ts';
 import { mismaForma } from './contrato.ts';
@@ -70,7 +71,7 @@ async function pedir(method: string, path: string, token: string, body?: unknown
 const ocupado = (r: Respuesta) => r.status === 409 && r.cuerpo?.codigo === 'RECURSO_OCUPADO';
 
 test('Etapa PV3 — Medidores y lecturas (ME-01 a ME-06)', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
 
   const createdPlantaIds: number[] = [];
   const createdSectorIds: number[] = [];
@@ -545,6 +546,7 @@ test('Etapa PV3 — Medidores y lecturas (ME-01 a ME-06)', async (t) => {
       verificar('POST /api/medidores/:id/lecturas', cargada, lecturaCargadaEjemplo);
     });
   } finally {
+    client = await clienteSano(client);
     // Limpieza: solo lo que creó esta prueba
     try {
       if (createdMaquinaIds.length > 0) {

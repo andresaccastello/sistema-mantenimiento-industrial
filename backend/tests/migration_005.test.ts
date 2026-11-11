@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,7 +23,7 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 }
 
 test('Migración 005 — Integridad compuesta y restricciones de estado', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
   let sectorId = 0;
 
   try {
@@ -131,6 +132,7 @@ test('Migración 005 — Integridad compuesta y restricciones de estado', async 
     });
 
   } finally {
+    client = await clienteSano(client);
     if (sectorId) {
       await client.query(`
         DELETE FROM intervencion_periodos_detencion WHERE maquina_id IN (

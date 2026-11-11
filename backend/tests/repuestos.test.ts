@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import bcrypt from 'bcryptjs';
 import { sign } from 'hono/jwt';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 import app from '../functions/api.ts';
 import { JWT_SECRET } from '../functions/config.ts';
 
@@ -65,7 +66,7 @@ async function deleteJson(path: string, token?: string) {
 }
 
 test('Etapa R1 — Repuestos, proveedores y stock (RE-01 a RE-09)', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
 
   const createdUsuarioIds: number[] = [];
   const createdProveedorIds: number[] = [];
@@ -1083,6 +1084,7 @@ test('Etapa R1 — Repuestos, proveedores y stock (RE-01 a RE-09)', async (t) =>
     });
 
   } finally {
+    client = await clienteSano(client);
     // Limpieza estricta en orden: movimientos, historial costos, repuestos, proveedores, excepciones, usuarios
     try {
       if (createdIntervencionIds.length > 0) {

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 import app from '../functions/api.ts';
 
 // Identificación estricta de la rama de Neon
@@ -17,7 +18,7 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 }
 
 test('Etapa 3 — Registrar Falla y Consultar Intervenciones (E2E API)', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
   let adminToken = '';
   let operarioToken = '';
   let operarioId = 0;
@@ -250,6 +251,7 @@ test('Etapa 3 — Registrar Falla y Consultar Intervenciones (E2E API)', async (
     });
 
   } finally {
+    client = await clienteSano(client);
     // Limpieza de datos temporales
     if (maquinaOperativaId > 0) {
       await client.query('DELETE FROM notificacion_envios WHERE notificacion_id IN (SELECT id FROM notificaciones WHERE maquina_id = $1)', [maquinaOperativaId]);

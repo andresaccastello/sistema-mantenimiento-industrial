@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import bcrypt from 'bcryptjs';
 import { sign } from 'hono/jwt';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 import app from '../functions/api.ts';
 import { JWT_SECRET } from '../functions/config.ts';
 import { mismaForma } from './contrato.ts';
@@ -60,7 +61,7 @@ async function postJson(path: string, body?: any, token?: string) {
 }
 
 test('Etapa C1 — Costos de la intervención y reporte de costos (CO-01 a CO-22)', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
 
   const createdPlantaIds: number[] = [];
   const createdSectorIds: number[] = [];
@@ -1150,6 +1151,7 @@ test('Etapa C1 — Costos de la intervención y reporte de costos (CO-01 a CO-22
       assert.strictEqual((await auditoriasCostos(id2)).length, 0);
     });
   } finally {
+    client = await clienteSano(client);
     // Limpieza: solo lo que creó esta prueba
     try {
       if (createdIntervencionIds.length > 0) {

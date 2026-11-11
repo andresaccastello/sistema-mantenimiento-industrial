@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import app from '../functions/api.ts';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,7 +23,7 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 }
 
 test('Etapa 8 — Tiempos de gestión e inactividad real de las máquinas', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
 
   const createdIntervencionIds: number[] = [];
   const createdMaquinaIds: number[] = [];
@@ -1431,6 +1432,7 @@ test('Etapa 8 — Tiempos de gestión e inactividad real de las máquinas', asyn
       assert.strictEqual(tieneSec2, false, 'La respuesta no debe tener el grupo del sector 2');
     });
   } finally {
+    client = await clienteSano(client);
     try {
       if (createdIntervencionIds.length > 0) {
         await client.query('DELETE FROM intervencion_periodos_detencion WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);

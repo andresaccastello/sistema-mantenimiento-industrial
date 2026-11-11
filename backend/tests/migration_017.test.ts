@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -79,7 +80,7 @@ async function crearBase(client: pg.PoolClient, costoManoObra = 0): Promise<Base
 }
 
 test('Migración 017 — Renglones de costo con mano de obra por persona', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
 
   try {
     const sqlPath = path.resolve(__dirname, '../../database/migrations/017_costos_renglones.sql');
@@ -308,6 +309,7 @@ test('Migración 017 — Renglones de costo con mano de obra por persona', async
       assert.strictEqual(resCk.rows[0].convalidated, true, 'ck_intervencion_costos_ajuste sigue validada');
     });
   } finally {
+    client = await clienteSano(client);
     client.release();
   }
 });

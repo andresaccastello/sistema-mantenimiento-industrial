@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 import app from '../functions/api.ts';
 
 // Configurar timeout de bloqueo para pruebas de concurrencia (3s para absorber latencia de red en Neon)
@@ -20,7 +21,7 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 }
 
 test('Etapa 4B — Motor de estados: cierres, recuperación de la máquina y estado manual', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
   const createdIntervencionIds: number[] = [];
   const createdMaquinaIds: number[] = [];
   const createdUsuarioIds: number[] = [];
@@ -2007,6 +2008,7 @@ test('Etapa 4B — Motor de estados: cierres, recuperación de la máquina y est
     });
 
   } finally {
+    client = await clienteSano(client);
     // Limpieza general
     try {
       await limpiarIntervenciones(createdIntervencionIds);

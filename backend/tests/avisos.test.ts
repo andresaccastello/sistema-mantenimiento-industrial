@@ -7,6 +7,7 @@ import assert from 'node:assert';
 import bcrypt from 'bcryptjs';
 import { sign } from 'hono/jwt';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 import app from '../functions/api.ts';
 import { JWT_SECRET } from '../functions/config.ts';
 import {
@@ -81,7 +82,7 @@ async function getTokenForUser(user: { id: number; legajo: string; sesion_versio
 }
 
 test('Etapa N1a — Avisos por email configurables', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
 
   const suf = Date.now();
   const createdUserIds: number[] = [];
@@ -924,6 +925,7 @@ test('Etapa N1a — Avisos por email configurables', async (t) => {
     });
 
   } finally {
+    client = await clienteSano(client);
     // Limpieza de datos creados en la prueba
     try {
       if (createdEnvioIds.length > 0) {

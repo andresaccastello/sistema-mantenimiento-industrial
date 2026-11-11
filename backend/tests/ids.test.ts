@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import bcrypt from 'bcryptjs';
 import { sign } from 'hono/jwt';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 import app from '../functions/api.ts';
 import { JWT_SECRET } from '../functions/config.ts';
 
@@ -103,7 +104,7 @@ async function igualQueCero(
 }
 
 test('Ids fuera de rango (ID-01 a ID-05)', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
 
   const createdPlantaIds: number[] = [];
   const createdSectorIds: number[] = [];
@@ -564,6 +565,7 @@ test('Ids fuera de rango (ID-01 a ID-05)', async (t) => {
       }
     });
   } finally {
+    client = await clienteSano(client);
     // Limpieza: solo lo que creó esta prueba
     try {
       if (createdIntervencionIds.length > 0) {

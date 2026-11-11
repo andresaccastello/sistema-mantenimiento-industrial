@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import bcrypt from 'bcryptjs';
 import { sign } from 'hono/jwt';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 import app from '../functions/api.ts';
 import { JWT_SECRET } from '../functions/config.ts';
 
@@ -82,7 +83,7 @@ async function getTokenForUser(user: { id: number; legajo: string; sesion_versio
 }
 
 test('Etapa F4a — API para las pantallas de administración', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
 
   const createdUserIds: number[] = [];
   const createdSectorIds: number[] = [];
@@ -1160,6 +1161,7 @@ test('Etapa F4a — API para las pantallas de administración', async (t) => {
     });
 
   } finally {
+    client = await clienteSano(client);
     // Restaurar catálogos originales
     await client.query('UPDATE criticidades SET orden = orden + 1000').catch(() => {});
     await client.query('UPDATE criticidades SET por_omision = FALSE WHERE por_omision = TRUE').catch(() => {});

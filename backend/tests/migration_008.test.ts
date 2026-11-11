@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,7 +23,7 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 }
 
 test('Migración 008 — Notificaciones internas, canales y bandeja de salida', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
 
   let usuario1Id = 0;
   let usuario2Id = 0;
@@ -171,6 +172,7 @@ test('Migración 008 — Notificaciones internas, canales y bandeja de salida', 
     });
 
   } finally {
+    client = await clienteSano(client);
     // Cleanup de registros de prueba
     if (notificacionId) {
       await client.query('DELETE FROM notificacion_envios WHERE notificacion_id = $1', [notificacionId]);

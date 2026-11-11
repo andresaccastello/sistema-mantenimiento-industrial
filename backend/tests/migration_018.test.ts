@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -160,7 +161,7 @@ function sumarDias(fecha: string, dias: number): string {
 }
 
 test('Migración 018 — Preventivos por calendario', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
 
   try {
     const sqlPath = path.resolve(__dirname, '../../database/migrations/018_preventivos.sql');
@@ -1058,6 +1059,7 @@ test('Migración 018 — Preventivos por calendario', async (t) => {
       }
     });
   } finally {
+    client = await clienteSano(client);
     client.release();
   }
 });

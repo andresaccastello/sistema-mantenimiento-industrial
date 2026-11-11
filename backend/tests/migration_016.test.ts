@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,7 +23,7 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 }
 
 test('Migración 016 — Repuestos, stock y pedidos: base de datos', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
 
   try {
     const sqlPath = path.resolve(__dirname, '../../database/migrations/016_repuestos_stock.sql');
@@ -504,6 +505,7 @@ test('Migración 016 — Repuestos, stock y pedidos: base de datos', async (t) =
     });
 
   } finally {
+    client = await clienteSano(client);
     client.release();
   }
 });

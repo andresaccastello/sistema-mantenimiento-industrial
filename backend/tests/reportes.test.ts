@@ -5,6 +5,7 @@ import path from 'node:path';
 import { sign } from 'hono/jwt';
 import app from '../functions/api.ts';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 import { JWT_SECRET } from '../functions/config.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -37,7 +38,7 @@ async function getTokenForUser(user: { id: number; legajo: string; sesion_versio
 }
 
 test('Etapa F5 — Indicadores y reportes (RP-01 a RP-07)', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
 
   const createdPlantaIds: number[] = [];
   const createdSectorIds: number[] = [];
@@ -552,6 +553,7 @@ test('Etapa F5 — Indicadores y reportes (RP-01 a RP-07)', async (t) => {
     });
 
   } finally {
+    client = await clienteSano(client);
     // Limpieza estricta de los datos creados
     if (createdIntervencionIds.length > 0) {
       await client.query('DELETE FROM intervencion_periodos_detencion WHERE intervencion_id = ANY($1)', [createdIntervencionIds]);

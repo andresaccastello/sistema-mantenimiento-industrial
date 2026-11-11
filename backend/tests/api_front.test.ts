@@ -8,6 +8,7 @@ import path from 'node:path';
 import bcrypt from 'bcryptjs';
 import app from '../functions/api.ts';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,7 +27,7 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 }
 
 test('Etapa API — API para el frontend', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
 
   const createdIntervencionIds: number[] = [];
   const createdMaquinaIds: number[] = [];
@@ -1658,6 +1659,7 @@ test('Etapa API — API para el frontend', async (t) => {
       assert.strictEqual(aud3.responsable_nuevo, null);
     });
   } finally {
+    client = await clienteSano(client);
     // Limpieza de datos creados en orden inverso de dependencias
     if (createdIntervencionIds.length > 0) {
       try {

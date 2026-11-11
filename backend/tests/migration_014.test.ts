@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,7 +23,7 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 }
 
 test('Migración 014 — Excepciones de permisos (usa_alcance y acciones de auditoría)', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
 
   try {
     const sqlPath = path.resolve(__dirname, '../../database/migrations/014_excepciones_permisos.sql');
@@ -112,6 +113,7 @@ test('Migración 014 — Excepciones de permisos (usa_alcance y acciones de audi
       }
     });
   } finally {
+    client = await clienteSano(client);
     client.release();
   }
 });

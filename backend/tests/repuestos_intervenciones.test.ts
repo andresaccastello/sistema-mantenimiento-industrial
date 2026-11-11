@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import bcrypt from 'bcryptjs';
 import { sign } from 'hono/jwt';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 import app from '../functions/api.ts';
 import { JWT_SECRET } from '../functions/config.ts';
 
@@ -78,7 +79,7 @@ async function deleteJson(path: string, token?: string) {
 }
 
 test('Etapa R1 — Repuestos y pedidos en la intervención, y reporte (RI-01 a RI-19)', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
 
   const createdPlantaIds: number[] = [];
   const createdSectorIds: number[] = [];
@@ -1463,6 +1464,7 @@ test('Etapa R1 — Repuestos y pedidos en la intervención, y reporte (RI-01 a R
     });
 
   } finally {
+    client = await clienteSano(client);
     // Limpieza estricta en orden:
     // pedidos, consumos, movimientos, repuesto_costos, repuestos, proveedores,
     // intervenciones chain, maquinas, usuarios y sus asociaciones, sectores, plantas

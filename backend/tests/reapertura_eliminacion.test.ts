@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 import app from '../functions/api.ts';
 
 // Configurar timeout de bloqueo para pruebas de concurrencia
@@ -20,7 +21,7 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 }
 
 test('Etapa 6 — Reapertura de intervenciones, eliminación lógica y edición de intervenciones abiertas', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
   const createdIntervencionIds: number[] = [];
   const createdMaquinaIds: number[] = [];
   const createdUsuarioIds: number[] = [];
@@ -1945,6 +1946,7 @@ test('Etapa 6 — Reapertura de intervenciones, eliminación lógica y edición 
     });
 
   } finally {
+    client = await clienteSano(client);
     // Limpieza
     try {
       await limpiarIntervenciones(createdIntervencionIds);

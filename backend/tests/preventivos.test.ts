@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import bcrypt from 'bcryptjs';
 import { sign } from 'hono/jwt';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 import app from '../functions/api.ts';
 import { JWT_SECRET } from '../functions/config.ts';
 import { mismaForma } from './contrato.ts';
@@ -84,7 +85,7 @@ function sumarAnios(fecha: string, anios: number): string {
 }
 
 test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-21)', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
 
   const createdPlantaIds: number[] = [];
   const createdSectorIds: number[] = [];
@@ -2312,6 +2313,7 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-21)', async (t) => {
       verificar('PATCH /api/intervenciones/:id/tareas/:tareaId', marcada.cuerpo, tareaMarcadaEjemplo);
     });
   } finally {
+    client = await clienteSano(client);
     // Limpieza: solo lo que creó esta prueba
     try {
       const maquinas = createdMaquinaIds;

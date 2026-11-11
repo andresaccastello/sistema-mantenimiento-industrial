@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import bcrypt from 'bcryptjs';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 import app from '../functions/api.ts';
 
 // Identificación estricta de la rama de Neon
@@ -18,7 +19,7 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 }
 
 test('Etapa F3a — Datos de la máquina y API para el tablero y las máquinas', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
 
   const createdIntervencionIds: number[] = [];
   const createdMaquinaIds: number[] = [];
@@ -1196,6 +1197,7 @@ test('Etapa F3a — Datos de la máquina y API para el tablero y las máquinas',
       assert.strictEqual(errC.codigo, 'DATOS_INVALIDOS');
     });
   } finally {
+    client = await clienteSano(client);
     await limpiarIntervenciones(createdIntervencionIds);
 
     if (createdMaquinaIds.length > 0) {

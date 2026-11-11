@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,7 +23,7 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 }
 
 test('Migración 013 — Datos de la máquina (criticidad, tipo de equipo, planta y modelo)', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
   const createdMaquinaIds: number[] = [];
   const createdSectorIds: number[] = [];
   const createdPlantaIds: number[] = [];
@@ -252,6 +253,7 @@ test('Migración 013 — Datos de la máquina (criticidad, tipo de equipo, plant
       );
     });
   } finally {
+    client = await clienteSano(client);
     if (createdMaquinaIds.length > 0) {
       await client.query('DELETE FROM maquinas WHERE id = ANY($1)', [createdMaquinaIds]);
     }

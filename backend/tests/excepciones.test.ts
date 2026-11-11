@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import bcrypt from 'bcryptjs';
 import { sign } from 'hono/jwt';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 import app from '../functions/api.ts';
 import { JWT_SECRET } from '../functions/config.ts';
 
@@ -73,7 +74,7 @@ async function getTokenForUser(user: { id: number; legajo: string; sesion_versio
 }
 
 test('Etapa API-05 — Excepciones de permisos por usuario (EX-01 a EX-10)', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
 
   const createdUserIds: number[] = [];
   const createdSectorIds: number[] = [];
@@ -742,6 +743,7 @@ test('Etapa API-05 — Excepciones de permisos por usuario (EX-01 a EX-10)', asy
     });
 
   } finally {
+    client = await clienteSano(client);
     // Limpieza estricta de datos creados en la suite
     await client.query(`
       DROP TRIGGER IF EXISTS trg_test_fail_auditoria ON auditoria_permisos;

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pool } from '../functions/db.ts';
+import { clienteSano } from './conexion.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,7 +23,7 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 }
 
 test('Migración 011 — Tiempos de gestión e inactividad', async (t) => {
-  const client = await pool.connect();
+  let client = await pool.connect();
 
   try {
     const sqlPath = path.resolve(__dirname, '../../database/migrations/011_tiempos.sql');
@@ -290,6 +291,7 @@ test('Migración 011 — Tiempos de gestión e inactividad', async (t) => {
       }
     });
   } finally {
+    client = await clienteSano(client);
     client.release();
   }
 });
