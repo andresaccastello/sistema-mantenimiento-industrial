@@ -44,6 +44,77 @@ export function BloqueMedidoresMaquina({ maquinaId, maquinaActiva }: Props) {
   if (!puede) return null;
   const lista = medidores ?? [];
 
+  const insigniaInactivo = (m: MedidorLista) =>
+    !m.activo && (
+      <Badge color="gray" variant="outline" size="sm" style={{ flexShrink: 0 }}>
+        Inactivo
+      </Badge>
+    );
+
+  const textoTareas = (m: MedidorLista) => `${m.tareas_activas} ${m.tareas_activas === 1 ? 'tarea' : 'tareas'}`;
+
+  const ultimaLectura = (m: MedidorLista) =>
+    m.ultima_lectura ? (
+      <div>
+        <Text size="sm">{textoValorMedidor(m.ultima_lectura.valor, m.unidad)}</Text>
+        <Text size="xs" c="dimmed">
+          el {fechaDeMomento(m.ultima_lectura.registrada_en)} por {nombreCompleto(m.ultima_lectura.registrada_por)}
+        </Text>
+      </div>
+    ) : (
+      <Text size="sm" c="dimmed">
+        Sin lecturas
+      </Text>
+    );
+
+  const botonCargar = (m: MedidorLista, anchoCompleto: boolean) =>
+    cargaLecturas &&
+    m.activo && (
+      <Tooltip label="La máquina está inactiva." disabled={maquinaActiva}>
+        {/* data-disabled y no disabled: un botón deshabilitado no muestra el tooltip */}
+        <Button
+          size="xs"
+          variant="light"
+          color="marca"
+          fullWidth={anchoCompleto}
+          leftSection={<IconGauge size={14} />}
+          data-disabled={maquinaActiva ? undefined : true}
+          aria-disabled={!maquinaActiva}
+          onClick={(e) => (maquinaActiva ? setCargando(m) : e.preventDefault())}
+        >
+          Cargar lectura
+        </Button>
+      </Tooltip>
+    );
+
+  const menu = (m: MedidorLista) => (
+    <Menu position="bottom-end" withinPortal>
+      <Menu.Target>
+        <ActionIcon variant="subtle" color="gray" aria-label={`Acciones de ${m.nombre}`} style={{ flexShrink: 0 }}>
+          <IconDotsVertical size={16} />
+        </ActionIcon>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Item leftSection={<IconList size={14} />} onClick={() => setViendo(m)}>
+          Ver lecturas
+        </Menu.Item>
+        {gestiona && (
+          <>
+            <Menu.Item leftSection={<IconEdit size={14} />} onClick={() => setEnEdicion(m)}>
+              Editar
+            </Menu.Item>
+            <Menu.Item
+              leftSection={m.activo ? <IconBan size={14} /> : <IconRotateClockwise size={14} />}
+              onClick={() => setCambiandoActivo(m)}
+            >
+              {m.activo ? 'Desactivar' : 'Reactivar'}
+            </Menu.Item>
+          </>
+        )}
+      </Menu.Dropdown>
+    </Menu>
+  );
+
   return (
     <Paper withBorder p="md" radius="md">
       <Stack gap="sm">
@@ -64,104 +135,70 @@ export function BloqueMedidoresMaquina({ maquinaId, maquinaActiva }: Props) {
             Esta máquina no tiene medidores.
           </Text>
         ) : (
-          <Table.ScrollContainer minWidth={640}>
-            <Table verticalSpacing="xs">
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th style={{ minWidth: 150 }}>Medidor</Table.Th>
-                  <Table.Th style={{ minWidth: 80 }}>Unidad</Table.Th>
-                  <Table.Th style={{ minWidth: 190 }}>Última lectura</Table.Th>
-                  <Table.Th style={{ minWidth: 90 }}>Tareas</Table.Th>
-                  <Table.Th style={{ minWidth: 170 }} />
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {lista.map((m) => (
-                  <Table.Tr key={m.id}>
-                    <Table.Td>
-                      <Group gap="xs" wrap="nowrap">
+          <>
+            {/* Debajo de sm, una tarjeta por medidor: "Cargar lectura" queda a la vista (PV4.1, 2) */}
+            <Stack gap="sm" hiddenFrom="sm">
+              {lista.map((m) => (
+                <Paper key={m.id} withBorder radius="md" p="sm">
+                  <Stack gap="xs">
+                    <Group justify="space-between" wrap="nowrap" align="flex-start">
+                      <Group gap="xs" wrap="wrap" style={{ minWidth: 0 }}>
                         <Text size="sm" fw={600}>
                           {m.nombre}
                         </Text>
-                        {!m.activo && (
-                          <Badge color="gray" variant="outline" size="sm" style={{ flexShrink: 0 }}>
-                            Inactivo
-                          </Badge>
-                        )}
+                        {insigniaInactivo(m)}
                       </Group>
-                    </Table.Td>
-                    <Table.Td>
-                      <Text size="sm">{m.unidad}</Text>
-                    </Table.Td>
-                    <Table.Td>
-                      {m.ultima_lectura ? (
-                        <>
-                          <Text size="sm">{textoValorMedidor(m.ultima_lectura.valor, m.unidad)}</Text>
-                          <Text size="xs" c="dimmed">
-                            el {fechaDeMomento(m.ultima_lectura.registrada_en)} por {nombreCompleto(m.ultima_lectura.registrada_por)}
-                          </Text>
-                        </>
-                      ) : (
-                        <Text size="sm" c="dimmed">
-                          Sin lecturas
-                        </Text>
-                      )}
-                    </Table.Td>
-                    <Table.Td>
-                      <Text size="sm">
-                        {m.tareas_activas} {m.tareas_activas === 1 ? 'tarea' : 'tareas'}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Group gap="xs" justify="flex-end" wrap="nowrap">
-                        {cargaLecturas && m.activo && (
-                          <Tooltip label="La máquina está inactiva." disabled={maquinaActiva}>
-                            {/* data-disabled y no disabled: un botón deshabilitado no muestra el tooltip */}
-                            <Button
-                              size="xs"
-                              variant="light"
-                              color="marca"
-                              leftSection={<IconGauge size={14} />}
-                              data-disabled={maquinaActiva ? undefined : true}
-                              aria-disabled={!maquinaActiva}
-                              onClick={(e) => (maquinaActiva ? setCargando(m) : e.preventDefault())}
-                            >
-                              Cargar lectura
-                            </Button>
-                          </Tooltip>
-                        )}
-                        <Menu position="bottom-end" withinPortal>
-                          <Menu.Target>
-                            <ActionIcon variant="subtle" color="gray" aria-label={`Acciones de ${m.nombre}`}>
-                              <IconDotsVertical size={16} />
-                            </ActionIcon>
-                          </Menu.Target>
-                          <Menu.Dropdown>
-                            <Menu.Item leftSection={<IconList size={14} />} onClick={() => setViendo(m)}>
-                              Ver lecturas
-                            </Menu.Item>
-                            {gestiona && (
-                              <>
-                                <Menu.Item leftSection={<IconEdit size={14} />} onClick={() => setEnEdicion(m)}>
-                                  Editar
-                                </Menu.Item>
-                                <Menu.Item
-                                  leftSection={m.activo ? <IconBan size={14} /> : <IconRotateClockwise size={14} />}
-                                  onClick={() => setCambiandoActivo(m)}
-                                >
-                                  {m.activo ? 'Desactivar' : 'Reactivar'}
-                                </Menu.Item>
-                              </>
-                            )}
-                          </Menu.Dropdown>
-                        </Menu>
-                      </Group>
-                    </Table.Td>
+                      {menu(m)}
+                    </Group>
+                    {ultimaLectura(m)}
+                    <Text size="sm">{textoTareas(m)}</Text>
+                    {botonCargar(m, true)}
+                  </Stack>
+                </Paper>
+              ))}
+            </Stack>
+
+            <Table.ScrollContainer minWidth={640} visibleFrom="sm">
+              <Table verticalSpacing="xs">
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th style={{ minWidth: 150 }}>Medidor</Table.Th>
+                    <Table.Th style={{ minWidth: 80 }}>Unidad</Table.Th>
+                    <Table.Th style={{ minWidth: 190 }}>Última lectura</Table.Th>
+                    <Table.Th style={{ minWidth: 90 }}>Tareas</Table.Th>
+                    <Table.Th style={{ minWidth: 170 }} />
                   </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          </Table.ScrollContainer>
+                </Table.Thead>
+                <Table.Tbody>
+                  {lista.map((m) => (
+                    <Table.Tr key={m.id}>
+                      <Table.Td>
+                        <Group gap="xs" wrap="nowrap">
+                          <Text size="sm" fw={600}>
+                            {m.nombre}
+                          </Text>
+                          {insigniaInactivo(m)}
+                        </Group>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="sm">{m.unidad}</Text>
+                      </Table.Td>
+                      <Table.Td>{ultimaLectura(m)}</Table.Td>
+                      <Table.Td>
+                        <Text size="sm">{textoTareas(m)}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Group gap="xs" justify="flex-end" wrap="nowrap">
+                          {botonCargar(m, false)}
+                          {menu(m)}
+                        </Group>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Table.ScrollContainer>
+          </>
         )}
       </Stack>
 

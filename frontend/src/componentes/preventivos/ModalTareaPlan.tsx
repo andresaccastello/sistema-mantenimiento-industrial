@@ -15,6 +15,7 @@ import {
   FilaPrevisto,
   MAXIMO_PREVISTOS,
   UNIDADES_FRECUENCIA,
+  anticipacionSegunCada,
   conFecha,
   conUso,
   descripcionAnticipacionUso,
@@ -86,11 +87,17 @@ export function ModalTareaPlan({
   const [guardando, setGuardando] = useState(false);
   /** "Primera vez a los" escrita a mano: ya no se llena sola. */
   const [primeraTocada, setPrimeraTocada] = useState(false);
+  /** "Avisar antes" escrita en este diálogo: ya no sigue al 10 % de "Cada" (PV4.1, 1). */
+  const [anticipacionTocada, setAnticipacionTocada] = useState(false);
+  /** El último "Cada" válido: mientras se escribe el nuevo, pasa por vacío o por otros números. */
+  const [cadaAnterior, setCadaAnterior] = useState<number | string>(inicial.usoCada);
 
   useEffect(() => {
     if (!abierto) return;
     setB(inicial);
     setPrimeraTocada(String(inicial.usoPrimera).trim() !== '');
+    setAnticipacionTocada(false);
+    setCadaAnterior(inicial.usoCada);
     setErrorGeneral(null);
     if (errorInicial?.campo) {
       setErrores(erroresDeApi({ ...errorInicial, campo: errorInicial.campo }));
@@ -307,7 +314,11 @@ export function ModalTareaPlan({
               rightSection={unidadALaDerecha(unidad)}
               rightSectionWidth={unidad ? 70 : undefined}
               value={b.usoCada}
-              onChange={(v) => cambiar({ usoCada: v }, ['usoCada', 'usoAnticipacion'])}
+              onChange={(v) => {
+                const usoAnticipacion = anticipacionSegunCada(b.usoAnticipacion, cadaAnterior, v, anticipacionTocada);
+                if (leerValorMedidor(v)) setCadaAnterior(v);
+                cambiar({ usoCada: v, usoAnticipacion }, ['usoCada', 'usoAnticipacion']);
+              }}
               error={errores.usoCada}
             />
             <CampoNumero
@@ -336,7 +347,10 @@ export function ModalTareaPlan({
               rightSection={unidadALaDerecha(unidad)}
               rightSectionWidth={unidad ? 70 : undefined}
               value={b.usoAnticipacion}
-              onChange={(v) => cambiar({ usoAnticipacion: v }, ['usoAnticipacion'])}
+              onChange={(v) => {
+                setAnticipacionTocada(true);
+                cambiar({ usoAnticipacion: v }, ['usoAnticipacion']);
+              }}
               error={errores.usoAnticipacion}
             />
           </>

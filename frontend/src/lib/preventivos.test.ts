@@ -37,6 +37,7 @@ import {
   textoProgramada,
   textoValorAlHacer,
   primeraUsoSugerida,
+  anticipacionSegunCada,
   descripcionPrimeraUso,
   descripcionAnticipacionUso,
   faltaMedidor,
@@ -926,5 +927,25 @@ describe('FE-119: campoLecturaConfirmar', () => {
       descripcion: null,
       modo: 'PASADA',
     });
+  });
+});
+
+describe('FE-121: "Avisar antes" sigue al 10 % de "Cada" (PV4.1, 1)', () => {
+  it('los casos de la tabla', () => {
+    assert.equal(anticipacionSegunCada(25, 250, 500, false), 50);
+    assert.equal(anticipacionSegunCada(40, 250, 500, false), 40);
+    assert.equal(anticipacionSegunCada('', 250, 500, false), '');
+    assert.equal(anticipacionSegunCada(0.01, 0.05, 1, false), 0.1);
+  });
+
+  it('tocada en el diálogo no sigue, aunque sea el 10 %', () => {
+    assert.equal(anticipacionSegunCada(25, 250, 500, true), 25);
+  });
+
+  it('escrita con coma, y un "Cada" nuevo que todavía no es válido', () => {
+    assert.equal(anticipacionSegunCada('2,5', '25', '300', false), 30);
+    assert.equal(anticipacionSegunCada(25, 250, '', false), 25);
+    assert.equal(anticipacionSegunCada(25, 250, 0, false), 25);
+    assert.equal(anticipacionSegunCada(25, 250, 'x', false), 25);
   });
 });

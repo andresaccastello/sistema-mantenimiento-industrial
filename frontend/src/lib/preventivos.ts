@@ -158,6 +158,30 @@ export function descripcionAnticipacionUso(unidad: string): string {
   return `Cuántas ${unidad || 'unidades'} antes pasa a próxima. Vacío: el 10 % de «Cada».`;
 }
 
+/** El 10 % de «Cada», redondeado a 2 decimales: la anticipación de omisión. */
+function diezPorCiento(cada: number): number {
+  return Math.round((cada / 10) * 100) / 100;
+}
+
+/**
+ * "Avisar antes" al cambiar "Cada" (PV4.1, 1): si no se tocó en el diálogo y era el 10 %
+ * del "Cada" anterior, pasa a ser el 10 % del nuevo. Otro valor, o vacío, no cambia; con un
+ * "Cada" que no es un número válido mayor que 0, tampoco.
+ */
+export function anticipacionSegunCada(
+  anticipacion: number | string,
+  cadaAnterior: number | string,
+  cadaNuevo: number | string,
+  tocada: boolean
+): number | string {
+  if (tocada) return anticipacion;
+  const actual = leerValorMedidor(anticipacion);
+  const anterior = leerValorMedidor(cadaAnterior);
+  const nuevo = leerValorMedidor(cadaNuevo);
+  if (actual === null || anterior === null || anterior === 0 || nuevo === null || nuevo === 0) return anticipacion;
+  return actual === diezPorCiento(anterior) ? diezPorCiento(nuevo) : anticipacion;
+}
+
 /** Una tarea por uso, o por las dos, que todavía no tiene medidor. */
 export function faltaMedidor(b: BorradorTarea): boolean {
   return conUso(b.criterio) && parsearId(b.medidorId) === null;
