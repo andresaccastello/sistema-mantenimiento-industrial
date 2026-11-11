@@ -58,6 +58,7 @@ import { EstadoBadge } from '../componentes/EstadoBadge';
 import { CriticidadBadge } from '../componentes/CriticidadBadge';
 import { ModalConfirmarRecuperacion } from '../componentes/acciones/ModalConfirmarRecuperacion';
 import { ModalMaquina } from '../componentes/ModalMaquina';
+import { BloqueMedidoresMaquina } from '../componentes/medidores/BloqueMedidoresMaquina';
 import { BloquePlanesMaquina } from '../componentes/preventivos/BloquePlanesMaquina';
 
 function parseYMD(str: string | null): Date | null {
@@ -621,6 +622,9 @@ export function DetalleMaquina() {
           </Stack>
         </Paper>
       )}
+
+      {/* PV4: Medidores, con PLANES_GESTIONAR o MAQUINAS_REGISTRAR_LECTURAS */}
+      <BloqueMedidoresMaquina maquinaId={maquina.id} maquinaActiva={maquina.activo} />
 
       {/* PV2: Planes preventivos, solo con PLANES_GESTIONAR */}
       <BloquePlanesMaquina maquinaId={maquina.id} />
