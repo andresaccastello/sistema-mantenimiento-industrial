@@ -5,7 +5,7 @@ import { validarFechaISO } from './fechas.ts';
 import { recalcularEstadoMaquina } from './recalculoMaquina.ts';
 import { registrarNotificaciones } from './auditoria.ts';
 import { bloquearIntervencion } from './bloqueos.ts';
-import { parseId } from '../validations.ts';
+import { parseId, validarMotivo } from '../validations.ts';
 
 /**
  * 7.1 GET /api/maquinas/:id/detenciones-abiertas
@@ -313,10 +313,7 @@ export async function cambiarEstadoManualMaquina(
     throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'Acción inválida. Debe ser FUERA_DE_SERVICIO o REACTIVAR');
   }
 
-  const motivo = typeof body.motivo === 'string' ? body.motivo.trim() : '';
-  if (motivo.length < 5) {
-    throw new ErrorNegocio(422, 'MOTIVO_REQUERIDO', 'Debe indicar un motivo de al menos 5 caracteres');
-  }
+  const motivo = validarMotivo(body.motivo);
 
   // Bloqueo de máquina FOR UPDATE
   const resM = await client.query('SELECT id, estado FROM maquinas WHERE id = $1 FOR UPDATE', [maquinaId]);

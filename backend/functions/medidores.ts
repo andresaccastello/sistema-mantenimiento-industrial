@@ -4,7 +4,7 @@ import { pool } from './db.ts';
 import { jwtVerify, dbVerify, requireAlgunPermiso, requirePermission } from './middleware.ts';
 import { ErrorNegocio, responderError } from './intervenciones/errores.ts';
 import { conTransaccion } from './intervenciones/transaccion.ts';
-import { parseEnteroTexto, parseId, leerCuerpoObjeto } from './validations.ts';
+import { parseEnteroTexto, parseId, leerCuerpoObjeto, validarMotivo } from './validations.ts';
 import { parseIdRuta, validarIdCuerpo } from './repuestos/validaciones.ts';
 import { getUsuarioContext, sectoresDelAlcance } from './preventivos/comun.ts';
 import { textoObligatorio, textoOpcional } from './preventivos/validaciones.ts';
@@ -273,10 +273,7 @@ medidoresApp.post('/:id/lecturas/:lecturaId/anular', gestiona, async (c) => {
     const lecturaId = parseIdRuta(c.req.param('lecturaId'));
     const leido = await leerCuerpoObjeto(c);
     if (!leido.ok) return leido.response;
-    const motivo = typeof leido.body.motivo === 'string' ? leido.body.motivo.trim() : '';
-    if (motivo.length < 5) {
-      throw new ErrorNegocio(422, 'MOTIVO_REQUERIDO', 'Indicá un motivo de al menos 5 caracteres');
-    }
+    const motivo = validarMotivo(leido.body.motivo, 'Indicá un motivo de al menos 5 caracteres');
     const sectores = sectoresDelAlcance(c);
     const usuario = getUsuarioContext(c);
 

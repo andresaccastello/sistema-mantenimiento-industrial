@@ -152,6 +152,7 @@ export function ModalEliminar({
 
           <Textarea
             label="Motivo"
+            maxLength={500}
             placeholder="Indicá el motivo de la eliminación (al menos 5 caracteres)"
             value={motivoTexto}
             onChange={(e) => setMotivoTexto(e.currentTarget.value)}

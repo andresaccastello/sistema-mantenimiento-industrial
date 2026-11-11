@@ -115,6 +115,7 @@ export function ModalDesactivarUsuario({
 
           <Textarea
             label="Motivo"
+            maxLength={500}
             placeholder="Indicá el motivo (al menos 5 caracteres)"
             value={motivo}
             onChange={(e) => setMotivo(e.currentTarget.value)}

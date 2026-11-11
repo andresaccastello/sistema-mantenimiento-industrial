@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { ErrorNegocio } from '../intervenciones/errores.ts';
+import { validarMotivo } from '../validations.ts';
 import { UsuarioVisibilidad } from '../intervenciones/visibilidad.ts';
 import { registrarAuditoria } from '../intervenciones/auditoria.ts';
 import { recalcularCostosIntervencion } from '../intervenciones/costos.ts';
@@ -49,11 +50,7 @@ export function autorizarRegistroConsumo(
     if (!('INTERVENCIONES_CORREGIR' in usuario.permisos)) {
       throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No tiene permiso para corregir intervenciones finalizadas');
     }
-    const motivoTrim = typeof motivo === 'string' ? motivo.trim() : '';
-    if (motivoTrim.length < 5) {
-      throw new ErrorNegocio(422, 'MOTIVO_REQUERIDO', 'Debe indicar un motivo de al menos 5 caracteres');
-    }
-    return motivoTrim;
+    return validarMotivo(motivo);
   }
   return null;
 }

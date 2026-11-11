@@ -86,6 +86,7 @@ export function ModalCancelarPedido({
 
           <Textarea
             label="Motivo de la cancelación"
+            maxLength={500}
             placeholder="Indicá por qué se cancela el pedido (mínimo 5 caracteres)"
             required
             rows={3}

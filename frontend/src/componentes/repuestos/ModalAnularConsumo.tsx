@@ -117,6 +117,7 @@ export function ModalAnularConsumo({
 
           <Textarea
             label="Motivo de la anulación"
+            maxLength={500}
             placeholder="Indicá por qué se anula el consumo (mínimo 5 caracteres)"
             required
             rows={3}

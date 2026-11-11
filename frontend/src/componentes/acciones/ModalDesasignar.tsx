@@ -85,6 +85,7 @@ export function ModalDesasignar({
 
           <Textarea
             label="Motivo"
+            maxLength={500}
             placeholder="Indicá el motivo por el cual se quita la responsabilidad"
             value={motivoTexto}
             onChange={(e) => setMotivoTexto(e.currentTarget.value)}

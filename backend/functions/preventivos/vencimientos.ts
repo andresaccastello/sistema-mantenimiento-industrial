@@ -196,14 +196,15 @@ async function procesarPlan(client: pg.PoolClient, planId: number, sistema: Usua
  * igual no repite avisos (2.3) ni duplica intervenciones (los bloqueos de generar).
  */
 export async function procesarVencimientos(opciones: { forzar?: boolean } = {}): Promise<ResultadoVencimientos> {
+  // Sin forzar, una vez por día. Solo se lee: la fecha se marca al terminar (C3, 2). Si dos
+  // programados arrancan a la vez, los dos revisan: los avisos no se repiten por el índice
+  // único y la intervención no se duplica por los bloqueos de generar (PV5, 3.4).
   if (!opciones.forzar) {
     const r = await pool.query(
-      `UPDATE configuracion_sistema
-       SET vencimientos_revisados_el = hoy_instalacion()
-       WHERE id = 1 AND vencimientos_revisados_el IS DISTINCT FROM hoy_instalacion()
-       RETURNING 1`
+      `SELECT vencimientos_revisados_el IS NOT DISTINCT FROM hoy_instalacion() AS hecho
+       FROM configuracion_sistema WHERE id = 1`
     );
-    if (r.rows.length === 0) return { revisado: false };
+    if (r.rows.length === 0 || r.rows[0].hecho) return { revisado: false };
   }
 
   const sistema: UsuarioVisibilidad = { id: await usuarioSistema(pool), permisos: {}, sectores: [] };
@@ -242,6 +243,12 @@ export async function procesarVencimientos(opciones: { forzar?: boolean } = {}):
       }
       resultado.errores.push({ plan_id: planId, codigo: err instanceof ErrorNegocio ? err.codigo : 'ERROR_INTERNO' });
     }
+  }
+
+  // Recorridos todos los planes, aunque alguno haya dado error, el día queda revisado.
+  // Si el proceso se cortó antes, la fecha no se marca y el próximo programado vuelve a revisar.
+  if (!opciones.forzar) {
+    await pool.query('UPDATE configuracion_sistema SET vencimientos_revisados_el = hoy_instalacion() WHERE id = 1');
   }
 
   return resultado;

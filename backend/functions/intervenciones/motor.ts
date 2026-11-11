@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { ErrorNegocio } from './errores.ts';
+import { validarMotivo, controlarTopeMotivo } from '../validations.ts';
 import { resolverPermisosEfectivos } from './permisos.ts';
 import { UsuarioVisibilidad } from './visibilidad.ts';
 import { bloquearIntervencion } from './bloqueos.ts';
@@ -249,6 +250,7 @@ export async function asignarResponsableServicio(
       'El motivo de reasignación es obligatorio'
     );
   }
+  controlarTopeMotivo(motivoLimpio);
 
   // Validar destinatario
   const datosDestinatario = await validarResponsableHabilitado(
@@ -364,6 +366,7 @@ export async function desasignarResponsableServicio(
       'El motivo para quitar el responsable es obligatorio'
     );
   }
+  controlarTopeMotivo(motivoLimpio);
 
   const responsableActual = Number(intervencion.responsable_usuario_id);
 
@@ -1215,10 +1218,7 @@ export async function cancelarIntervencionServicio(
   const transicion = await verificarTransicion(client, 'CANCELAR', intervencion, maquina, usuario);
 
   // Motivo de cancelación obligatorio (min 5 caracteres)
-  const motivo = typeof body.motivo === 'string' ? body.motivo.trim() : '';
-  if (motivo.length < 5) {
-    throw new ErrorNegocio(422, 'MOTIVO_REQUERIDO', 'Debe indicar un motivo de cancelación de al menos 5 caracteres');
-  }
+  const motivo = validarMotivo(body.motivo, 'Debe indicar un motivo de cancelación de al menos 5 caracteres');
 
   // Decisión de recuperación (validación antes de mutar)
   const resNow = await client.query('SELECT NOW() AS ahora');
@@ -1342,10 +1342,7 @@ export async function reabrirIntervencionServicio(
 
   const transicion = await verificarTransicion(client, 'REABRIR', intervencion, maquina, usuario);
 
-  const motivo = typeof body.motivo === 'string' ? body.motivo.trim() : '';
-  if (motivo.length < 5) {
-    throw new ErrorNegocio(422, 'MOTIVO_REQUERIDO', 'El motivo de la reapertura es obligatorio y debe tener al menos 5 caracteres');
-  }
+  const motivo = validarMotivo(body.motivo, 'El motivo de la reapertura es obligatorio y debe tener al menos 5 caracteres');
 
   // 3. Período de detención (E9, ejemplo 4):
   const resPeriodoAbierto = await client.query(
@@ -1636,10 +1633,7 @@ export async function eliminarIntervencionServicio(
 
   const { intervencion, maquina } = await bloquearIntervencion(client, intervencionId, usuario);
 
-  const motivo = typeof body.motivo === 'string' ? body.motivo.trim() : '';
-  if (motivo.length < 5) {
-    throw new ErrorNegocio(422, 'MOTIVO_REQUERIDO', 'El motivo de la eliminación es obligatorio y debe tener al menos 5 caracteres');
-  }
+  const motivo = validarMotivo(body.motivo, 'El motivo de la eliminación es obligatorio y debe tener al menos 5 caracteres');
 
   await verificarEliminar(client, intervencion, maquina, usuario);
 

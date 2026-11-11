@@ -112,6 +112,7 @@ export function ModalAsignar({
 
           <Textarea
             label={`Motivo${tieneResponsable ? '' : ' (opcional)'}`}
+            maxLength={500}
             placeholder="Explicá el motivo de la asignación"
             value={motivoTexto}
             onChange={(e) => setMotivoTexto(e.currentTarget.value)}

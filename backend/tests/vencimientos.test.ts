@@ -283,8 +283,35 @@ test('Etapa PV5 — Generación automática y avisos de vencimiento (PA-01 a PA-
         // Forzar revisa aunque ya se haya revisado hoy
         const forzada = await procesarVencimientos({ forzar: true });
         assert.strictEqual(forzada.revisado, true);
+
+        // C3, 2: un error que corta la revisión antes de terminar no marca el día. Se fuerza
+        // sacándole la marca al usuario del sistema, que la revisión busca para ser el autor.
+        await client.query(`UPDATE configuracion_sistema SET vencimientos_revisados_el = hoy_instalacion() - 1 WHERE id = 1`);
+        await client.query('UPDATE usuarios SET es_sistema = FALSE WHERE id = $1', [sistemaId]);
+        let cortada = false;
+        try {
+          await procesarVencimientos();
+        } catch {
+          cortada = true;
+        } finally {
+          client = await clienteSano(client);
+          await client.query('UPDATE usuarios SET es_sistema = TRUE WHERE id = $1', [sistemaId]);
+        }
+        assert.strictEqual(cortada, true, 'La revisión se cortó');
+        const marcadaTrasCorte = (await client.query(
+          `SELECT vencimientos_revisados_el = hoy_instalacion() AS hoy FROM configuracion_sistema WHERE id = 1`
+        )).rows[0].hoy;
+        assert.strictEqual(marcadaTrasCorte, false, 'Cortada, la fecha no queda marcada');
+
+        const proxima = await procesarVencimientos();
+        assert.strictEqual(proxima.revisado, true, 'El próximo programado vuelve a revisar');
+        const marcadaAlFinal = (await client.query(
+          `SELECT vencimientos_revisados_el = hoy_instalacion() AS hoy FROM configuracion_sistema WHERE id = 1`
+        )).rows[0].hoy;
+        assert.strictEqual(marcadaAlFinal, true, 'Al terminar, queda revisado hoy');
       } finally {
         client = await clienteSano(client);
+        await client.query('UPDATE usuarios SET es_sistema = TRUE WHERE id = $1', [sistemaId]);
         await client.query('UPDATE configuracion_sistema SET vencimientos_revisados_el = $1::date WHERE id = 1', [revisadosEl]);
       }
     });

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { pool } from './db.ts';
 import { requirePermission } from './middleware.ts';
 import { ErrorNegocio, responderError } from './intervenciones/errores.ts';
+import { validarMotivo } from './validations.ts';
 import { bloquearIntervencion } from './intervenciones/bloqueos.ts';
 import { UsuarioVisibilidad, puedeVerIntervencion } from './intervenciones/visibilidad.ts';
 import { veCostos, puedeCargarCostos } from './repuestos/permisos.ts';
@@ -373,10 +374,7 @@ intervencionRepuestosApp.post('/:id/repuestos/:consumoId/anular', async (c) => {
       throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'Cuerpo JSON inválido');
     }
 
-    const motivoTrim = typeof body.motivo === 'string' ? body.motivo.trim() : '';
-    if (motivoTrim.length < 5) {
-      throw new ErrorNegocio(422, 'MOTIVO_REQUERIDO', 'Debe indicar un motivo de al menos 5 caracteres');
-    }
+    const motivoTrim = validarMotivo(body.motivo);
 
     await client.query('BEGIN');
 
@@ -987,10 +985,7 @@ intervencionRepuestosApp.post('/:id/pedidos/:pedidoId/cancelar', async (c) => {
       throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'Cuerpo JSON inválido');
     }
 
-    const motivoTrim = typeof body.motivo === 'string' ? body.motivo.trim() : '';
-    if (motivoTrim.length < 5) {
-      throw new ErrorNegocio(422, 'MOTIVO_REQUERIDO', 'Debe indicar un motivo de al menos 5 caracteres');
-    }
+    const motivoTrim = validarMotivo(body.motivo);
 
     await client.query('BEGIN');
 

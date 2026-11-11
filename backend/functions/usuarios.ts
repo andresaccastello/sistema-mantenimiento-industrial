@@ -3,7 +3,8 @@ import bcrypt from 'bcryptjs';
 import pg from 'pg';
 import { pool } from './db.ts';
 import { jwtVerify, dbVerify, requirePermission } from './middleware.ts';
-import { parseId, parseEnteroTexto } from './validations.ts';
+import { parseId, parseEnteroTexto, validarMotivo } from './validations.ts';
+import { responderError } from './intervenciones/errores.ts';
 import { resolverPermisosEfectivos, AlcancePermiso } from './intervenciones/permisos.ts';
 
 const SCOPE_HIERARCHY: Record<AlcancePermiso, number> = {
@@ -1148,9 +1149,11 @@ usuariosApp.post('/:id/desactivar', async (c) => {
     body = {};
   }
 
-  const { motivo } = body || {};
-  if (typeof motivo !== 'string' || motivo.trim().length < 5) {
-    return c.json({ error: 'El motivo es obligatorio y debe tener al menos 5 caracteres', codigo: 'MOTIVO_REQUERIDO' }, 422);
+  let motivo: string;
+  try {
+    motivo = validarMotivo(body?.motivo, 'El motivo es obligatorio y debe tener al menos 5 caracteres');
+  } catch (error) {
+    return responderError(c, error);
   }
 
   const client = await pool.connect();
@@ -1248,9 +1251,11 @@ usuariosApp.post('/:id/reactivar', async (c) => {
     body = {};
   }
 
-  const { motivo } = body || {};
-  if (typeof motivo !== 'string' || motivo.trim().length < 5) {
-    return c.json({ error: 'El motivo es obligatorio y debe tener al menos 5 caracteres', codigo: 'MOTIVO_REQUERIDO' }, 422);
+  let motivo: string;
+  try {
+    motivo = validarMotivo(body?.motivo, 'El motivo es obligatorio y debe tener al menos 5 caracteres');
+  } catch (error) {
+    return responderError(c, error);
   }
 
   const client = await pool.connect();
@@ -1437,9 +1442,11 @@ usuariosApp.put('/:id/excepciones/:codigo', async (c) => {
   } catch {
     // cuerpo no parseable o inexistente
   }
-  const motivo = typeof body?.motivo === 'string' ? body.motivo.trim() : '';
-  if (motivo.length < 5) {
-    return c.json({ error: 'El motivo es requerido y debe tener al menos 5 caracteres', codigo: 'MOTIVO_REQUERIDO' }, 422);
+  let motivo: string;
+  try {
+    motivo = validarMotivo(body?.motivo, 'El motivo es requerido y debe tener al menos 5 caracteres');
+  } catch (error) {
+    return responderError(c, error);
   }
 
   // 7. Solo en el PUT: efecto no es CONCEDER ni DENEGAR
@@ -1604,9 +1611,11 @@ usuariosApp.delete('/:id/excepciones/:codigo', async (c) => {
   } catch {
     // cuerpo no parseable o inexistente
   }
-  const motivo = typeof body?.motivo === 'string' ? body.motivo.trim() : '';
-  if (motivo.length < 5) {
-    return c.json({ error: 'El motivo es requerido y debe tener al menos 5 caracteres', codigo: 'MOTIVO_REQUERIDO' }, 422);
+  let motivo: string;
+  try {
+    motivo = validarMotivo(body?.motivo, 'El motivo es requerido y debe tener al menos 5 caracteres');
+  } catch (error) {
+    return responderError(c, error);
   }
 
   // 9. Nadie toca un permiso que no tiene (8.5): quien hace el cambio tiene que tener ese permiso entre sus permisos efectivos

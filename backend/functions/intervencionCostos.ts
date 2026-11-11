@@ -8,6 +8,7 @@ import { UsuarioVisibilidad, puedeVerIntervencion } from './intervenciones/visib
 import { registrarAuditoria } from './intervenciones/auditoria.ts';
 import { recalcularCostosIntervencion } from './intervenciones/costos.ts';
 import { parseIdRuta, validarIdCuerpo, formatearCantidad } from './repuestos/validaciones.ts';
+import { validarMotivo, controlarTopeMotivo } from './validations.ts';
 
 /**
  * Etapa C1, sección 4: renglones de costo de la intervención.
@@ -301,13 +302,13 @@ function validarRenglon(body: any, finalizada: boolean): RenglonValidado {
   if (presente(body.motivo) && typeof body.motivo !== 'string') {
     throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El motivo debe ser texto');
   }
-  const motivoTrim = typeof body.motivo === 'string' ? body.motivo.trim() : '';
-  if ((tipo === 'AJUSTE' || finalizada) && motivoTrim.length < 5) {
-    throw new ErrorNegocio(422, 'MOTIVO_REQUERIDO', 'Debe indicar un motivo de al menos 5 caracteres');
-  }
-  if (motivoTrim.length > 500) {
-    throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El motivo no puede superar los 500 caracteres');
-  }
+  const motivoTrim =
+    tipo === 'AJUSTE' || finalizada
+      ? validarMotivo(body.motivo)
+      : typeof body.motivo === 'string'
+        ? body.motivo.trim()
+        : '';
+  controlarTopeMotivo(motivoTrim);
 
   // descripcion
   if (presente(body.descripcion) && typeof body.descripcion !== 'string') {
@@ -661,13 +662,7 @@ intervencionCostosApp.post('/:id/costos/:renglonId/anular', async (c) => {
     const usuario = getUsuarioContext(c);
     const body = await leerJson(c);
 
-    const motivoTrim = typeof body.motivo === 'string' ? body.motivo.trim() : '';
-    if (motivoTrim.length < 5) {
-      throw new ErrorNegocio(422, 'MOTIVO_REQUERIDO', 'Debe indicar un motivo de al menos 5 caracteres');
-    }
-    if (motivoTrim.length > 500) {
-      throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El motivo no puede superar los 500 caracteres');
-    }
+    const motivoTrim = validarMotivo(body.motivo);
 
     await client.query('BEGIN');
 

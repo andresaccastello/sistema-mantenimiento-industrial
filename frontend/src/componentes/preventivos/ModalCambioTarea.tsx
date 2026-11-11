@@ -97,6 +97,7 @@ export function ModalCambioTarea({ tarea, cambio, finalizada, onConfirmar, onCer
           <>
             <Textarea
               label="Motivo"
+              maxLength={500}
               required
               autosize
               minRows={2}

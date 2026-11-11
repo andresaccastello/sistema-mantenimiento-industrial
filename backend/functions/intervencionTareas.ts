@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import pg from 'pg';
 import { pool } from './db.ts';
 import { requirePermission } from './middleware.ts';
-import { leerCuerpoObjeto } from './validations.ts';
+import { leerCuerpoObjeto, validarMotivo } from './validations.ts';
 import { ErrorNegocio, responderError } from './intervenciones/errores.ts';
 import { conTransaccion } from './intervenciones/transaccion.ts';
 import { bloquearIntervencion } from './intervenciones/bloqueos.ts';
@@ -326,14 +326,11 @@ intervencionTareasApp.patch('/:id/tareas/:tareaId', async (c) => {
       if (error) throw error;
 
       const finalizada = intervencion.estado === 'FINALIZADA';
-      const motivo = typeof b.motivo === 'string' ? b.motivo.trim() : '';
-      if (finalizada && motivo.length < 5) {
-        throw new ErrorNegocio(
-          422,
-          'MOTIVO_REQUERIDO',
-          'Con la intervención finalizada, el motivo es obligatorio y debe tener al menos 5 caracteres'
-        );
-      }
+      const motivo = finalizada
+        ? validarMotivo(b.motivo, 'Con la intervención finalizada, el motivo es obligatorio y debe tener al menos 5 caracteres')
+        : typeof b.motivo === 'string'
+          ? b.motivo.trim()
+          : '';
 
       if (tareaId === null) throw new ErrorNegocio(404, 'TAREA_NO_ENCONTRADA', 'Tarea no encontrada');
       const resT = await client.query(

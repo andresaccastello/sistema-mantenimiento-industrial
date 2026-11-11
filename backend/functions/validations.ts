@@ -1,4 +1,32 @@
 import { Context } from 'hono';
+import { ErrorNegocio } from './intervenciones/errores.ts';
+
+/** El largo máximo de un motivo, recortado (C3, 1). */
+export const MOTIVO_MAXIMO = 500;
+
+/** Un motivo ya recortado no puede superar los 500 caracteres: 422 DATOS_INVALIDOS. */
+export const controlarTopeMotivo = (texto: string): void => {
+  if (texto.length > MOTIVO_MAXIMO) {
+    throw new ErrorNegocio(422, 'DATOS_INVALIDOS', `El motivo no puede superar los ${MOTIVO_MAXIMO} caracteres`);
+  }
+};
+
+/**
+ * Un motivo: un texto que, recortado, tenga entre 5 y 500 caracteres. Devuelve el texto recortado.
+ * Si no es texto o tiene menos de 5: 422 MOTIVO_REQUERIDO, con el mensaje de la ruta.
+ * Más de 500: 422 DATOS_INVALIDOS (C3, 1).
+ */
+export const validarMotivo = (
+  valor: unknown,
+  mensajeRequerido = 'Debe indicar un motivo de al menos 5 caracteres'
+): string => {
+  const texto = typeof valor === 'string' ? valor.trim() : '';
+  if (texto.length < 5) {
+    throw new ErrorNegocio(422, 'MOTIVO_REQUERIDO', mensajeRequerido);
+  }
+  controlarTopeMotivo(texto);
+  return texto;
+};
 
 /**
  * Un entero seguro escrito solo con dígitos, desde `minimo`. Si no, null.

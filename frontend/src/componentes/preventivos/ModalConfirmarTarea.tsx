@@ -213,6 +213,7 @@ export function ModalConfirmarTarea({ tarea, finalizada, onConfirmar, onCerrar }
           <>
             <Textarea
               label="Motivo"
+              maxLength={500}
               required
               autosize
               minRows={2}

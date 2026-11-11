@@ -231,6 +231,7 @@ export function ModalConsumo({
           {esFinalizada && (
             <Textarea
               label="Motivo de la corrección"
+              maxLength={500}
               placeholder="Indicá el motivo por el cual se agrega repuesto a una intervención finalizada (mínimo 5 caracteres)"
               required
               rows={2}

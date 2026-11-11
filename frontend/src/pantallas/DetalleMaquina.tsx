@@ -911,6 +911,7 @@ export function DetalleMaquina() {
 
             <Textarea
               label="Motivo"
+              maxLength={500}
               placeholder="Indicá el motivo (al menos 5 caracteres)"
               required
               minRows={3}

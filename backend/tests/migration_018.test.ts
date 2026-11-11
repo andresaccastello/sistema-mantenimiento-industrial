@@ -419,13 +419,20 @@ test('Migración 018 — Preventivos por calendario', async (t) => {
         await client.query('ALTER TABLE planes_mantenimiento ADD COLUMN criterio VARCHAR(30)');
         planId = await crearPlan(client, b, 'Plan viejo M18');
         const idEsperado = String(planId);
+        // La 018 nombra los 20 planes de menor id. Si en la rama quedan 20 o más con id menor,
+        // el de la prueba no entra en la lista: se controla que nombre 20 (C3, 3).
+        const anteriores = Number((await client.query(
+          'SELECT COUNT(*)::integer AS n FROM planes_mantenimiento WHERE id < $1', [planId]
+        )).rows[0].n);
 
         await assert.rejects(client.query(sqlContent), (err: Error) => {
           assert.match(err.message, /Hay planes de mantenimiento con el formato viejo: .*Revisarlos antes de migrar\./);
-          assert.ok(
-            err.message.split(/[:.]/)[1].split(',').map((s) => s.trim()).includes(idEsperado),
-            `El mensaje nombra el plan ${idEsperado}: ${err.message}`
-          );
+          const nombrados = err.message.split(/[:.]/)[1].split(',').map((s) => s.trim());
+          if (anteriores < 20) {
+            assert.ok(nombrados.includes(idEsperado), `El mensaje nombra el plan ${idEsperado}: ${err.message}`);
+          } else {
+            assert.strictEqual(nombrados.length, 20, `El mensaje nombra 20 planes: ${err.message}`);
+          }
           return true;
         });
       } finally {

@@ -120,6 +120,7 @@ export function ModalReabrir({
 
           <Textarea
             label="Motivo"
+            maxLength={500}
             placeholder="Indicá el motivo de la reapertura (al menos 5 caracteres)"
             value={motivoTexto}
             onChange={(e) => setMotivoTexto(e.currentTarget.value)}
