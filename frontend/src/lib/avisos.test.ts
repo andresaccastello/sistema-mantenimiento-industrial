@@ -9,7 +9,7 @@ import {
 } from './avisos';
 
 describe('FE-39: lib/avisos.ts', () => {
-  it('orden de TIPOS_AVISO: los 8 códigos coinciden exactamente con REGLAS_EVENTOS_NOTIFICACION del backend', () => {
+  it('orden de TIPOS_AVISO: los 9 códigos coinciden exactamente con REGLAS_EVENTOS_NOTIFICACION del backend', () => {
     // Debe coincidir estrictamente con REGLAS_EVENTOS_NOTIFICACION de backend/functions/intervenciones/notificaciones.ts
     const codigosEsperados = [
       'FALLA_REGISTRADA',
@@ -20,6 +20,7 @@ describe('FE-39: lib/avisos.ts', () => {
       'INTERVENCION_CANCELADA',
       'INTERVENCION_REABIERTA',
       'DETENCION_PENDIENTE_CONFIRMACION',
+      'PREVENTIVO_VENCIMIENTO',
     ];
 
     const codigosActuales = TIPOS_AVISO.map((t) => t.tipo_evento);
@@ -86,5 +87,12 @@ describe('FE-39: lib/avisos.ts', () => {
       destino: 'guardia@planta.com',
     };
     assert.equal(detalleEnvio(enviado, ahora), 'Enviado a guardia@planta.com');
+  });
+});
+
+describe('FE-125: el tipo de aviso de vencimientos (PV5, 5)', () => {
+  it('con su nombre en la configuración de avisos', () => {
+    assert.equal(nombreTipoAviso('PREVENTIVO_VENCIMIENTO'), 'Vencimiento de un preventivo');
+    assert.equal(TIPOS_AVISO[TIPOS_AVISO.length - 1].tipo_evento, 'PREVENTIVO_VENCIMIENTO');
   });
 });

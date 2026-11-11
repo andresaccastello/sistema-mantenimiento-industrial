@@ -1240,6 +1240,21 @@ export interface GeneracionRespuesta {
 }
 
 /**
+ * `POST /api/planes/procesar-vencimientos` (PV5, 3.3). Forzada, siempre revisa; sin forzar
+ * (el programado), `{ revisado: false }` si ya se revisó hoy.
+ */
+export type ProcesarVencimientosRespuesta =
+  | { revisado: false }
+  | {
+      revisado: true;
+      planes: number;
+      generadas: Array<{ plan_id: number; intervencion_id: number }>;
+      /** Las notificaciones creadas. */
+      avisos: number;
+      errores: Array<{ plan_id: number; codigo: string }>;
+    };
+
+/**
  * Una tarea de una intervención preventiva. El proveedor es la sugerencia de la tarea del
  * plan de hoy; los repuestos previstos se copiaron al generarla.
  */

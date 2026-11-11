@@ -8,6 +8,7 @@ import type { PlanDetalle } from '../../api/tipos';
 import { ApiError, mensajeError } from '../../lib/errores';
 import { CampoNumero } from '../CampoNumero';
 import { SelectResponsablePlan } from './SelectResponsablePlan';
+import { SwitchGeneracionAutomatica } from './SwitchGeneracionAutomatica';
 
 interface Props {
   plan: PlanDetalle;
@@ -15,13 +16,14 @@ interface Props {
   onCerrar: () => void;
 }
 
-/** P2 "Editar": nombre, descripción, responsable y anticipación. Manda solo lo que cambió. */
+/** P2 "Editar": nombre, descripción, responsable, anticipación y generación automática. Manda solo lo que cambió. */
 export function ModalEditarPlan({ plan, abierto, onCerrar }: Props) {
   const queryClient = useQueryClient();
   const [nombre, setNombre] = useState(plan.nombre);
   const [descripcion, setDescripcion] = useState(plan.descripcion ?? '');
   const [responsableId, setResponsableId] = useState<string | null>(plan.responsable ? String(plan.responsable.id) : null);
   const [anticipacion, setAnticipacion] = useState<number | string>(plan.anticipacion_dias);
+  const [automatica, setAutomatica] = useState(plan.generacion_automatica);
   const [errorNombre, setErrorNombre] = useState<string | null>(null);
   const [errorAnticipacion, setErrorAnticipacion] = useState<string | null>(null);
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
@@ -33,6 +35,7 @@ export function ModalEditarPlan({ plan, abierto, onCerrar }: Props) {
     setDescripcion(plan.descripcion ?? '');
     setResponsableId(plan.responsable ? String(plan.responsable.id) : null);
     setAnticipacion(plan.anticipacion_dias);
+    setAutomatica(plan.generacion_automatica);
     setErrorNombre(null);
     setErrorAnticipacion(null);
     setErrorGeneral(null);
@@ -60,6 +63,7 @@ export function ModalEditarPlan({ plan, abierto, onCerrar }: Props) {
     const responsable = responsableId ? Number(responsableId) : null;
     if (responsable !== (plan.responsable?.id ?? null)) cambios.responsable_usuario_id = responsable;
     if (dias !== plan.anticipacion_dias) cambios.anticipacion_dias = dias;
+    if (automatica !== plan.generacion_automatica) cambios.generacion_automatica = automatica;
 
     if (Object.keys(cambios).length === 0) {
       onCerrar();
@@ -126,6 +130,7 @@ export function ModalEditarPlan({ plan, abierto, onCerrar }: Props) {
           }}
           error={errorAnticipacion}
         />
+        <SwitchGeneracionAutomatica checked={automatica} onChange={setAutomatica} />
 
         {errorGeneral && (
           <Alert color="red" icon={<IconAlertCircle size={16} />}>

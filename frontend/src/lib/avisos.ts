@@ -12,7 +12,7 @@ export interface TipoAvisoInfo {
 }
 
 /**
- * Los 8 tipos de eventos notificables en el mismo orden que REGLAS_EVENTOS_NOTIFICACION del backend.
+ * Los 9 tipos de eventos notificables en el mismo orden que REGLAS_EVENTOS_NOTIFICACION del backend.
  */
 export const TIPOS_AVISO: readonly TipoAvisoInfo[] = [
   {
@@ -56,6 +56,12 @@ export const TIPOS_AVISO: readonly TipoAvisoInfo[] = [
     nombre: 'Máquina para confirmar',
     destinatarios:
       'A quienes confirman que una máquina volvió a producir. Siempre es de prioridad alta.',
+  },
+  {
+    tipo_evento: 'PREVENTIVO_VENCIMIENTO',
+    nombre: 'Vencimiento de un preventivo',
+    destinatarios:
+      'Al responsable del plan o, si no tiene, a quienes gestionan los planes del sector. Es de prioridad alta si vence una tarea de una máquina de criticidad de prioridad alta.',
   },
 ] as const;
 

@@ -115,6 +115,7 @@ export function DetallePlan() {
               </Anchor>
               {' · '}
               {plan.responsable ? nombreCompleto(plan.responsable) : 'Sin responsable'}
+              {plan.generacion_automatica && ' · Generación automática'}
               {' · '}
               {`Avisa ${plan.anticipacion_dias} ${plan.anticipacion_dias === 1 ? 'día' : 'días'} antes`}
             </Text>

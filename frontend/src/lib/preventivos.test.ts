@@ -8,6 +8,7 @@ import {
   borradorTareaVacio,
   borradorDeTarea,
   cuerpoPlan,
+  textoResultadoVencimientos,
   cuerpoTarea,
   tareasParaGenerar,
   avisoTareasSinMarcar,
@@ -947,5 +948,45 @@ describe('FE-121: "Avisar antes" sigue al 10 % de "Cada" (PV4.1, 1)', () => {
     assert.equal(anticipacionSegunCada(25, 250, '', false), 25);
     assert.equal(anticipacionSegunCada(25, 250, 0, false), 25);
     assert.equal(anticipacionSegunCada(25, 250, 'x', false), 25);
+  });
+});
+
+describe('FE-122: cuerpoPlan con la generación automática (PV5, 5)', () => {
+  const plan = { maquinaId: '760', nombre: 'Mecánico', descripcion: '', responsableId: null, anticipacionDias: 7, tareas: [] };
+  it('prendida va; apagada o sin el campo, no: la API la pone apagada', () => {
+    assert.deepEqual(cuerpoPlan({ ...plan, generacionAutomatica: true }), {
+      maquina_id: 760,
+      nombre: 'Mecánico',
+      anticipacion_dias: 7,
+      generacion_automatica: true,
+      tareas: [],
+    });
+    assert.equal('generacion_automatica' in cuerpoPlan({ ...plan, generacionAutomatica: false }), false);
+    assert.equal('generacion_automatica' in cuerpoPlan(plan), false);
+  });
+});
+
+describe('FE-123: textoResultadoVencimientos (PV5, 5)', () => {
+  const base = { revisado: true as const, planes: 12, generadas: [{ plan_id: 5, intervencion_id: 14338 }], avisos: 7, errores: [] };
+  it('el resumen, con singulares y plurales', () => {
+    assert.equal(textoResultadoVencimientos(base), 'Se revisaron 12 planes: 1 intervención generada, 7 avisos.');
+    assert.equal(
+      textoResultadoVencimientos({ ...base, planes: 1, generadas: [], avisos: 1 }),
+      'Se revisó 1 plan: 0 intervenciones generadas, 1 aviso.'
+    );
+  });
+  it('con errores, los suma', () => {
+    const errores = [{ plan_id: 9, codigo: 'MAQUINA_INACTIVA' }, { plan_id: 10, codigo: 'RECURSO_OCUPADO' }];
+    assert.equal(
+      textoResultadoVencimientos({ ...base, errores }),
+      'Se revisaron 12 planes: 1 intervención generada, 7 avisos. 2 planes con error.'
+    );
+    assert.equal(
+      textoResultadoVencimientos({ ...base, errores: errores.slice(0, 1) }),
+      'Se revisaron 12 planes: 1 intervención generada, 7 avisos. 1 plan con error.'
+    );
+  });
+  it('ya revisado hoy', () => {
+    assert.equal(textoResultadoVencimientos({ revisado: false }), 'Los vencimientos ya se revisaron hoy.');
   });
 });

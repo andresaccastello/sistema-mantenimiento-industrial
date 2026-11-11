@@ -11,6 +11,7 @@ import { CampoNumero } from '../componentes/CampoNumero';
 import { ListaTareasBorrador } from '../componentes/preventivos/ListaTareasBorrador';
 import { ModalTareaPlan, ErrorTareaExterno } from '../componentes/preventivos/ModalTareaPlan';
 import { SelectResponsablePlan } from '../componentes/preventivos/SelectResponsablePlan';
+import { SwitchGeneracionAutomatica } from '../componentes/preventivos/SwitchGeneracionAutomatica';
 import { ApiError, mensajeError } from '../lib/errores';
 import { parsearId } from '../lib/formato';
 import { etiquetaMaquina, coincideMaquina } from '../lib/maquinas';
@@ -44,6 +45,7 @@ export function NuevoPlan() {
   const [descripcion, setDescripcion] = useState('');
   const [responsableId, setResponsableId] = useState<string | null>(null);
   const [anticipacion, setAnticipacion] = useState<number | string>(7);
+  const [automatica, setAutomatica] = useState(false);
   const [tareas, setTareas] = useState<BorradorTarea[]>([]);
   const [errores, setErrores] = useState<Errores>({});
   const [erroresTareas, setErroresTareas] = useState<Record<number, string>>({});
@@ -118,7 +120,15 @@ export function NuevoPlan() {
     try {
       const plan = await clienteApi.post<PlanDetalle>(
         '/api/planes',
-        cuerpoPlan({ maquinaId, nombre, descripcion, responsableId, anticipacionDias: anticipacion, tareas })
+        cuerpoPlan({
+          maquinaId,
+          nombre,
+          descripcion,
+          responsableId,
+          anticipacionDias: anticipacion,
+          generacionAutomatica: automatica,
+          tareas,
+        })
       );
       for (const clave of [['planes'], ['vencimientos'], ['tablero']]) {
         await queryClient.invalidateQueries({ queryKey: clave });
@@ -219,6 +229,7 @@ export function NuevoPlan() {
               error={errores.anticipacion}
             />
           </SimpleGrid>
+          <SwitchGeneracionAutomatica checked={automatica} onChange={setAutomatica} />
           <Textarea
             label="Descripción"
             placeholder="Opcional"

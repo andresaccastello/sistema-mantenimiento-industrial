@@ -30,7 +30,7 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { etiquetaMaquina } from '../lib/maquinas';
 import { formatFechaHora, formatDuracion, parsearId } from '../lib/formato';
-import { nombreCompleto } from '../lib/personas';
+import { nombreCompleto, textoAutor } from '../lib/personas';
 import { eventosHistorial } from '../lib/intervenciones';
 import { ordenarAcciones, etiquetaAccion, CodigoAccion } from '../lib/acciones';
 import { BloqueRepuestosIntervencion } from '../componentes/repuestos/BloqueRepuestosIntervencion';
@@ -344,7 +344,7 @@ export function DetalleIntervencion() {
                 </Group>
                 <Group justify="space-between" align="flex-start">
                   <Text size="sm" c="dimmed">{esPreventivo ? 'Generada por' : 'Reportada por'}</Text>
-                  <Text size="sm">{nombreCompleto(reporte.creado_por)} · {reporte.creado_por.legajo || '—'}</Text>
+                  <Text size="sm">{textoAutor(reporte.creado_por)}</Text>
                 </Group>
                 <Group justify="space-between" align="flex-start">
                   <Text size="sm" c="dimmed">{esPreventivo ? 'Generada' : 'Reportada'}</Text>
