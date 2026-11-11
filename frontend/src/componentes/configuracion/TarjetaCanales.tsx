@@ -1,18 +1,16 @@
 import React, { useState } from 'react';
 import {
-  SimpleGrid,
   Card,
   Stack,
   Group,
   Text,
-  Badge,
   Switch,
   Button,
   Tooltip,
   Alert,
   Box,
 } from '@mantine/core';
-import { IconMail, IconBrandWhatsapp, IconAlertTriangle, IconAlertCircle } from '@tabler/icons-react';
+import { IconMail, IconAlertTriangle, IconAlertCircle } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { clienteApi } from '../../api/cliente';
 import { CanalAviso, ConfiguracionAvisos } from '../../api/tipos';
@@ -32,7 +30,6 @@ export function TarjetaCanales({ canales, pendientes, onActualizado }: TarjetaCa
   const { usuario } = useAuth();
 
   const canalEmail = canales.find((c) => c.canal === 'EMAIL');
-  const canalWhatsApp = canales.find((c) => c.canal === 'WHATSAPP');
 
   const [modalConfirmarApagar, setModalConfirmarApagar] = useState(false);
   const [actualizandoCanal, setActualizandoCanal] = useState(false);
@@ -103,122 +100,86 @@ export function TarjetaCanales({ canales, pendientes, onActualizado }: TarjetaCa
 
   return (
     <>
-      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-        {/* Tarjeta EMAIL */}
-        <Card withBorder radius="sm" padding="lg">
-          <Stack gap="md" justify="space-between" style={{ height: '100%' }}>
-            <Stack gap="xs">
-              <Group justify="space-between" align="center">
-                <Group gap="xs">
-                  <IconMail size={20} color="#0284c7" />
-                  <Text fw={600} size="md">
-                    Email
-                  </Text>
-                </Group>
-                <Switch
-                  label="Activo"
-                  checked={Boolean(canalEmail?.activo)}
-                  disabled={!canalEmail?.configurado || actualizandoCanal}
-                  onChange={(e) => cambiarEstadoEmail(e.currentTarget.checked)}
-                />
+      <Card withBorder radius="sm" padding="lg">
+        <Stack gap="md" justify="space-between" style={{ height: '100%' }}>
+          <Stack gap="xs">
+            <Group justify="space-between" align="center">
+              <Group gap="xs">
+                <IconMail size={20} color="#0284c7" />
+                <Text fw={600} size="md">
+                  Email
+                </Text>
               </Group>
+              <Switch
+                label="Activo"
+                checked={Boolean(canalEmail?.activo)}
+                disabled={!canalEmail?.configurado || actualizandoCanal}
+                onChange={(e) => cambiarEstadoEmail(e.currentTarget.checked)}
+              />
+            </Group>
 
-              {canalEmail?.configurado ? (
-                <>
-                  <Text size="sm" c="dimmed">
-                    Envía desde {canalEmail.remitente}
-                  </Text>
-                  <Box mt="xs">
-                    {tieneEmailPropio ? (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={handleEnviarPrueba}
-                        loading={enviandoPrueba}
-                      >
-                        Enviar prueba
-                      </Button>
-                    ) : (
-                      <Tooltip label="Cargá tu email en tu usuario para recibir la prueba.">
-                        <span>
-                          <Button variant="default" size="sm" disabled>
-                            Enviar prueba
-                          </Button>
-                        </span>
-                      </Tooltip>
-                    )}
-                  </Box>
-                  {errorPrueba && (
-                    <Alert
-                      color="red"
-                      icon={<IconAlertCircle size={16} />}
-                      title={errorPrueba.mensaje}
-                      mt="xs"
+            {canalEmail?.configurado ? (
+              <>
+                <Text size="sm" c="dimmed">
+                  Envía desde {canalEmail.remitente}
+                </Text>
+                <Box mt="xs">
+                  {tieneEmailPropio ? (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={handleEnviarPrueba}
+                      loading={enviandoPrueba}
                     >
-                      {errorPrueba.detalle && (
-                        <Text size="xs" c="dimmed">
-                          {errorPrueba.detalle}
-                        </Text>
-                      )}
-                    </Alert>
+                      Enviar prueba
+                    </Button>
+                  ) : (
+                    <Tooltip label="Cargá tu email en tu usuario para recibir la prueba.">
+                      <span>
+                        <Button variant="default" size="sm" disabled>
+                          Enviar prueba
+                        </Button>
+                      </span>
+                    </Tooltip>
                   )}
-                </>
-              ) : (
-                <Alert
-                  color="yellow"
-                  icon={<IconAlertTriangle size={16} />}
-                  title="Configuración pendiente"
-                  mt="xs"
-                >
-                  Falta configurar el servidor de correo. Lo hace quien instala el sistema (ver{' '}
-                  <code>docs/desarrollo-local.md</code>).
-                </Alert>
-              )}
-            </Stack>
-
-            {canalEmail?.actualizado_en && (
-              <Text size="xs" c="dimmed" mt="md">
-                Último cambio: {formatFechaHora(canalEmail.actualizado_en)}
-                {canalEmail.actualizado_por &&
-                  ` por ${nombreCompleto(canalEmail.actualizado_por)}`}
-              </Text>
+                </Box>
+                {errorPrueba && (
+                  <Alert
+                    color="red"
+                    icon={<IconAlertCircle size={16} />}
+                    title={errorPrueba.mensaje}
+                    mt="xs"
+                  >
+                    {errorPrueba.detalle && (
+                      <Text size="xs" c="dimmed">
+                        {errorPrueba.detalle}
+                      </Text>
+                    )}
+                  </Alert>
+                )}
+              </>
+            ) : (
+              <Alert
+                color="yellow"
+                icon={<IconAlertTriangle size={16} />}
+                title="Configuración pendiente"
+                mt="xs"
+              >
+                Falta configurar el servidor de correo. Lo hace quien instala el sistema (ver{' '}
+                <code>docs/desarrollo-local.md</code>).
+              </Alert>
             )}
           </Stack>
-        </Card>
 
-        {/* Tarjeta WHATSAPP */}
-        <Card withBorder radius="sm" padding="lg">
-          <Stack gap="md" justify="space-between" style={{ height: '100%' }}>
-            <Stack gap="xs">
-              <Group justify="space-between" align="center">
-                <Group gap="xs">
-                  <IconBrandWhatsapp size={20} color="#25D366" />
-                  <Text fw={600} size="md">
-                    WhatsApp
-                  </Text>
-                  <Badge color="gray" variant="light" size="sm">
-                    Próximamente
-                  </Badge>
-                </Group>
-                <Switch label="Activo" checked={false} disabled />
-              </Group>
-
-              <Text size="sm" c="dimmed">
-                Se puede dejar preparado: cargá el número de cada usuario y elegí qué avisos van a
-                salir.
-              </Text>
-            </Stack>
-
-            {canalWhatsApp?.actualizado_en && (
-              <Text size="xs" c="dimmed" mt="md">
-                Último cambio: {formatFechaHora(canalWhatsApp.actualizado_en)}
-                {canalWhatsApp.actualizado_por &&
-                  ` por ${nombreCompleto(canalWhatsApp.actualizado_por)}`}
-              </Text>
-            )}
-          </Stack>
-        </Card>
-      </SimpleGrid>
+          {canalEmail?.actualizado_en && (
+            <Text size="xs" c="dimmed" mt="md">
+              Último cambio: {formatFechaHora(canalEmail.actualizado_en)}
+              {canalEmail.actualizado_por &&
+                ` por ${nombreCompleto(canalEmail.actualizado_por)}`}
+            </Text>
+          )}
+        </Stack>
+      </Card>
 
       <ConfirmarApagarEmailModal
         abierto={modalConfirmarApagar}

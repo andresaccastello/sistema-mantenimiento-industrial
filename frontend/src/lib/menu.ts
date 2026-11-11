@@ -2,6 +2,10 @@
  * Ítems del menú según permisos (sección 7.2 de docs/etapas/etapa-f0-base-frontend.md)
  */
 
+import { itemsMenuCelular, permitidaEnCelular } from './celular';
+
+export { itemsMenuCelular, permitidaEnCelular };
+
 export interface ItemMenu {
   etiqueta: string;
   ruta: string;
@@ -15,7 +19,7 @@ export type PermisosEntrada =
   | null
   | undefined;
 
-function verificarPermiso(permisos: PermisosEntrada, codigo: string): boolean {
+export function verificarPermiso(permisos: PermisosEntrada, codigo: string): boolean {
   if (!permisos) return false;
 
   if (Array.isArray(permisos)) {
@@ -41,8 +45,13 @@ function verificarPermiso(permisos: PermisosEntrada, codigo: string): boolean {
 
 /**
  * Devuelve en orden canónico los ítems de navegación según los permisos dados.
+ * En el celular (enCelular = true), devuelve solo las secciones permitidas que el usuario tiene.
  */
-export function itemsMenu(permisos: PermisosEntrada): ItemMenu[] {
+export function itemsMenu(permisos: PermisosEntrada, enCelular = false): ItemMenu[] {
+  if (enCelular) {
+    return itemsMenuCelular(permisos);
+  }
+
   const items: ItemMenu[] = [
     {
       etiqueta: 'Inicio',

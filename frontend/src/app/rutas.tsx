@@ -1,10 +1,12 @@
 import React, { Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router';
 import { Center, Loader } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import { Layout } from './Layout';
 import { RutaProtegida } from './RutaProtegida';
 import { useAuth } from '../auth/AuthContext';
 import { destinoInicio } from '../lib/inicio';
+import { CORTE_CELULAR } from '../lib/celular';
 
 // Pantallas completas
 import { Ingreso } from '../pantallas/Ingreso';
@@ -48,7 +50,8 @@ const DevAppLazy = import.meta.env.DEV
 
 function RedireccionInicio() {
   const { usuario } = useAuth();
-  const destino = destinoInicio(usuario?.permisos);
+  const esCelular = Boolean(useMediaQuery(CORTE_CELULAR));
+  const destino = destinoInicio(usuario?.permisos, esCelular);
   return <Navigate to={destino} replace />;
 }
 

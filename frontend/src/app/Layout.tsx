@@ -13,8 +13,10 @@ import {
   Box,
   Divider,
   UnstyledButton,
+  Card,
+  ThemeIcon,
 } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
+import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import {
   IconHome,
   IconAlertTriangle,
@@ -29,12 +31,14 @@ import {
   IconSettings,
   IconPackage,
   IconCalendarCheck,
+  IconDeviceDesktop,
 } from '@tabler/icons-react';
 import { useLocation, useNavigate, Outlet } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
 import { clienteApi } from '../api/cliente';
 import { itemsMenu } from '../lib/menu';
+import { CORTE_CELULAR, permitidaEnCelular } from '../lib/celular';
 import { esRutaInicio } from '../lib/inicio';
 import { nombrePerfil } from '../lib/perfiles';
 import { nombreCompleto } from '../lib/personas';
@@ -63,6 +67,7 @@ export function Layout() {
   const navigate = useNavigate();
 
   const esObligatorio = Boolean(usuario?.debe_cambiar_password);
+  const esCelular = Boolean(useMediaQuery(CORTE_CELULAR));
 
   const { data: config } = useQuery<ConfiguracionPublica>({
     queryKey: ['configuracion-publica'],
@@ -74,7 +79,12 @@ export function Layout() {
   const nombreEmpresa = config?.nombre_empresa;
   const tieneLogo = config?.tiene_logo;
 
-  const menu = itemsMenu(usuario?.permisos || {});
+  const menu = itemsMenu(usuario?.permisos || {}, esCelular);
+  const bloquearEnCelular =
+    esCelular &&
+    !esObligatorio &&
+    location.pathname !== '/' &&
+    !permitidaEnCelular(location.pathname, usuario?.permisos);
 
   const handleNavegar = (ruta: string) => {
     navigate(ruta);
@@ -265,7 +275,36 @@ export function Layout() {
       )}
 
       <AppShell.Main>
-        <Outlet />
+        {bloquearEnCelular ? (
+          <Card padding="xl" radius="sm" withBorder>
+            <Stack align="center" gap="md" py="xl">
+              <ThemeIcon size={56} radius="xl" color="marca" variant="light">
+                <IconDeviceDesktop size={28} />
+              </ThemeIcon>
+              <Text size="lg" fw={600} c="#1e293b" ta="center">
+                Esta sección se usa desde la computadora
+              </Text>
+              <Text size="sm" c="#64748b" ta="center" maw={450}>
+                En el celular podés reportar fallas y consultar el tablero y los reportes.
+              </Text>
+              {menu.length > 0 && (
+                <Group justify="center" gap="sm" wrap="wrap" mt="xs">
+                  {menu.map((item) => (
+                    <Button
+                      key={item.ruta}
+                      variant="default"
+                      onClick={() => handleNavegar(item.ruta)}
+                    >
+                      {item.etiqueta}
+                    </Button>
+                  ))}
+                </Group>
+              )}
+            </Stack>
+          </Card>
+        ) : (
+          <Outlet />
+        )}
       </AppShell.Main>
     </AppShell>
   );

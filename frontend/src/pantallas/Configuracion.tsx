@@ -77,13 +77,12 @@ export function Configuracion() {
     <Stack gap="xl">
       <EncabezadoPagina titulo="Configuración" />
 
-      {/* Bloque: Avisos por email y WhatsApp */}
+      {/* Bloque: Avisos por email */}
       <Stack gap="lg">
         <div>
-          <Title order={3}>Avisos por email y WhatsApp</Title>
+          <Title order={3}>Avisos por email</Title>
           <Text size="sm" c="dimmed" mt={4}>
-            La campana del sistema avisa siempre. Acá se elige qué avisos, además, salen por email o
-            WhatsApp.
+            La campana del sistema avisa siempre. Acá se elige qué avisos, además, salen por email.
           </Text>
         </div>
 

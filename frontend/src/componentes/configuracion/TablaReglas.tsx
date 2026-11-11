@@ -18,21 +18,18 @@ const OPCIONES_MODO = [
 ];
 
 export function TablaReglas({ reglas, onActualizado }: TablaReglasProps) {
-  // Guardando por clave `${tipo_evento}_${canal}`
   const [guardandoKey, setGuardandoKey] = useState<string | null>(null);
 
   const cambiarRegla = async (
     tipoEvento: string,
-    canal: 'EMAIL' | 'WHATSAPP',
     nuevoModo: ModoAviso
   ) => {
-    const key = `${tipoEvento}_${canal}`;
-    setGuardandoKey(key);
+    setGuardandoKey(tipoEvento);
 
     try {
       await clienteApi.put('/api/configuracion/avisos/reglas', {
         tipo_evento: tipoEvento,
-        canal,
+        canal: 'EMAIL',
         modo: nuevoModo,
       });
       notifications.show({ message: 'Guardado.', color: 'green' });
@@ -58,19 +55,15 @@ export function TablaReglas({ reglas, onActualizado }: TablaReglasProps) {
         <Table verticalSpacing="sm" striped highlightOnHover>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th style={{ width: '50%' }}>Aviso</Table.Th>
-              <Table.Th style={{ width: '25%' }}>Email</Table.Th>
-              <Table.Th style={{ width: '25%' }}>WhatsApp</Table.Th>
+              <Table.Th style={{ width: '65%' }}>Aviso</Table.Th>
+              <Table.Th style={{ width: '35%' }}>Email</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {TIPOS_AVISO.map((tipo) => {
               const regla = mapaReglas.get(tipo.tipo_evento);
               const modoEmail = regla?.EMAIL || 'NUNCA';
-              const modoWhatsApp = regla?.WHATSAPP || 'NUNCA';
-
-              const guardandoEmail = guardandoKey === `${tipo.tipo_evento}_EMAIL`;
-              const guardandoWhatsApp = guardandoKey === `${tipo.tipo_evento}_WHATSAPP`;
+              const guardandoEmail = guardandoKey === tipo.tipo_evento;
 
               return (
                 <Table.Tr key={tipo.tipo_evento}>
@@ -91,22 +84,7 @@ export function TablaReglas({ reglas, onActualizado }: TablaReglasProps) {
                       disabled={guardandoEmail}
                       onChange={(val) => {
                         if (val && val !== modoEmail) {
-                          cambiarRegla(tipo.tipo_evento, 'EMAIL', val as ModoAviso);
-                        }
-                      }}
-                      allowDeselect={false}
-                    />
-                  </Table.Td>
-
-                  <Table.Td>
-                    <Select
-                      size="sm"
-                      data={OPCIONES_MODO}
-                      value={modoWhatsApp}
-                      disabled={guardandoWhatsApp}
-                      onChange={(val) => {
-                        if (val && val !== modoWhatsApp) {
-                          cambiarRegla(tipo.tipo_evento, 'WHATSAPP', val as ModoAviso);
+                          cambiarRegla(tipo.tipo_evento, val as ModoAviso);
                         }
                       }}
                       allowDeselect={false}

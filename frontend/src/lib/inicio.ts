@@ -1,6 +1,7 @@
 /**
- * Destino de "Inicio" (sección 7.3 de docs/etapas/etapa-f0-base-frontend.md)
+ * Destino de "Inicio" (sección 7.3 de docs/etapas/etapa-f0-base-frontend.md y Etapa A1)
  */
+import { verificarPermiso, type PermisosEntrada } from './menu';
 
 export type PermisosAlcanceEntrada =
   | Record<string, string | { alcance?: string } | unknown>
@@ -10,10 +11,37 @@ export type PermisosAlcanceEntrada =
 
 /**
  * Determina la ruta a la que debe redirigir "Inicio":
- * - Si INTERVENCIONES_VER tiene alcance TODAS o SECTORES -> /tablero
- * - En cualquier otro caso (PROPIAS, sin permiso, etc.) -> /mis-reportes
+ * - En computadora (enCelular = false):
+ *   - Si INTERVENCIONES_VER tiene alcance TODAS o SECTORES -> /tablero
+ *   - En cualquier otro caso -> /mis-reportes
+ * - En celular (enCelular = true):
+ *   - Con INTERVENCIONES_CREAR -> /reportar
+ *   - Si no, al tablero si lo tiene -> /tablero
+ *   - O a reportes si tiene REPORTES_CONSULTAR -> /reportes
+ *   - En cualquier otro caso -> /mis-reportes
  */
-export function destinoInicio(permisos: PermisosAlcanceEntrada): '/tablero' | '/mis-reportes' {
+export function destinoInicio(permisos: PermisosAlcanceEntrada, enCelular?: false): '/tablero' | '/mis-reportes';
+export function destinoInicio(
+  permisos: PermisosAlcanceEntrada,
+  enCelular: boolean
+): '/tablero' | '/mis-reportes' | '/reportar' | '/reportes';
+export function destinoInicio(
+  permisos: PermisosAlcanceEntrada,
+  enCelular = false
+): '/tablero' | '/mis-reportes' | '/reportar' | '/reportes' {
+  if (enCelular) {
+    if (verificarPermiso(permisos as PermisosEntrada, 'INTERVENCIONES_CREAR')) {
+      return '/reportar';
+    }
+    if (destinoInicio(permisos, false) === '/tablero') {
+      return '/tablero';
+    }
+    if (verificarPermiso(permisos as PermisosEntrada, 'REPORTES_CONSULTAR')) {
+      return '/reportes';
+    }
+    return '/mis-reportes';
+  }
+
   if (!permisos) {
     return '/mis-reportes';
   }

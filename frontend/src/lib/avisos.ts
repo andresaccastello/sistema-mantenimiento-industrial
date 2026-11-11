@@ -1,5 +1,5 @@
 /**
- * Lógica pura de avisos por email y WhatsApp (Etapa N1b)
+ * Lógica pura de avisos por email (Etapa N1b)
  */
 
 import { ModoAviso } from '../api/tipos';
