@@ -37,6 +37,12 @@ import {
   textoProgramada,
   textoValorAlHacer,
   primeraUsoSugerida,
+  descripcionPrimeraUso,
+  descripcionAnticipacionUso,
+  faltaMedidor,
+  sinMedidores,
+  textoFrecuenciaBorrador,
+  textoPrimeraBorrador,
   ESTADOS_POR_OMISION,
   BorradorTarea,
   FilaConfirmar,
@@ -262,12 +268,13 @@ describe('FE-73: avisoTareasSinMarcar', () => {
 });
 
 describe('FE-74: estados de una tarea preventiva', () => {
-  it('los cinco, con texto, color e ícono', () => {
+  it('los seis, con texto, color e ícono', () => {
     assert.deepEqual(
       ESTADOS_TAREA_PREVENTIVA.map((e) => [e.estado, e.texto, e.color, e.icono]),
       [
         ['VENCIDA', 'Vencida', 'red', 'IconAlertTriangle'],
         ['PROXIMA', 'Próxima', 'orange', 'IconClock'],
+        ['SIN_LECTURA', 'Sin lectura', 'gray', 'IconGaugeOff'],
         ['EN_CURSO', 'En curso', 'blue', 'IconTool'],
         ['AL_DIA', 'Al día', 'green', 'IconCircleCheck'],
         ['INACTIVA', 'Inactiva', 'gray', 'IconBan'],
@@ -812,5 +819,55 @@ describe('FE-108: primeraUsoSugerida', () => {
     assert.equal(primeraUsoSugerida(512.5, 0.1), 512.6);
     assert.equal(primeraUsoSugerida(0, 250), 250);
     assert.equal(primeraUsoSugerida(null, 250), 250);
+  });
+});
+
+describe('FE-115: las ayudas de "Primera vez a los" y "Avisar antes"', () => {
+  it('ya hecha, con la última lectura, o sin lecturas', () => {
+    const ultima = { valor: 1240, registrada_en: '2026-11-02T15:00:00.000Z' };
+    assert.equal(descripcionPrimeraUso(ultima, null, 'horas'), 'Última lectura: 1.240 horas (02/11/2026).');
+    assert.equal(descripcionPrimeraUso(null, null, 'horas'), 'El medidor todavía no tiene lecturas.');
+    assert.equal(
+      descripcionPrimeraUso(ultima, 480, 'horas'),
+      'Ya se hizo: la próxima se cuenta desde la última vez (a las 480 horas).'
+    );
+  });
+
+  it('avisar antes, con la unidad', () => {
+    assert.equal(descripcionAnticipacionUso('horas'), 'Cuántas horas antes pasa a próxima. Vacío: el 10 % de «Cada».');
+  });
+});
+
+describe('FE-116: faltaMedidor y sinMedidores', () => {
+  it('solo las tareas por uso o por las dos sin medidor', () => {
+    assert.equal(faltaMedidor(borradorUso()), false);
+    assert.equal(faltaMedidor(borradorUso({ medidorId: null })), true);
+    assert.equal(faltaMedidor(borradorUso({ criterio: 'AMBOS', medidorId: null })), true);
+    assert.equal(faltaMedidor(borrador({ medidorId: null })), false);
+  });
+
+  it('al cambiar la máquina, todas pierden el medidor', () => {
+    const tareas = sinMedidores([borradorUso(), borrador(), borradorUso({ criterio: 'AMBOS' })]);
+    assert.deepEqual(tareas.map((t) => t.medidorId), [null, null, null]);
+    assert.deepEqual(tareas.map(faltaMedidor), [true, false, true]);
+    assert.equal(tareas[0].usoCada, 250);
+  });
+});
+
+describe('FE-117: textoFrecuenciaBorrador y textoPrimeraBorrador', () => {
+  it('según el criterio, con la unidad del medidor', () => {
+    const fecha = borrador({ frecuenciaValor: 6 });
+    const uso = borradorUso();
+    const ambas = borradorUso({ criterio: 'AMBOS', frecuenciaValor: 6, primeraFecha: '2026-12-01' });
+    assert.equal(textoFrecuenciaBorrador(fecha, ''), 'Cada 6 meses');
+    assert.equal(textoFrecuenciaBorrador(uso, 'horas'), 'Cada 250 horas');
+    assert.equal(textoFrecuenciaBorrador(ambas, 'horas'), 'Cada 6 meses o 250 horas');
+    assert.equal(textoPrimeraBorrador(fecha, ''), 'Primera vez: 01/12/2026');
+    assert.equal(textoPrimeraBorrador(uso, 'horas'), 'Primera vez a las 500 horas');
+    assert.equal(textoPrimeraBorrador(ambas, 'horas'), 'Primera vez: 01/12/2026 o a las 500 horas');
+  });
+
+  it('sin el medidor, el número solo', () => {
+    assert.equal(textoFrecuenciaBorrador(borradorUso({ medidorId: null }), ''), 'Cada 250');
   });
 });

@@ -1,25 +1,42 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Modal, Stack, TextInput, Textarea, Group, Select, Button, Alert, Text, ActionIcon } from '@mantine/core';
+import { Modal, Stack, TextInput, Textarea, Group, Select, Button, Alert, Text, ActionIcon, SegmentedControl } from '@mantine/core';
 import { DatePickerInput, DateStringValue } from '@mantine/dates';
 import { IconAlertCircle, IconPlus, IconTrash } from '@tabler/icons-react';
 import { clienteApi } from '../../api/cliente';
-import type { FrecuenciaUnidad, ProveedorOpcion, RepuestoOpcion } from '../../api/tipos';
+import type { FrecuenciaUnidad, MedidorLista, ProveedorOpcion, RepuestoOpcion, UsoTareaPlan } from '../../api/tipos';
 import { ApiError, mensajeError } from '../../lib/errores';
+import { leerValorMedidor } from '../../lib/medidores';
 import {
   BorradorTarea,
   CampoTarea,
+  CriterioTarea,
   ErroresTarea,
   FilaPrevisto,
   MAXIMO_PREVISTOS,
   UNIDADES_FRECUENCIA,
+  conFecha,
+  conUso,
+  descripcionAnticipacionUso,
+  descripcionPrimeraUso,
   errorTareaDeApi,
   erroresDeApi,
   hayErrores,
+  primeraUsoSugerida,
   sinErrorDeFila,
   validarTareaBorrador,
 } from '../../lib/preventivos';
 import { CampoNumero } from '../CampoNumero';
+
+/** La unidad del medidor, a la derecha de un número. */
+function unidadALaDerecha(unidad: string) {
+  if (!unidad) return undefined;
+  return (
+    <Text size="xs" c="dimmed" pr="xs">
+      {unidad}
+    </Text>
+  );
+}
 
 export interface ErrorTareaExterno {
   campo: CampoTarea | null;
@@ -32,8 +49,15 @@ interface Props {
   titulo: string;
   /** La tarea vacía, o la que se edita. */
   inicial: BorradorTarea;
+  /** La máquina del plan: sus medidores activos son los que se ofrecen. */
+  maquinaId: number | null;
   /** Al editar una tarea que ya se hizo: cambia la ayuda de la primera fecha. */
   yaSeHizo?: boolean;
+  /**
+   * Al editar, el uso de la tarea: su medidor se muestra aunque esté inactivo, y si ya se
+   * hizo, la ayuda de la primera vez lo dice.
+   */
+  usoTarea?: UsoTareaPlan | null;
   /** P3: el error que la API devolvió para esta tarea, con su indice. */
   errorInicial?: ErrorTareaExterno | null;
   /** Guarda en la API, o devuelve la tarea al formulario. Si lanza un ApiError, se muestra. */
@@ -45,15 +69,28 @@ interface Props {
  * 3.5 El diálogo de una tarea, para agregar y para editar. Valida con validarTareaBorrador
  * antes de mandar, y pone los errores de la API en su campo cuando se puede.
  */
-export function ModalTareaPlan({ abierto, titulo, inicial, yaSeHizo, errorInicial, onGuardar, onCerrar }: Props) {
+export function ModalTareaPlan({
+  abierto,
+  titulo,
+  inicial,
+  maquinaId,
+  yaSeHizo,
+  usoTarea,
+  errorInicial,
+  onGuardar,
+  onCerrar,
+}: Props) {
   const [b, setB] = useState<BorradorTarea>(inicial);
   const [errores, setErrores] = useState<ErroresTarea>({});
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  /** "Primera vez a los" escrita a mano: ya no se llena sola. */
+  const [primeraTocada, setPrimeraTocada] = useState(false);
 
   useEffect(() => {
     if (!abierto) return;
     setB(inicial);
+    setPrimeraTocada(String(inicial.usoPrimera).trim() !== '');
     setErrorGeneral(null);
     if (errorInicial?.campo) {
       setErrores(erroresDeApi({ ...errorInicial, campo: errorInicial.campo }));
@@ -78,6 +115,41 @@ export function ModalTareaPlan({ abierto, titulo, inicial, yaSeHizo, errorInicia
     value: String(r.id),
     label: r.codigo ? `${r.codigo} · ${r.nombre}` : r.nombre,
   }));
+
+  // Los medidores activos de la máquina
+  const { data: medidores } = useQuery<MedidorLista[]>({
+    queryKey: ['medidores', 'maquina', maquinaId, { maquina_id: maquinaId }],
+    queryFn: () => clienteApi.get<MedidorLista[]>('/api/medidores', { params: { maquina_id: maquinaId ?? 0 } }),
+    enabled: abierto && maquinaId !== null,
+  });
+  const activos = medidores ?? [];
+  // El medidor de la tarea que se edita, si ya no está activo, sigue en la lista
+  const medidorTarea = usoTarea?.medidor ?? null;
+  const tareaInactivo = medidorTarea !== null && !activos.some((m) => m.id === medidorTarea.id) ? medidorTarea : null;
+  const opcionesMedidor = [
+    ...activos.map((m) => ({ value: String(m.id), label: m.nombre })),
+    ...(tareaInactivo ? [{ value: String(tareaInactivo.id), label: `${tareaInactivo.nombre} (inactivo)` }] : []),
+  ];
+  const elegido = activos.find((m) => String(m.id) === b.medidorId) ?? null;
+  const esElDeLaTarea = medidorTarea !== null && String(medidorTarea.id) === b.medidorId;
+  const unidad = elegido?.unidad ?? (esElDeLaTarea && medidorTarea ? medidorTarea.unidad : '');
+  const ultimaLectura = elegido ? elegido.ultima_lectura : esElDeLaTarea && usoTarea ? usoTarea.lectura_actual : null;
+  const sinMedidores = medidores !== undefined && activos.length === 0 && !usoTarea;
+
+  // Con un solo medidor activo, viene elegido
+  useEffect(() => {
+    if (abierto && conUso(b.criterio) && b.medidorId === null && activos.length === 1) {
+      setB((actual) => ({ ...actual, medidorId: String(activos[0].id) }));
+    }
+  }, [abierto, b.criterio, b.medidorId, medidores]);
+
+  // "Primera vez a los", mientras no se toque: la última lectura más "Cada"
+  const cadaValido = leerValorMedidor(b.usoCada);
+  const sugerida = b.medidorId !== null && cadaValido !== null && cadaValido > 0 ? primeraUsoSugerida(ultimaLectura?.valor ?? null, cadaValido) : null;
+  useEffect(() => {
+    if (!abierto || primeraTocada || sugerida === null) return;
+    setB((actual) => (actual.usoPrimera === sugerida ? actual : { ...actual, usoPrimera: sugerida }));
+  }, [abierto, primeraTocada, sugerida]);
 
   const cambiar = (cambios: Partial<BorradorTarea>, limpiar: CampoTarea[]) => {
     setB((actual) => ({ ...actual, ...cambios }));
@@ -154,39 +226,121 @@ export function ModalTareaPlan({ abierto, titulo, inicial, yaSeHizo, errorInicia
           onChange={(e) => cambiar({ detalle: e.currentTarget.value }, [])}
         />
 
-        <Group grow align="flex-start">
-          <CampoNumero
-            label="Cada"
-            required
-            allowDecimal={false}
-            value={b.frecuenciaValor}
-            onChange={(v) => cambiar({ frecuenciaValor: v }, ['frecuencia'])}
-            error={errores.frecuencia}
+        <Stack gap={4}>
+          <Text size="sm" fw={500}>
+            Vence por
+          </Text>
+          <SegmentedControl
+            aria-label="Vence por"
+            fullWidth
+            color="marca"
+            data={[
+              { value: 'FECHA', label: 'Fecha' },
+              { value: 'USO', label: 'Uso', disabled: sinMedidores },
+              { value: 'AMBOS', label: 'Las dos', disabled: sinMedidores },
+            ]}
+            value={b.criterio}
+            // Los campos del otro criterio se esconden, pero quedan en el borrador
+            onChange={(v) => cambiar({ criterio: v as CriterioTarea }, [])}
           />
-          <Select
-            label="Unidad"
-            aria-label="Unidad de la frecuencia"
-            data={UNIDADES_FRECUENCIA}
-            allowDeselect={false}
-            value={b.frecuenciaUnidad}
-            onChange={(v) => v && cambiar({ frecuenciaUnidad: v as FrecuenciaUnidad }, ['frecuencia'])}
-          />
-        </Group>
+          {sinMedidores && (
+            <Text size="xs" c="dimmed">
+              La máquina no tiene medidores: se cargan en su ficha.
+            </Text>
+          )}
+        </Stack>
 
-        <DatePickerInput
-          label="Primera fecha"
-          required
-          valueFormat="DD/MM/YYYY"
-          placeholder="Elegí la fecha"
-          description={
-            yaSeHizo
-              ? 'Ya se hizo: la próxima fecha se cuenta desde la última vez.'
-              : 'Cuándo vence por primera vez.'
-          }
-          value={b.primeraFecha}
-          onChange={(v: DateStringValue | null) => cambiar({ primeraFecha: v }, ['primeraFecha'])}
-          error={errores.primeraFecha}
-        />
+        {conFecha(b.criterio) && (
+          <>
+            <Group grow align="flex-start">
+              <CampoNumero
+                label="Cada"
+                required
+                allowDecimal={false}
+                value={b.frecuenciaValor}
+                onChange={(v) => cambiar({ frecuenciaValor: v }, ['frecuencia'])}
+                error={errores.frecuencia}
+              />
+              <Select
+                label="Unidad"
+                aria-label="Unidad de la frecuencia"
+                data={UNIDADES_FRECUENCIA}
+                allowDeselect={false}
+                value={b.frecuenciaUnidad}
+                onChange={(v) => v && cambiar({ frecuenciaUnidad: v as FrecuenciaUnidad }, ['frecuencia'])}
+              />
+            </Group>
+
+            <DatePickerInput
+              label="Primera fecha"
+              required
+              valueFormat="DD/MM/YYYY"
+              placeholder="Elegí la fecha"
+              description={
+                yaSeHizo
+                  ? 'Ya se hizo: la próxima fecha se cuenta desde la última vez.'
+                  : 'Cuándo vence por primera vez.'
+              }
+              value={b.primeraFecha}
+              onChange={(v: DateStringValue | null) => cambiar({ primeraFecha: v }, ['primeraFecha'])}
+              error={errores.primeraFecha}
+            />
+          </>
+        )}
+
+        {conUso(b.criterio) && (
+          <>
+            <Select
+              label="Medidor"
+              required
+              placeholder="Elegí el medidor"
+              data={opcionesMedidor}
+              allowDeselect={false}
+              value={b.medidorId}
+              onChange={(v) => cambiar({ medidorId: v }, ['medidor'])}
+              error={errores.medidor}
+            />
+            <CampoNumero
+              label="Cada"
+              required
+              decimalScale={2}
+              rightSection={unidadALaDerecha(unidad)}
+              rightSectionWidth={unidad ? 70 : undefined}
+              value={b.usoCada}
+              onChange={(v) => cambiar({ usoCada: v }, ['usoCada', 'usoAnticipacion'])}
+              error={errores.usoCada}
+            />
+            <CampoNumero
+              label="Primera vez a los"
+              required
+              description={
+                b.medidorId !== null
+                  ? descripcionPrimeraUso(ultimaLectura, esElDeLaTarea && usoTarea ? usoTarea.ultimo : null, unidad)
+                  : undefined
+              }
+              decimalScale={2}
+              rightSection={unidadALaDerecha(unidad)}
+              rightSectionWidth={unidad ? 70 : undefined}
+              value={b.usoPrimera}
+              onChange={(v) => {
+                setPrimeraTocada(true);
+                cambiar({ usoPrimera: v }, ['usoPrimera']);
+              }}
+              error={errores.usoPrimera}
+            />
+            <CampoNumero
+              label="Avisar antes"
+              placeholder="Opcional"
+              description={descripcionAnticipacionUso(unidad)}
+              decimalScale={2}
+              rightSection={unidadALaDerecha(unidad)}
+              rightSectionWidth={unidad ? 70 : undefined}
+              value={b.usoAnticipacion}
+              onChange={(v) => cambiar({ usoAnticipacion: v }, ['usoAnticipacion'])}
+              error={errores.usoAnticipacion}
+            />
+          </>
+        )}
 
         <Stack gap="xs">
           <Text size="sm" fw={500}>

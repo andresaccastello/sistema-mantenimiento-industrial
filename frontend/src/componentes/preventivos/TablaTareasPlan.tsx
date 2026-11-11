@@ -2,8 +2,9 @@ import { Link } from 'react-router';
 import { Table, Text, Menu, ActionIcon, Stack } from '@mantine/core';
 import { IconDotsVertical, IconEdit, IconBan, IconRotateClockwise, IconExternalLink } from '@tabler/icons-react';
 import type { TareaPlan } from '../../api/tipos';
-import { formatFechaDia, textoFrecuencia, textoVencimiento } from '../../lib/preventivos';
+import { formatFechaDia, textoFrecuenciaTarea, textoValorMedidor } from '../../lib/preventivos';
 import { EstadoBadge } from '../EstadoBadge';
+import { CeldaProxima } from './CeldaProxima';
 import { TextoPrevistos } from './TextoPrevistos';
 
 interface Props {
@@ -23,7 +24,7 @@ export function TablaTareasPlan({ tareas, onEditar, onCambiarActivo }: Props) {
             <Table.Th style={{ minWidth: 200 }}>Tarea</Table.Th>
             <Table.Th style={{ minWidth: 120 }}>Frecuencia</Table.Th>
             <Table.Th style={{ minWidth: 110 }}>Última vez</Table.Th>
-            <Table.Th style={{ minWidth: 120 }}>Próxima</Table.Th>
+            <Table.Th style={{ minWidth: 150 }}>Próxima</Table.Th>
             <Table.Th style={{ minWidth: 150 }}>Sugerido</Table.Th>
             <Table.Th style={{ width: 48 }} />
           </Table.Tr>
@@ -45,19 +46,19 @@ export function TablaTareasPlan({ tareas, onEditar, onCambiarActivo }: Props) {
                 )}
               </Table.Td>
               <Table.Td>
-                <Text size="sm">{textoFrecuencia(t.frecuencia_valor, t.frecuencia_unidad)}</Text>
+                <Text size="sm">{textoFrecuenciaTarea(t)}</Text>
               </Table.Td>
               <Table.Td>
                 <Text size="sm">{t.ultima_ejecucion ? formatFechaDia(t.ultima_ejecucion) : 'Nunca'}</Text>
+                {t.uso && t.uso.ultimo !== null && (
+                  <Text size="xs" c="dimmed">
+                    a las {textoValorMedidor(t.uso.ultimo, t.uso.medidor.unidad)}
+                  </Text>
+                )}
               </Table.Td>
               <Table.Td>
                 {t.activo ? (
-                  <>
-                    <Text size="sm">{formatFechaDia(t.proxima_fecha)}</Text>
-                    <Text size="xs" c="dimmed">
-                      {textoVencimiento(t.dias)}
-                    </Text>
-                  </>
+                  <CeldaProxima proxima_fecha={t.proxima_fecha} dias={t.dias} uso={t.uso} />
                 ) : (
                   <Text size="sm">—</Text>
                 )}

@@ -1,10 +1,19 @@
 import { Stack, Paper, Group, Text, Button } from '@mantine/core';
 import { IconEdit, IconTrash } from '@tabler/icons-react';
-import { BorradorTarea, formatFechaDia, previstosDeBorrador, textoFrecuencia } from '../../lib/preventivos';
+import type { MedidorLista } from '../../api/tipos';
+import {
+  BorradorTarea,
+  faltaMedidor,
+  previstosDeBorrador,
+  textoFrecuenciaBorrador,
+  textoPrimeraBorrador,
+} from '../../lib/preventivos';
 import { TextoPrevistos } from './TextoPrevistos';
 
 interface Props {
   tareas: BorradorTarea[];
+  /** Los medidores de la máquina elegida, para la unidad de las tareas por uso. */
+  medidores: MedidorLista[];
   /** El error de la API para una tarea, por su posición. */
   errores: Record<number, string>;
   onEditar: (indice: number) => void;
@@ -12,18 +21,19 @@ interface Props {
 }
 
 /** P3: las tareas del plan nuevo, antes de guardarlo. */
-export function ListaTareasBorrador({ tareas, errores, onEditar, onQuitar }: Props) {
+export function ListaTareasBorrador({ tareas, medidores, errores, onEditar, onQuitar }: Props) {
   return (
     <Stack gap="xs">
       {tareas.map((t, i) => {
-        const valor = Number(String(t.frecuenciaValor).replace(',', '.'));
+        const unidad = medidores.find((m) => String(m.id) === t.medidorId)?.unidad ?? '';
+        const sinMedidor = faltaMedidor(t);
         const error = errores[i];
         return (
           <Paper
             key={i}
             withBorder
             p="sm"
-            style={error ? { borderColor: 'var(--mantine-color-red-6)' } : undefined}
+            style={error || sinMedidor ? { borderColor: 'var(--mantine-color-red-6)' } : undefined}
           >
             <Group justify="space-between" align="flex-start" wrap="wrap" gap="xs">
               <Stack gap={2} style={{ minWidth: 0, flex: 1 }}>
@@ -31,10 +41,14 @@ export function ListaTareasBorrador({ tareas, errores, onEditar, onQuitar }: Pro
                   {i + 1}. {t.accion}
                 </Text>
                 <Text size="xs" c="dimmed">
-                  {Number.isInteger(valor) ? textoFrecuencia(valor, t.frecuenciaUnidad) : ''} · Primera vez:{' '}
-                  {formatFechaDia(t.primeraFecha)}
+                  {textoFrecuenciaBorrador(t, unidad)} · {textoPrimeraBorrador(t, unidad)}
                 </Text>
                 <TextoPrevistos repuestos={previstosDeBorrador(t.repuestos)} size="xs" dimmed />
+                {sinMedidor && (
+                  <Text size="xs" c="red">
+                    Falta elegir el medidor
+                  </Text>
+                )}
                 {error && (
                   <Text size="xs" c="red">
                     {error}

@@ -32,6 +32,7 @@ export const ESTADOS: readonly InfoEstado[] = [
 export const ESTADOS_TAREA_PREVENTIVA: readonly InfoEstado[] = [
   { entidad: 'tarea_preventiva', estado: 'VENCIDA', texto: 'Vencida', color: 'red', icono: 'IconAlertTriangle' },
   { entidad: 'tarea_preventiva', estado: 'PROXIMA', texto: 'Próxima', color: 'orange', icono: 'IconClock' },
+  { entidad: 'tarea_preventiva', estado: 'SIN_LECTURA', texto: 'Sin lectura', color: 'gray', icono: 'IconGaugeOff' },
   { entidad: 'tarea_preventiva', estado: 'EN_CURSO', texto: 'En curso', color: 'blue', icono: 'IconTool' },
   { entidad: 'tarea_preventiva', estado: 'AL_DIA', texto: 'Al día', color: 'green', icono: 'IconCircleCheck' },
   { entidad: 'tarea_preventiva', estado: 'INACTIVA', texto: 'Inactiva', color: 'gray', icono: 'IconBan' },

@@ -5,7 +5,7 @@ import { Stack, Group, Title, Paper, Select, TextInput, Textarea, Button, Text, 
 import { notifications } from '@mantine/notifications';
 import { IconAlertCircle, IconPlus } from '@tabler/icons-react';
 import { clienteApi } from '../api/cliente';
-import type { MaquinaLista, PlanDetalle } from '../api/tipos';
+import type { MaquinaLista, MedidorLista, PlanDetalle } from '../api/tipos';
 import { useAuth } from '../auth/AuthContext';
 import { CampoNumero } from '../componentes/CampoNumero';
 import { ListaTareasBorrador } from '../componentes/preventivos/ListaTareasBorrador';
@@ -14,7 +14,7 @@ import { SelectResponsablePlan } from '../componentes/preventivos/SelectResponsa
 import { ApiError, mensajeError } from '../lib/errores';
 import { parsearId } from '../lib/formato';
 import { etiquetaMaquina, coincideMaquina } from '../lib/maquinas';
-import { BorradorTarea, borradorTareaVacio, cuerpoPlan, errorTareaDeApi } from '../lib/preventivos';
+import { BorradorTarea, borradorTareaVacio, cuerpoPlan, errorTareaDeApi, faltaMedidor, sinMedidores } from '../lib/preventivos';
 
 interface Errores {
   maquina?: string;
@@ -64,6 +64,14 @@ export function NuevoPlan() {
     return (maquinas ?? []).filter((m) => m.activo && (todas || sectores.includes(m.sector.id)));
   }, [maquinas, usuario, alcance]);
 
+  // Los medidores activos de la máquina elegida: la unidad de las tareas por uso
+  const maquinaElegida = parsearId(maquinaId);
+  const { data: medidores } = useQuery<MedidorLista[]>({
+    queryKey: ['medidores', 'maquina', maquinaElegida, { maquina_id: maquinaElegida }],
+    queryFn: () => clienteApi.get<MedidorLista[]>('/api/medidores', { params: { maquina_id: maquinaElegida ?? 0 } }),
+    enabled: maquinaElegida !== null,
+  });
+
   const hayDatos =
     nombre.trim() !== '' || descripcion.trim() !== '' || responsableId !== null || tareas.length > 0 ||
     (maquinaId !== null && maquinaId !== String(maquinaInicial));
@@ -101,7 +109,10 @@ export function NuevoPlan() {
     }
     if (tareas.length === 0) nuevos.tareas = 'Agregá al menos una tarea.';
     setErrores(nuevos);
-    if (Object.values(nuevos).some(Boolean)) return;
+    // Las tareas por uso que perdieron el medidor al cambiar la máquina
+    const conTareasSinMedidor = tareas.some(faltaMedidor);
+    if (conTareasSinMedidor) setErrorGeneral('Hay tareas sin medidor: editalas.');
+    if (Object.values(nuevos).some(Boolean) || conTareasSinMedidor) return;
 
     setGuardando(true);
     try {
@@ -166,6 +177,7 @@ export function NuevoPlan() {
               }
               value={maquinaId}
               onChange={(v) => {
+                if (v !== maquinaId) setTareas((actual) => sinMedidores(actual));
                 setMaquinaId(v);
                 setResponsableId(null);
                 limpiarError('maquina');
@@ -234,6 +246,7 @@ export function NuevoPlan() {
           ) : (
             <ListaTareasBorrador
               tareas={tareas}
+              medidores={medidores ?? []}
               errores={erroresTareas}
               onEditar={(i) => setDialogo({ indice: i })}
               onQuitar={quitarTarea}
@@ -275,6 +288,7 @@ export function NuevoPlan() {
         abierto={dialogo !== null}
         titulo={dialogo?.indice === null ? 'Agregar tarea' : 'Editar tarea'}
         inicial={dialogo && dialogo.indice !== null ? tareas[dialogo.indice] : borradorTareaVacio()}
+        maquinaId={maquinaElegida}
         errorInicial={dialogo?.errorInicial ?? null}
         onGuardar={guardarTarea}
         onCerrar={() => setDialogo(null)}

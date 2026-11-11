@@ -5,7 +5,7 @@
  * y `proxima_fecha` tal como los manda la API (D-021).
  */
 import { formatCantidad, parsearId } from './formato';
-import { leerValorMedidor, textoValorMedidor } from './medidores';
+import { fechaDeMomento, leerValorMedidor, textoValorMedidor } from './medidores';
 import { validarCantidad } from './repuestos';
 import type {
   EstadoFechaTarea,
@@ -131,6 +131,68 @@ export function textoValorAlHacer(uso: Pick<UsoTareaIntervencion, 'valor' | 'med
 /** La primera vez sugerida: la última lectura más `cada`, o `cada` si no hay lecturas. */
 export function primeraUsoSugerida(ultima: number | null, cada: number): number {
   return Math.round(((ultima ?? 0) + cada) * 100) / 100;
+}
+
+// ---------------------------------------------------------------------------
+// La tarea por uso en el diálogo y en el plan nuevo (PV4, 4.1 y 4.3)
+// ---------------------------------------------------------------------------
+
+/**
+ * La ayuda de "Primera vez a los": si la tarea ya se hizo con este medidor, desde cuándo
+ * se cuenta; si no, la última lectura del medidor elegido.
+ */
+export function descripcionPrimeraUso(
+  ultimaLectura: { valor: number; registrada_en: string } | null,
+  ultimoHecho: number | null,
+  unidad: string
+): string {
+  if (ultimoHecho !== null) {
+    return `Ya se hizo: la próxima se cuenta desde la última vez (a las ${textoValorMedidor(ultimoHecho, unidad)}).`;
+  }
+  if (!ultimaLectura) return 'El medidor todavía no tiene lecturas.';
+  return `Última lectura: ${textoValorMedidor(ultimaLectura.valor, unidad)} (${fechaDeMomento(ultimaLectura.registrada_en)}).`;
+}
+
+/** La ayuda de "Avisar antes", con la unidad del medidor. */
+export function descripcionAnticipacionUso(unidad: string): string {
+  return `Cuántas ${unidad || 'unidades'} antes pasa a próxima. Vacío: el 10 % de «Cada».`;
+}
+
+/** Una tarea por uso, o por las dos, que todavía no tiene medidor. */
+export function faltaMedidor(b: BorradorTarea): boolean {
+  return conUso(b.criterio) && parsearId(b.medidorId) === null;
+}
+
+/** Al cambiar la máquina del plan nuevo, las tareas pierden el medidor (era de la otra). */
+export function sinMedidores(tareas: BorradorTarea[]): BorradorTarea[] {
+  return tareas.map((t) => (t.medidorId === null ? t : { ...t, medidorId: null }));
+}
+
+/** El borrador como una tarea para los textos, con la unidad de su medidor (o vacía). */
+function tareaDeBorrador(b: BorradorTarea, unidad: string) {
+  const valor = Number(String(b.frecuenciaValor).replace(',', '.'));
+  const cada = leerValorMedidor(b.usoCada);
+  return {
+    frecuencia_valor: conFecha(b.criterio) && Number.isInteger(valor) ? valor : null,
+    frecuencia_unidad: conFecha(b.criterio) ? b.frecuenciaUnidad : null,
+    uso: conUso(b.criterio) && cada !== null ? { cada, medidor: { unidad } } : null,
+  };
+}
+
+/** `textoFrecuenciaTarea` de un borrador. */
+export function textoFrecuenciaBorrador(b: BorradorTarea, unidad: string): string {
+  return textoFrecuenciaTarea(tareaDeBorrador(b, unidad));
+}
+
+/** "Primera vez: 01/12/2026", "Primera vez a las 500 horas" o las dos, unidas con "o". */
+export function textoPrimeraBorrador(b: BorradorTarea, unidad: string): string {
+  const porFecha = conFecha(b.criterio) ? `: ${formatFechaDia(b.primeraFecha)}` : null;
+  const primera = leerValorMedidor(b.usoPrimera);
+  const porUso = conUso(b.criterio) && primera !== null ? ` a las ${textoValorMedidor(primera, unidad)}` : null;
+  if (porFecha && porUso) return `Primera vez${porFecha} o${porUso}`;
+  if (porFecha) return `Primera vez${porFecha}`;
+  if (porUso) return `Primera vez${porUso}`;
+  return '';
 }
 
 // ---------------------------------------------------------------------------

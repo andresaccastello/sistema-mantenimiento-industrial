@@ -8,7 +8,7 @@ import { clienteApi } from '../../api/cliente';
 import type { GeneracionRespuesta, PlanDetalle } from '../../api/tipos';
 import { ApiError, mensajeError } from '../../lib/errores';
 import { nombreCompleto } from '../../lib/personas';
-import { tareasParaGenerar, textoVencimiento } from '../../lib/preventivos';
+import { tareasParaGenerar, textoVenceTarea } from '../../lib/preventivos';
 import { EstadoBadge } from '../EstadoBadge';
 
 interface Props {
@@ -112,7 +112,7 @@ export function ModalGenerar({ planId, onCerrar }: Props) {
                       <EstadoBadge entidad="tarea_preventiva" estado={f.tarea.estado} size="xs" />
                     </Group>
                     <Text size="xs" c="dimmed">
-                      {f.motivo ?? (f.tarea.activo ? textoVencimiento(f.tarea.dias) : '')}
+                      {f.motivo ?? (f.tarea.activo ? textoVenceTarea(f.tarea) : '')}
                     </Text>
                   </Stack>
                 }

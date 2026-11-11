@@ -8,6 +8,7 @@ import {
   IconCircleX,
   IconAlertTriangle,
   IconBan,
+  IconGaugeOff,
   IconQuestionMark,
 } from '@tabler/icons-react';
 import { obtenerInfoEstado, EntidadEstado } from '../lib/estados';
@@ -20,6 +21,7 @@ const ICONOS: Record<string, React.ComponentType<{ size?: number; style?: React.
   IconCircleX,
   IconAlertTriangle,
   IconBan,
+  IconGaugeOff,
   IconQuestionMark,
 };
 

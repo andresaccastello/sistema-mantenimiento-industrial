@@ -12,14 +12,13 @@ import {
   FiltrosPreventivos,
   TAMANIO_PAGINA_VENCIMIENTOS,
   alternarEstado,
-  formatFechaDia,
   paramsVencimientos,
-  textoFrecuencia,
-  textoVencimiento,
+  textoFrecuenciaTarea,
 } from '../../lib/preventivos';
 import { CriticidadBadge } from '../CriticidadBadge';
 import { EstadoBadge } from '../EstadoBadge';
 import { PantallaVacia } from '../PantallaVacia';
+import { CeldaProxima } from './CeldaProxima';
 import { FiltrosMaquinaPreventivos } from './FiltrosMaquinaPreventivos';
 import { ModalGenerar } from './ModalGenerar';
 import { TarjetasResumen } from './TarjetasResumen';
@@ -93,17 +92,14 @@ export function TabVencimientos({ filtros, onCambiarFiltros }: Props) {
                       <EstadoBadge entidad="tarea_preventiva" estado={t.estado} />
                     </Table.Td>
                     <Table.Td style={{ whiteSpace: 'nowrap' }}>
-                      <Text size="sm">{formatFechaDia(t.proxima_fecha)}</Text>
-                      <Text size="xs" c="dimmed">
-                        {textoVencimiento(t.dias)}
-                      </Text>
+                      <CeldaProxima proxima_fecha={t.proxima_fecha} dias={t.dias} uso={t.uso} />
                     </Table.Td>
                     <Table.Td style={{ maxWidth: 260 }}>
                       <Text size="sm" fw={500}>
                         {t.accion}
                       </Text>
                       <Text size="xs" c="dimmed">
-                        {textoFrecuencia(t.frecuencia_valor, t.frecuencia_unidad)}
+                        {textoFrecuenciaTarea(t)}
                       </Text>
                     </Table.Td>
                     <Table.Td>

@@ -201,7 +201,9 @@ export function DetallePlan() {
         abierto={tareaEnDialogo !== null}
         titulo={tareaEnDialogo === 'nueva' ? 'Agregar tarea' : 'Editar tarea'}
         inicial={tareaEnDialogo && tareaEnDialogo !== 'nueva' ? borradorDeTarea(tareaEnDialogo) : borradorTareaVacio()}
+        maquinaId={plan.maquina.id}
         yaSeHizo={Boolean(tareaEnDialogo && tareaEnDialogo !== 'nueva' && tareaEnDialogo.ultima_ejecucion)}
+        usoTarea={tareaEnDialogo && tareaEnDialogo !== 'nueva' ? tareaEnDialogo.uso : null}
         onGuardar={guardarTarea}
         onCerrar={() => setTareaEnDialogo(null)}
       />

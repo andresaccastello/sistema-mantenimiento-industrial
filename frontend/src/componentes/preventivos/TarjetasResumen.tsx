@@ -14,6 +14,7 @@ interface Props {
 const CLAVES: Record<EstadoVencimiento, keyof VencimientosRespuesta['resumen']> = {
   VENCIDA: 'vencidas',
   PROXIMA: 'proximas',
+  SIN_LECTURA: 'sin_lectura',
   EN_CURSO: 'en_curso',
   AL_DIA: 'al_dia',
 };
@@ -21,14 +22,23 @@ const CLAVES: Record<EstadoVencimiento, keyof VencimientosRespuesta['resumen']> 
 const TITULOS: Record<EstadoVencimiento, string> = {
   VENCIDA: 'Vencidas',
   PROXIMA: 'Próximas',
+  SIN_LECTURA: 'Sin lectura',
   EN_CURSO: 'En curso',
   AL_DIA: 'Al día',
 };
 
-/** Las tarjetas del resumen de vencimientos. Cada una es un filtro por estado. */
-export function TarjetasResumen({ resumen, elegido, onTocar, estados = ['VENCIDA', 'PROXIMA', 'EN_CURSO', 'AL_DIA'] }: Props) {
+/**
+ * Las tarjetas del resumen de vencimientos. Cada una es un filtro por estado. Todas en
+ * una fila desde 1200 px (lg); en celular, de a dos.
+ */
+export function TarjetasResumen({
+  resumen,
+  elegido,
+  onTocar,
+  estados = ['VENCIDA', 'PROXIMA', 'SIN_LECTURA', 'EN_CURSO', 'AL_DIA'],
+}: Props) {
   return (
-    <SimpleGrid cols={{ base: 2, sm: estados.length }} spacing="sm">
+    <SimpleGrid cols={{ base: 2, sm: Math.min(estados.length, 3), lg: estados.length }} spacing="sm">
       {estados.map((estado) => {
         const cantidad = resumen ? resumen[CLAVES[estado]] : null;
         const info = obtenerInfoEstado('tarea_preventiva', estado);
