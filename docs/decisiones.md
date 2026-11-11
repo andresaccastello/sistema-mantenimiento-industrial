@@ -328,3 +328,19 @@ El circuito ya está cubierto: el operario hace la revisión como hoy, y si encu
 4. **La generación automática se prende por plan** (`generacion_automatica`). Prendida, genera la intervención igual que el botón "Generar", con las tareas vencidas y próximas. Apagada, el plan solo avisa.
 5. **El autor de lo automático es el usuario "Sistema".** No inicia sesión, no tiene permisos y no aparece en las listas de usuarios. Así cada intervención y cada aviso tienen un autor, como exige el modelo, sin inventar una persona.
 6. **Un plan que falla no frena a los demás:** cada plan se procesa en su propia transacción, y el error queda en el resultado.
+
+## D-026 — Cumplimiento de los preventivos
+
+**Estado:** Aceptada
+
+1. **Se mide por tarea, no por intervención.** Una intervención preventiva puede llevar varias tareas, y cada una tiene su propio vencimiento.
+2. **Una tarea hecha** es una fila de `intervencion_tareas` con `hecha = true`, de una intervención `FINALIZADA` no eliminada, cuya fecha de finalización cae en el período. **Se hizo a tiempo si cumple todo lo que corresponde:**
+   - **con fecha programada:** la fecha local de finalización es igual o anterior a `fecha_programada`;
+   - **con uso programado:** `valor_medidor` es igual o menor que `uso_programado`.
+
+   Con los dos, tienen que cumplirse los dos: lo que llegue primero.
+3. **Una tarea vencida sin hacer** es una tarea del plan que hoy está `VENCIDA`, con su próxima fecha dentro del período. Las que vencen solo por uso no se cuentan acá, porque no tienen una fecha para ubicarlas en el período.
+4. **El cumplimiento** es `a tiempo / (hechas + vencidas sin hacer)`, en porcentaje con un decimal. Sin nada que medir, no hay número: se muestra "—".
+5. **El atraso promedio** es el promedio de días entre `fecha_programada` y la fecha local de finalización, solo en las tareas hechas tarde que tienen fecha programada.
+
+**Motivo:** una medida simple, que se explica en una oración y se controla a mano con los datos de una intervención.

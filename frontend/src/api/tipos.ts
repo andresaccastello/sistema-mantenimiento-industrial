@@ -1338,3 +1338,51 @@ export interface LecturaMedidor {
   anulada_por: Persona | null;
   motivo_anulacion: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Cumplimiento de los preventivos en los reportes (Etapa R1, D-026)
+// ---------------------------------------------------------------------------
+
+export type AgrupacionPreventivos = 'sector' | 'maquina' | 'plan';
+
+export interface ResumenCumplimientoPreventivos {
+  hechas: number;
+  a_tiempo: number;
+  tarde: number;
+  vencidas_sin_hacer: number;
+  cumplimiento: number | null;
+  atraso_promedio_dias: number | null;
+}
+
+export interface GrupoCumplimientoBase {
+  hechas: number;
+  a_tiempo: number;
+  tarde: number;
+  vencidas_sin_hacer: number;
+  cumplimiento: number | null;
+  atraso_promedio_dias: number | null;
+}
+
+export interface GrupoCumplimientoSector extends GrupoCumplimientoBase {
+  sector: { id: number; nombre: string };
+}
+
+export interface GrupoCumplimientoMaquina extends GrupoCumplimientoBase {
+  maquina: { id: number; codigo: string | null; nombre: string };
+}
+
+export interface GrupoCumplimientoPlan extends GrupoCumplimientoBase {
+  plan: { id: number; nombre: string };
+  maquina: { id: number; codigo: string | null; nombre: string };
+}
+
+export type GrupoCumplimientoPreventivos =
+  | GrupoCumplimientoSector
+  | GrupoCumplimientoMaquina
+  | GrupoCumplimientoPlan;
+
+/** `GET /api/reportes/preventivos`. */
+export interface ReportePreventivosRespuesta<G = GrupoCumplimientoPreventivos> {
+  resumen: ResumenCumplimientoPreventivos;
+  grupos: G[];
+}

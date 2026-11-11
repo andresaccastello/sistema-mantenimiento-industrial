@@ -6,6 +6,7 @@ import { responderError, ErrorNegocio } from './intervenciones/errores.ts';
 import { UsuarioVisibilidad } from './intervenciones/visibilidad.ts';
 import { validarIntervaloReporte } from './intervalos.ts';
 import { veCostos } from './repuestos/permisos.ts';
+import { reportePreventivos } from './reportes/cumplimiento.ts';
 
 const reportesApp = new Hono();
 reportesApp.use('*', jwtVerify, dbVerify);
@@ -894,5 +895,7 @@ reportesApp.get('/costos', requirePermission('REPORTES_CONSULTAR'), async (c) =>
     return responderError(c, error);
   }
 });
+
+reportesApp.get('/preventivos', requirePermission('REPORTES_CONSULTAR'), reportePreventivos);
 
 export default reportesApp;
