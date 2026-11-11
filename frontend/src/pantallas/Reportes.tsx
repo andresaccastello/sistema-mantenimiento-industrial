@@ -10,6 +10,7 @@ import {
   InactividadMaquinaFila,
   TiemposAgrupadosFila,
   ReporteCostosRespuesta,
+  ReportePreventivosRespuesta,
 } from '../api/tipos';
 import {
   leerFiltrosReportes,
@@ -18,6 +19,9 @@ import {
   FiltrosReportes,
   VistaReporte,
   AgrupacionTiempos,
+  AgrupacionPreventivos,
+  agruparDeTiempos,
+  agruparDePreventivos,
   vistaReporteVisible,
 } from '../lib/reportes';
 import { FiltrosReportesBarra } from '../componentes/reportes/FiltrosReportes';
@@ -28,6 +32,7 @@ import {
   TabReporteRepuestos,
   ReporteRepuestosData,
 } from '../componentes/reportes/TabReporteRepuestos';
+import { TabPreventivos } from '../componentes/reportes/TabPreventivos';
 import { TabReporteCostos } from '../componentes/reportes/TabReporteCostos';
 import { useAuth } from '../auth/AuthContext';
 
@@ -82,12 +87,15 @@ export function Reportes() {
     enabled: vista === 'inactividad',
   });
 
+  const agruparTiempos = agruparDeTiempos(filtros.agrupar);
+  const agruparPreventivos = agruparDePreventivos(filtros.agrupar);
+
   const queryTiemposParams = useMemo(() => {
     return {
       ...queryParams,
-      agrupar: filtros.agrupar,
+      agrupar: agruparTiempos,
     };
-  }, [queryParams, filtros.agrupar]);
+  }, [queryParams, agruparTiempos]);
 
   const queryTiempos = useQuery<TiemposAgrupadosFila[]>({
     queryKey: ['reportes', 'tiempos', queryTiemposParams],
@@ -99,6 +107,19 @@ export function Reportes() {
     queryKey: ['reportes', 'repuestos', queryParams],
     queryFn: () => clienteApi.get<ReporteRepuestosData>('/api/reportes/repuestos', { params: queryParams }),
     enabled: vista === 'repuestos',
+  });
+
+  const queryPreventivosParams = useMemo(() => {
+    return {
+      ...queryParams,
+      agrupar: agruparPreventivos,
+    };
+  }, [queryParams, agruparPreventivos]);
+
+  const queryPreventivos = useQuery<ReportePreventivosRespuesta>({
+    queryKey: ['reportes', 'preventivos', queryPreventivosParams],
+    queryFn: () => clienteApi.get<ReportePreventivosRespuesta>('/api/reportes/preventivos', { params: queryPreventivosParams }),
+    enabled: vista === 'preventivos',
   });
 
   const queryCostos = useQuery<ReporteCostosRespuesta>({
@@ -125,6 +146,10 @@ export function Reportes() {
     handleFiltrosChange({ agrupar: nuevaAgrupacion });
   };
 
+  const handleAgruparPreventivosChange = (nuevaAgrupacion: AgrupacionPreventivos) => {
+    handleFiltrosChange({ agrupar: nuevaAgrupacion });
+  };
+
   return (
     <Stack gap="lg">
       <Title order={2} c="#0f172a">
@@ -140,13 +165,14 @@ export function Reportes() {
         rango={rango}
       />
 
-      {/* Pestañas: Indicadores · Inactividad · Tiempos · Repuestos · Costos */}
+      {/* Pestañas: Indicadores · Inactividad · Tiempos · Repuestos · Preventivos · Costos */}
       <Tabs value={vista} onChange={handleTabChange}>
         <Tabs.List>
           <Tabs.Tab value="indicadores">Indicadores</Tabs.Tab>
           <Tabs.Tab value="inactividad">Inactividad</Tabs.Tab>
           <Tabs.Tab value="tiempos">Tiempos</Tabs.Tab>
           <Tabs.Tab value="repuestos">Repuestos</Tabs.Tab>
+          <Tabs.Tab value="preventivos">Preventivos</Tabs.Tab>
           {veCostos && <Tabs.Tab value="costos">Costos</Tabs.Tab>}
         </Tabs.List>
 
@@ -184,7 +210,7 @@ export function Reportes() {
           {queryTiempos.data && (
             <TabTiempos
               data={queryTiempos.data}
-              agrupar={filtros.agrupar}
+              agrupar={agruparTiempos}
               onAgruparChange={handleAgruparChange}
               rango={rango}
             />
@@ -201,6 +227,19 @@ export function Reportes() {
           {queryRepuestos.data && (
             <TabReporteRepuestos datos={queryRepuestos.data} />
           )}
+        </Tabs.Panel>
+
+        <Tabs.Panel value="preventivos">
+          <TabPreventivos
+            datos={queryPreventivos.data}
+            cargando={queryPreventivos.isLoading}
+            error={queryPreventivos.isError ? queryPreventivos.error : undefined}
+            reintentar={() => queryPreventivos.refetch()}
+            agrupar={agruparPreventivos}
+            onCambiarAgrupar={handleAgruparPreventivosChange}
+            desde={rango.desde}
+            hasta={rango.hasta}
+          />
         </Tabs.Panel>
 
         {veCostos && (

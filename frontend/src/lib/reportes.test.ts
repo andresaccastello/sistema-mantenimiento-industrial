@@ -12,6 +12,12 @@ import {
   filaTiempos,
   filasReporteRepuestos,
   vistaReporteVisible,
+  textoCumplimiento,
+  colorCumplimiento,
+  textoAtrasoPromedio,
+  nombreGrupoPreventivos,
+  filasReportePreventivos,
+  agruparDePreventivos,
   FILTROS_REPORTES_POR_DEFECTO,
   FiltrosReportes,
 } from './reportes';
@@ -385,5 +391,139 @@ describe('FE-53: filasReporteRepuestos', () => {
     assert.equal(res.filas[0][0], 'Grasa lubricante');
   });
 });
+
+describe('FE-126: textoCumplimiento, colorCumplimiento y textoAtrasoPromedio', () => {
+  it('textoCumplimiento formatea con coma y un decimal, o guión largo para null', () => {
+    assert.equal(textoCumplimiento(81), '81,0 %');
+    assert.equal(textoCumplimiento(81.0), '81,0 %');
+    assert.equal(textoCumplimiento(95.46), '95,5 %');
+    assert.equal(textoCumplimiento(0), '0,0 %');
+    assert.equal(textoCumplimiento(100), '100,0 %');
+    assert.equal(textoCumplimiento(null), '—');
+    assert.equal(textoCumplimiento(undefined), '—');
+  });
+
+  it('colorCumplimiento devuelve green >= 90, yellow >= 70, red < 70 y gray para null', () => {
+    assert.equal(colorCumplimiento(100), 'green');
+    assert.equal(colorCumplimiento(90), 'green');
+    assert.equal(colorCumplimiento(89.9), 'yellow');
+    assert.equal(colorCumplimiento(70), 'yellow');
+    assert.equal(colorCumplimiento(69.9), 'red');
+    assert.equal(colorCumplimiento(0), 'red');
+    assert.equal(colorCumplimiento(null), 'gray');
+    assert.equal(colorCumplimiento(undefined), 'gray');
+  });
+
+  it('textoAtrasoPromedio formatea días con coma o guión largo', () => {
+    assert.equal(textoAtrasoPromedio(3.5), '3,5 días');
+    assert.equal(textoAtrasoPromedio(1), '1 día');
+    assert.equal(textoAtrasoPromedio(2), '2 días');
+    assert.equal(textoAtrasoPromedio(null), '—');
+  });
+});
+
+describe('FE-127: nombreGrupoPreventivos', () => {
+  it('formatea el grupo para sector, maquina y plan según la sección 3', () => {
+    assert.equal(
+      nombreGrupoPreventivos({ sector: { id: 3, nombre: 'Pintura' } }, 'sector'),
+      'Pintura'
+    );
+
+    assert.equal(
+      nombreGrupoPreventivos(
+        { maquina: { id: 12, codigo: 'PIN-01', nombre: 'Cámara de pintura' } },
+        'maquina'
+      ),
+      'PIN-01 · Cámara de pintura'
+    );
+
+    assert.equal(
+      nombreGrupoPreventivos(
+        { maquina: { id: 13, codigo: null, nombre: 'Compresor auxiliar' } },
+        'maquina'
+      ),
+      'Compresor auxiliar'
+    );
+
+    assert.equal(
+      nombreGrupoPreventivos(
+        {
+          plan: { id: 8, nombre: 'Plan mensual' },
+          maquina: { id: 12, codigo: 'PIN-01', nombre: 'Cámara de pintura' },
+        },
+        'plan'
+      ),
+      'Plan mensual (PIN-01)'
+    );
+
+    assert.equal(
+      nombreGrupoPreventivos(
+        {
+          plan: { id: 9, nombre: 'Plan trimestral' },
+          maquina: { id: 13, codigo: null, nombre: 'Compresor auxiliar' },
+        },
+        'plan'
+      ),
+      'Plan trimestral (Compresor auxiliar)'
+    );
+  });
+});
+
+describe('FE-128: filasReportePreventivos y filtros de preventivos en URL', () => {
+  it('genera columnas y filas para el CSV de preventivos y las exporta con aCsv', () => {
+    const grupos = [
+      {
+        maquina: { id: 12, codigo: 'PIN-01', nombre: 'Cámara de pintura' },
+        hechas: 10,
+        a_tiempo: 7,
+        tarde: 3,
+        vencidas_sin_hacer: 2,
+        cumplimiento: 58.3,
+        atraso_promedio_dias: 4.0,
+      },
+      {
+        maquina: { id: 15, codigo: 'TOR-02', nombre: 'Torno CNC' },
+        hechas: 5,
+        a_tiempo: 5,
+        tarde: 0,
+        vencidas_sin_hacer: 0,
+        cumplimiento: 100.0,
+        atraso_promedio_dias: null,
+      },
+    ];
+
+    const { columnas, filas } = filasReportePreventivos(grupos, 'maquina');
+    assert.deepEqual(columnas, [
+      'Grupo',
+      'Hechas',
+      'A tiempo',
+      'Tarde',
+      'Vencidas sin hacer',
+      'Cumplimiento',
+      'Atraso',
+    ]);
+    assert.deepEqual(filas, [
+      ['PIN-01 · Cámara de pintura', 10, 7, 3, 2, 58.3, 4],
+      ['TOR-02 · Torno CNC', 5, 5, 0, 0, 100, null],
+    ]);
+
+    const csv = aCsv(columnas, filas);
+    assert.equal(csv.includes('PIN-01 · Cámara de pintura;10;7;3;2;58,3;4\r\n'), true);
+    assert.equal(csv.includes('TOR-02 · Torno CNC;5;5;0;0;100;\r\n'), true);
+  });
+
+  it('recuerda vista=preventivos y agrupar=maquina|plan en la dirección', () => {
+    const leido = leerFiltrosReportes('?vista=preventivos&agrupar=plan');
+    assert.equal(leido.vista, 'preventivos');
+    assert.equal(leido.agrupar, 'plan');
+    assert.equal(agruparDePreventivos(leido.agrupar), 'plan');
+    assert.equal(agruparDePreventivos('ejecucion'), 'sector');
+
+    const params = escribirFiltrosReportes(leido);
+    assert.equal(params.get('vista'), 'preventivos');
+    assert.equal(params.get('agrupar'), 'plan');
+  });
+});
+
 
 

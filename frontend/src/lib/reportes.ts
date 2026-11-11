@@ -1,8 +1,12 @@
-import { parsearId } from './formato';
+import { formatCantidad, parsearId } from './formato';
+import type { AgrupacionPreventivos, GrupoCumplimientoPreventivos } from '../api/tipos';
+
+export type { AgrupacionPreventivos };
 
 export type PeriodoOpcion = '7d' | '30d' | '90d' | 'mes' | 'mes-anterior' | 'personalizado';
-export type VistaReporte = 'indicadores' | 'inactividad' | 'tiempos' | 'repuestos' | 'costos';
+export type VistaReporte = 'indicadores' | 'inactividad' | 'tiempos' | 'repuestos' | 'preventivos' | 'costos';
 export type AgrupacionTiempos = 'ejecucion' | 'tipo' | 'sector';
+export type AgrupacionReporte = AgrupacionTiempos | AgrupacionPreventivos;
 
 export interface FiltrosReportes {
   periodo: PeriodoOpcion;
@@ -11,7 +15,7 @@ export interface FiltrosReportes {
   planta: number | null;
   sector: number | null;
   vista: VistaReporte;
-  agrupar: AgrupacionTiempos;
+  agrupar: AgrupacionReporte;
 }
 
 export const FILTROS_REPORTES_POR_DEFECTO: FiltrosReportes = {
@@ -25,8 +29,8 @@ export const FILTROS_REPORTES_POR_DEFECTO: FiltrosReportes = {
 };
 
 const PERIODOS_VALIDOS: Set<string> = new Set(['7d', '30d', '90d', 'mes', 'mes-anterior', 'personalizado']);
-const VISTAS_VALIDAS: Set<string> = new Set(['indicadores', 'inactividad', 'tiempos', 'repuestos', 'costos']);
-const AGRUPACIONES_VALIDAS: Set<string> = new Set(['ejecucion', 'tipo', 'sector']);
+const VISTAS_VALIDAS: Set<string> = new Set(['indicadores', 'inactividad', 'tiempos', 'repuestos', 'preventivos', 'costos']);
+const AGRUPACIONES_VALIDAS: Set<string> = new Set(['ejecucion', 'tipo', 'sector', 'maquina', 'plan']);
 
 const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -95,9 +99,9 @@ export function leerFiltrosReportes(
 
   // 5. Agrupar
   const rawAgrupar = getParam('agrupar');
-  let agrupar: AgrupacionTiempos = 'ejecucion';
+  let agrupar: AgrupacionReporte = 'ejecucion';
   if (rawAgrupar && AGRUPACIONES_VALIDAS.has(rawAgrupar)) {
-    agrupar = rawAgrupar as AgrupacionTiempos;
+    agrupar = rawAgrupar as AgrupacionReporte;
   }
 
   return {
@@ -500,3 +504,116 @@ export function filasReporteCostos(datos?: DatosReporteCostos | null): {
   });
   return { columnas, filas };
 }
+
+/**
+ * Devuelve una agrupación válida para Tiempos ('ejecucion' | 'tipo' | 'sector').
+ */
+export function agruparDeTiempos(agrupar?: string | null): AgrupacionTiempos {
+  if (agrupar === 'ejecucion' || agrupar === 'tipo' || agrupar === 'sector') {
+    return agrupar;
+  }
+  return 'ejecucion';
+}
+
+/**
+ * Devuelve una agrupación válida para Preventivos ('sector' | 'maquina' | 'plan').
+ */
+export function agruparDePreventivos(agrupar?: string | null): AgrupacionPreventivos {
+  if (agrupar === 'sector' || agrupar === 'maquina' || agrupar === 'plan') {
+    return agrupar;
+  }
+  return 'sector';
+}
+
+/**
+ * Formato del porcentaje de cumplimiento (Etapa R1, sección 3):
+ * 81 -> "81,0 %"
+ * 81.25 -> "81,3 %"
+ * null -> "—"
+ */
+export function textoCumplimiento(valor: number | null | undefined): string {
+  if (valor === null || valor === undefined || isNaN(valor)) {
+    return '—';
+  }
+  return `${Number(valor).toFixed(1).replace('.', ',')} %`;
+}
+
+/**
+ * Color del porcentaje de cumplimiento (Etapa R1, sección 3):
+ * >= 90: 'green'
+ * >= 70: 'yellow'
+ * < 70: 'red'
+ * null: 'gray'
+ */
+export function colorCumplimiento(valor: number | null | undefined): 'green' | 'yellow' | 'red' | 'gray' {
+  if (valor === null || valor === undefined || isNaN(valor)) {
+    return 'gray';
+  }
+  if (valor >= 90) return 'green';
+  if (valor >= 70) return 'yellow';
+  return 'red';
+}
+
+/**
+ * Formato del atraso promedio en días:
+ * 3.5 -> "3,5 días"
+ * 1 -> "1 día"
+ * null -> "—"
+ */
+export function textoAtrasoPromedio(dias: number | null | undefined): string {
+  if (dias === null || dias === undefined || isNaN(dias)) {
+    return '—';
+  }
+  const redondeado = Number(Number(dias).toFixed(1));
+  return `${formatCantidad(redondeado)} ${redondeado === 1 ? 'día' : 'días'}`;
+}
+
+/**
+ * Nombre visual del grupo en el reporte de preventivos (Etapa R1, sección 3):
+ * - sector: "Pintura"
+ * - maquina: "PIN-01 · Cámara de pintura" (o solo el nombre si no tiene código)
+ * - plan: "Plan mensual (PIN-01)" (o el nombre de la máquina si no tiene código)
+ */
+export function nombreGrupoPreventivos(
+  grupo: Partial<GrupoCumplimientoPreventivos> & Record<string, any>,
+  agrupar: AgrupacionPreventivos
+): string {
+  if (agrupar === 'sector') {
+    return grupo.sector?.nombre ?? '—';
+  }
+  if (agrupar === 'maquina') {
+    const m = grupo.maquina;
+    if (!m) return '—';
+    return m.codigo ? `${m.codigo} · ${m.nombre}` : m.nombre;
+  }
+  const p = grupo.plan;
+  const m = grupo.maquina;
+  if (!p) return '—';
+  const refMaquina = m?.codigo || m?.nombre;
+  return refMaquina ? `${p.nombre} (${refMaquina})` : p.nombre;
+}
+
+/**
+ * Devuelve { columnas, filas } para el CSV del reporte de preventivos (Etapa R1, sección 3).
+ */
+export function filasReportePreventivos(
+  datos: GrupoCumplimientoPreventivos[] | { grupos?: GrupoCumplimientoPreventivos[] } | null | undefined,
+  agrupar: AgrupacionPreventivos
+): {
+  columnas: string[];
+  filas: Array<Array<string | number | null>>;
+} {
+  const columnas = ['Grupo', 'Hechas', 'A tiempo', 'Tarde', 'Vencidas sin hacer', 'Cumplimiento', 'Atraso'];
+  const grupos = Array.isArray(datos) ? datos : datos?.grupos || [];
+  const filas = grupos.map((g) => [
+    nombreGrupoPreventivos(g, agrupar),
+    g.hechas,
+    g.a_tiempo,
+    g.tarde,
+    g.vencidas_sin_hacer,
+    g.cumplimiento,
+    g.atraso_promedio_dias,
+  ]);
+  return { columnas, filas };
+}
+
