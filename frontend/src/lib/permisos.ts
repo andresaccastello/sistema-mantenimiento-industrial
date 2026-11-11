@@ -7,6 +7,9 @@ export const GRUPOS_PERMISOS = [
   'Avisos',
   'Usuarios y permisos',
   'Configuración',
+  'Preventivos',
+  'Repuestos',
+  'Costos',
   'Módulos futuros',
   'Otros',
 ] as const;
@@ -32,14 +35,10 @@ export function grupoPermiso(codigo: string): GrupoPermiso {
   if (codigo.startsWith('NOTIFICACIONES_')) return 'Avisos';
   if (codigo.startsWith('USUARIOS_') || codigo.startsWith('PERMISOS_')) return 'Usuarios y permisos';
   if (codigo.startsWith('CONFIGURACION_')) return 'Configuración';
-  if (
-    codigo.startsWith('REPUESTOS_') ||
-    codigo.startsWith('COSTOS_') ||
-    codigo.startsWith('DOCUMENTOS_') ||
-    codigo.startsWith('PLANES_')
-  ) {
-    return 'Módulos futuros';
-  }
+  if (codigo.startsWith('PLANES_')) return 'Preventivos';
+  if (codigo.startsWith('REPUESTOS_')) return 'Repuestos';
+  if (codigo.startsWith('COSTOS_')) return 'Costos';
+  if (codigo.startsWith('DOCUMENTOS_')) return 'Módulos futuros';
   return 'Otros';
 }
 

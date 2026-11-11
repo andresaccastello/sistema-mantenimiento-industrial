@@ -28,10 +28,10 @@ describe('FE-34: etiquetaAlcance, grupoPermiso y filasPermisos', () => {
     assert.equal(grupoPermiso('USUARIOS_GESTIONAR'), 'Usuarios y permisos');
     assert.equal(grupoPermiso('PERMISOS_GESTIONAR'), 'Usuarios y permisos');
     assert.equal(grupoPermiso('CONFIGURACION_GESTIONAR'), 'Configuración');
-    assert.equal(grupoPermiso('REPUESTOS_VER'), 'Módulos futuros');
-    assert.equal(grupoPermiso('COSTOS_VER'), 'Módulos futuros');
+    assert.equal(grupoPermiso('REPUESTOS_VER'), 'Repuestos');
+    assert.equal(grupoPermiso('COSTOS_VER'), 'Costos');
     assert.equal(grupoPermiso('DOCUMENTOS_GESTIONAR'), 'Módulos futuros');
-    assert.equal(grupoPermiso('PLANES_GESTIONAR'), 'Módulos futuros');
+    assert.equal(grupoPermiso('PLANES_GESTIONAR'), 'Preventivos');
     assert.equal(grupoPermiso('ALGO_RARO'), 'Otros');
   });
 
@@ -229,6 +229,29 @@ describe('FE-38: matrizPerfiles', () => {
     assert.equal(matriz[2].celdas[1], '—');
     // Perfil 2 -> "—"
     assert.equal(matriz[2].celdas[2], '—');
+  });
+});
+
+describe('FE-120: los grupos de Preventivos, Repuestos y Costos (PV4, 7)', () => {
+  it('van después de los que ya existían, y Módulos futuros queda para DOCUMENTOS_', () => {
+    assert.deepEqual(GRUPOS_PERMISOS, [
+      'Intervenciones',
+      'Máquinas',
+      'Reportes',
+      'Avisos',
+      'Usuarios y permisos',
+      'Configuración',
+      'Preventivos',
+      'Repuestos',
+      'Costos',
+      'Módulos futuros',
+      'Otros',
+    ]);
+    assert.equal(grupoPermiso('PLANES_GESTIONAR'), 'Preventivos');
+    assert.equal(grupoPermiso('REPUESTOS_GESTIONAR'), 'Repuestos');
+    assert.equal(grupoPermiso('COSTOS_GESTIONAR'), 'Costos');
+    assert.equal(grupoPermiso('DOCUMENTOS_VER'), 'Módulos futuros');
+    assert.equal(grupoPermiso('MAQUINAS_REGISTRAR_LECTURAS'), 'Máquinas');
   });
 });
 

@@ -7,7 +7,7 @@ import type { IntervencionTareasRespuesta, TareaIntervencion, TareaIntervencionM
 import { mensajeError } from '../../lib/errores';
 import { formatFechaHora } from '../../lib/formato';
 import { nombreCompleto } from '../../lib/personas';
-import { formatFechaDia, textoEstadoPrevisto, textoUnPrevisto } from '../../lib/preventivos';
+import { textoEstadoPrevisto, textoProgramada, textoUnPrevisto, textoValorAlHacer } from '../../lib/preventivos';
 import { CambioTarea, ModalCambioTarea } from './ModalCambioTarea';
 import { ModalConfirmarTarea } from './ModalConfirmarTarea';
 
@@ -21,6 +21,7 @@ interface CuerpoPatch {
   observacion?: string | null;
   motivo?: string;
   repuestos?: Array<{ id: number; cantidad: number }>;
+  lectura?: number;
 }
 
 /** "Previsto: Aceite ISO 68 × 2,5 litro · Filtro × 1 unidad". */
@@ -45,7 +46,8 @@ export function BloqueTareasIntervencion({ intervencionId, estadoIntervencion }:
   });
 
   const refrescar = async () => {
-    for (const clave of [['intervencion', intervencionId], ['repuestos'], ['planes'], ['plan'], ['vencimientos'], ['tablero']]) {
+    // ['medidores']: marcar una tarea por uso puede registrar una lectura
+    for (const clave of [['intervencion', intervencionId], ['repuestos'], ['medidores'], ['planes'], ['plan'], ['vencimientos'], ['tablero']]) {
       await queryClient.invalidateQueries({ queryKey: clave });
     }
   };
@@ -60,6 +62,11 @@ export function BloqueTareasIntervencion({ intervencionId, estadoIntervencion }:
     if (hecha && t.repuestos_previstos.length > 0) {
       if (estadoIntervencion === 'PENDIENTE') setAvisoPendiente(t.id);
       else setConfirmando(t);
+      return;
+    }
+    // Solo con uso: el diálogo pide la lectura, en cualquier estado (PV4, 6)
+    if (hecha && t.uso) {
+      setConfirmando(t);
       return;
     }
     const anulaRepuestos = !hecha && t.repuestos_previstos.some((p) => p.estado === 'USADO');
@@ -98,6 +105,8 @@ export function BloqueTareasIntervencion({ intervencionId, estadoIntervencion }:
           <Loader size="sm" color="marca" />
         ) : (
           data.tareas.map((t, i) => {
+            const programada = textoProgramada(t.fecha_programada, t.uso);
+            const valorAlHacer = t.hecha ? textoValorAlHacer(t.uso) : null;
             return (
               <Stack key={t.id} gap={4}>
                 {i > 0 && <Divider />}
@@ -119,9 +128,16 @@ export function BloqueTareasIntervencion({ intervencionId, estadoIntervencion }:
                   )}
                 </Group>
                 <Stack gap={2} pl={32}>
-                  <Text size="xs" c="dimmed">
-                    Programada para {formatFechaDia(t.fecha_programada)}
-                  </Text>
+                  {programada && (
+                    <Text size="xs" c="dimmed">
+                      {programada}
+                    </Text>
+                  )}
+                  {valorAlHacer && (
+                    <Text size="xs" c="dimmed">
+                      {valorAlHacer}
+                    </Text>
+                  )}
                   {!t.hecha && t.repuestos_previstos.length > 0 && (
                     <Text size="xs" c="dimmed">
                       {textoPrevisto(t)}

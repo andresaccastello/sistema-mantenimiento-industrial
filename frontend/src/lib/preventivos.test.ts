@@ -43,6 +43,7 @@ import {
   sinMedidores,
   textoFrecuenciaBorrador,
   textoPrimeraBorrador,
+  campoLecturaConfirmar,
   ESTADOS_POR_OMISION,
   BorradorTarea,
   FilaConfirmar,
@@ -869,5 +870,61 @@ describe('FE-117: textoFrecuenciaBorrador y textoPrimeraBorrador', () => {
 
   it('sin el medidor, el número solo', () => {
     assert.equal(textoFrecuenciaBorrador(borradorUso({ medidorId: null }), ''), 'Cada 250');
+  });
+});
+
+describe('FE-118: cuerpoConfirmar con la lectura', () => {
+  it('la lectura va siempre como número, también igual a la última', () => {
+    assert.deepEqual(cuerpoConfirmar([], '', '', '512,5'), { hecha: true, repuestos: [], observacion: null, lectura: 512.5 });
+    assert.equal(cuerpoConfirmar([], '', '', 0).lectura, 0);
+    assert.deepEqual(cuerpoConfirmar([filaBase], '', ' Se cargó tarde ', 480), {
+      hecha: true,
+      repuestos: [{ id: 31, cantidad: 2.5 }],
+      observacion: null,
+      motivo: 'Se cargó tarde',
+      lectura: 480,
+    });
+  });
+
+  it('sin tarea por uso no va', () => {
+    assert.equal('lectura' in cuerpoConfirmar([filaBase], '', ''), false);
+    assert.equal('lectura' in cuerpoConfirmar([filaBase], '', '', ''), false);
+  });
+});
+
+describe('FE-119: campoLecturaConfirmar', () => {
+  const medidor = {
+    id: 3,
+    nombre: 'Horómetro',
+    unidad: 'horas',
+    activo: true,
+    ultima_lectura: { valor: 512.5, registrada_en: '2026-11-10T15:00:00.000Z' },
+  };
+
+  it('abierta: llena con la última', () => {
+    assert.deepEqual(campoLecturaConfirmar({ medidor }, false), {
+      etiqueta: 'Lectura del Horómetro',
+      inicial: 512.5,
+      descripcion: 'Última: 512,5 horas, el 10/11/2026. Si sigue igual, dejala.',
+      modo: 'NUEVA',
+    });
+  });
+
+  it('abierta sin lecturas: vacía', () => {
+    assert.deepEqual(campoLecturaConfirmar({ medidor: { ...medidor, ultima_lectura: null } }, false), {
+      etiqueta: 'Lectura del Horómetro',
+      inicial: '',
+      descripcion: 'El medidor todavía no tiene lecturas.',
+      modo: 'NUEVA',
+    });
+  });
+
+  it('finalizada: cuando se hizo, vacía y sin pasar la última', () => {
+    assert.deepEqual(campoLecturaConfirmar({ medidor }, true), {
+      etiqueta: 'Lectura del Horómetro cuando se hizo',
+      inicial: '',
+      descripcion: null,
+      modo: 'PASADA',
+    });
   });
 });

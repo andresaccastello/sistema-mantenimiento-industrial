@@ -783,6 +783,8 @@ export interface CuerpoConfirmar {
   repuestos: Array<{ id: number; cantidad: number }>;
   observacion: string | null;
   motivo?: string;
+  /** La lectura del medidor, con una tarea por uso (PV4, 6). */
+  lectura?: number;
 }
 
 /** Una fila por previsto: tildada, con la cantidad prevista. */
@@ -819,16 +821,58 @@ export function validarConfirmar(filas: FilaConfirmar[]): Record<number, string>
   return errores;
 }
 
-/** El cuerpo del PATCH: las filas tildadas, con su cantidad. Las otras quedan NO_USADO. */
-export function cuerpoConfirmar(filas: FilaConfirmar[], observacion: string, motivo: string): CuerpoConfirmar {
+/**
+ * El cuerpo del PATCH: las filas tildadas, con su cantidad. Las otras quedan NO_USADO.
+ * Con una tarea por uso, la lectura va siempre, aunque sea igual a la última.
+ */
+export function cuerpoConfirmar(
+  filas: FilaConfirmar[],
+  observacion: string,
+  motivo: string,
+  lectura?: number | string
+): CuerpoConfirmar {
   const cuerpo: CuerpoConfirmar = {
     hecha: true,
     repuestos: filas.filter((f) => f.usado).map((f) => ({ id: f.previstoId, cantidad: numero(f.cantidad) })),
     observacion: observacion.trim() || null,
   };
   if (motivo.trim()) cuerpo.motivo = motivo.trim();
+  const valor = leerValorMedidor(lectura);
+  if (valor !== null) cuerpo.lectura = valor;
   return cuerpo;
 }
+
+/** El campo de la lectura al marcar una tarea por uso (PV4, 6). */
+export interface CampoLecturaConfirmar {
+  etiqueta: string;
+  /** Lleno con la última lectura; vacío sin lecturas o con la intervención finalizada. */
+  inicial: number | string;
+  descripcion: string | null;
+  modo: 'NUEVA' | 'PASADA';
+}
+
+/**
+ * Abierta: "Lectura del Horómetro", llena con la última. Finalizada: una corrección de
+ * antes, "Lectura del Horómetro cuando se hizo", vacía y sin pasar la última.
+ */
+export function campoLecturaConfirmar(uso: Pick<UsoTareaIntervencion, 'medidor'>, finalizada: boolean): CampoLecturaConfirmar {
+  const { nombre, unidad, ultima_lectura: ultima } = uso.medidor;
+  if (finalizada) {
+    return { etiqueta: `Lectura del ${nombre} cuando se hizo`, inicial: '', descripcion: null, modo: 'PASADA' };
+  }
+  if (!ultima) {
+    return { etiqueta: `Lectura del ${nombre}`, inicial: '', descripcion: 'El medidor todavía no tiene lecturas.', modo: 'NUEVA' };
+  }
+  return {
+    etiqueta: `Lectura del ${nombre}`,
+    inicial: ultima.valor,
+    descripcion: `Última: ${textoValorMedidor(ultima.valor, unidad)}, el ${fechaDeMomento(ultima.registrada_en)}. Si sigue igual, dejala.`,
+    modo: 'NUEVA',
+  };
+}
+
+/** Los errores de la API que van al campo de la lectura al marcar una tarea. */
+export const ERRORES_DE_LECTURA = ['LECTURA_REQUERIDA', 'LECTURA_MENOR', 'LECTURA_MAYOR', 'MEDIDOR_INACTIVO'];
 
 export function textoBotonConfirmar(n: number): string {
   if (n === 0) return 'Marcar como hecha';
