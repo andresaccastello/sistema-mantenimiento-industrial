@@ -272,7 +272,7 @@ Sobre las máquinas activas de la selección y el período elegido:
 1. **Un plan es de una máquina** y tiene tareas. Cada tarea tiene su frecuencia: cada N días, semanas, meses o años. Una máquina puede tener varios planes, por ejemplo uno mecánico y uno eléctrico, cada uno con su responsable.
 2. **La próxima fecha se calcula, no se guarda.** Es la última ejecución más la frecuencia; sin ejecuciones, la primera fecha que se cargó. La última ejecución es la fecha de finalización de la última intervención finalizada, no eliminada, con esa tarea marcada como hecha. Así, reabrir, cancelar, eliminar o corregir la fecha de una intervención mueve la próxima fecha sin ningún paso extra.
 3. **Se cuenta desde la última ejecución,** no desde la fecha que tocaba. Si un cambio de aceite cada 6 meses se hizo con un mes de atraso, el próximo es 6 meses después de cuando se hizo.
-4. **La intervención se genera a pedido.** Un usuario con `PLANES_GESTIONAR` genera, desde el plan, una intervención `PREVENTIVO` con las tareas que vencen. Sigue el mismo circuito que una correctiva: estados, tiempos, repuestos, costos y detenciones. La generación automática y los avisos de vencimiento quedan para la PV6, porque necesitan un disparador programado y un autor que no es una persona.
+4. **La intervención se genera a pedido.** Un usuario con `PLANES_GESTIONAR` genera, desde el plan, una intervención `PREVENTIVO` con las tareas que vencen. Sigue el mismo circuito que una correctiva: estados, tiempos, repuestos, costos y detenciones. La generación automática y los avisos de vencimiento quedan para la PV5 (D-025), porque necesitan un disparador programado y un autor que no es una persona.
 5. **Una tarea está en una sola intervención abierta a la vez.** Mientras está en una, no se vuelve a generar.
 6. **"Hoy" es el de la instalación,** según su zona horaria (`configuracion_sistema.zona_horaria`), no el del servidor.
 
@@ -309,3 +309,22 @@ Sobre las máquinas activas de la selección y el período elegido:
 8. **Si se cambia el medidor físico,** por ejemplo un horómetro nuevo que arranca de cero, se da de alta otro medidor y se le pasan las tareas.
 
 **Motivo:** cumplir el requisito 6 con la misma idea de D-021: nada se guarda que se pueda calcular, y deshacer una intervención deshace su efecto sin pasos extra.
+
+## D-024 — Sin revisiones de rutina del operario
+
+**Estado:** Aceptada
+
+**El requisito 7 del relevamiento** (revisiones diarias, semanales o mensuales del operario) **no se implementa.** Son controles de minutos: cargarlos en el sistema le agrega trabajo al operario y no da información que se use.
+
+El circuito ya está cubierto: el operario hace la revisión como hoy, y si encuentra algo usa "Reportar falla", que abre una intervención correctiva y avisa a mantenimiento. Lo que sí conviene seguir en el sistema, como un cambio de aceite o una tarea con repuestos, va en un plan preventivo.
+
+## D-025 — Generación automática y avisos de vencimiento
+
+**Estado:** Aceptada
+
+1. **Una vez por día,** el sistema revisa las tareas preventivas. Lo dispara el mismo programado de Neon que procesa los envíos. Un usuario con `PLANES_GESTIONAR` también lo puede pedir a mano.
+2. **Un aviso por vencimiento:** cuando una tarea está próxima, se avisa una vez, y cuando vence, otra. El vencimiento se identifica por su próxima fecha o su próximo uso. Cuando se hace la tarea, cambia, y el ciclo vuelve a empezar.
+3. **El aviso le llega** al responsable del plan. Si el plan no tiene responsable o está inactivo, les llega a los usuarios con `PLANES_GESTIONAR` que alcanzan el sector de la máquina. Va uno por plan, con sus tareas juntas.
+4. **La generación automática se prende por plan** (`generacion_automatica`). Prendida, genera la intervención igual que el botón "Generar", con las tareas vencidas y próximas. Apagada, el plan solo avisa.
+5. **El autor de lo automático es el usuario "Sistema".** No inicia sesión, no tiene permisos y no aparece en las listas de usuarios. Así cada intervención y cada aviso tienen un autor, como exige el modelo, sin inventar una persona.
+6. **Un plan que falla no frena a los demás:** cada plan se procesa en su propia transacción, y el error queda en el resultado.

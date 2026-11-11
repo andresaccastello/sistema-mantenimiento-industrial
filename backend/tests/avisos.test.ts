@@ -873,7 +873,7 @@ test('Etapa N1a — Avisos por email configurables', async (t) => {
     });
 
     // AV-14: Estado final
-    await t.test('AV-14: Verificación de estado final de canales y las 16 reglas', async () => {
+    await t.test('AV-14: Verificación de estado final de canales y las 18 reglas', async () => {
       // Restaurar canales
       for (const ic of initCanales) {
         await client.query(
@@ -907,7 +907,7 @@ test('Etapa N1a — Avisos por email configurables', async (t) => {
       }
 
       const resReglasFinal = await client.query('SELECT tipo_evento, canal, modo, actualizado_en, actualizado_por_usuario_id FROM notificacion_reglas');
-      assert.strictEqual(resReglasFinal.rows.length, 16);
+      assert.strictEqual(resReglasFinal.rows.length, 18);
       for (const r of resReglasFinal.rows) {
         const orig = initReglas.find((ir) => ir.tipo_evento === r.tipo_evento && ir.canal === r.canal);
         assert.strictEqual(r.modo, orig?.modo, `Regla ${r.tipo_evento}/${r.canal} debe coincidir con estado inicial`);

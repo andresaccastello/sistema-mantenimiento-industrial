@@ -45,7 +45,17 @@ CREATE TABLE IF NOT EXISTS notificacion_reglas (
     actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     actualizado_por_usuario_id BIGINT NULL REFERENCES usuarios(id),
     CONSTRAINT pk_notificacion_reglas PRIMARY KEY (tipo_evento, canal),
-    CONSTRAINT ck_notificacion_reglas_tipo_evento CHECK (tipo_evento IN (
+    CONSTRAINT ck_notificacion_reglas_canal CHECK (canal IN ('EMAIL', 'WHATSAPP')),
+    CONSTRAINT ck_notificacion_reglas_modo CHECK (modo IN ('NUNCA', 'SOLO_ALTA', 'SIEMPRE'))
+);
+
+-- Los tipos de aviso, con DROP/ADD para que una base existente tome los nuevos
+-- (PV5: PREVENTIVO_VENCIMIENTO)
+ALTER TABLE notificacion_reglas
+    DROP CONSTRAINT IF EXISTS ck_notificacion_reglas_tipo_evento;
+
+ALTER TABLE notificacion_reglas
+    ADD CONSTRAINT ck_notificacion_reglas_tipo_evento CHECK (tipo_evento IN (
         'FALLA_REGISTRADA',
         'INTERVENCION_ASIGNADA',
         'INTERVENCION_REASIGNADA',
@@ -53,13 +63,11 @@ CREATE TABLE IF NOT EXISTS notificacion_reglas (
         'INTERVENCION_FINALIZADA',
         'INTERVENCION_CANCELADA',
         'INTERVENCION_REABIERTA',
-        'DETENCION_PENDIENTE_CONFIRMACION'
-    )),
-    CONSTRAINT ck_notificacion_reglas_canal CHECK (canal IN ('EMAIL', 'WHATSAPP')),
-    CONSTRAINT ck_notificacion_reglas_modo CHECK (modo IN ('NUNCA', 'SOLO_ALTA', 'SIEMPRE'))
-);
+        'DETENCION_PENDIENTE_CONFIRMACION',
+        'PREVENTIVO_VENCIMIENTO'
+    ));
 
--- Valores iniciales para notificacion_reglas (16 filas, no sobrescribe cambios posteriores)
+-- Valores iniciales para notificacion_reglas (18 filas, no sobrescribe cambios posteriores)
 INSERT INTO notificacion_reglas (tipo_evento, canal, modo) VALUES
     ('FALLA_REGISTRADA', 'EMAIL', 'SOLO_ALTA'),
     ('FALLA_REGISTRADA', 'WHATSAPP', 'NUNCA'),
@@ -76,7 +84,9 @@ INSERT INTO notificacion_reglas (tipo_evento, canal, modo) VALUES
     ('INTERVENCION_REABIERTA', 'EMAIL', 'NUNCA'),
     ('INTERVENCION_REABIERTA', 'WHATSAPP', 'NUNCA'),
     ('DETENCION_PENDIENTE_CONFIRMACION', 'EMAIL', 'SIEMPRE'),
-    ('DETENCION_PENDIENTE_CONFIRMACION', 'WHATSAPP', 'NUNCA')
+    ('DETENCION_PENDIENTE_CONFIRMACION', 'WHATSAPP', 'NUNCA'),
+    ('PREVENTIVO_VENCIMIENTO', 'EMAIL', 'SOLO_ALTA'),
+    ('PREVENTIVO_VENCIMIENTO', 'WHATSAPP', 'NUNCA')
 ON CONFLICT (tipo_evento, canal) DO NOTHING;
 
 -- 4. Permiso CONFIGURACION_GESTIONAR

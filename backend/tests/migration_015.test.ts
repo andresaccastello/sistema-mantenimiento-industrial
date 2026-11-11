@@ -128,10 +128,10 @@ test('Migración 015 — Avisos por email: base de datos', async (t) => {
       }
     });
 
-    // M15-03: notificacion_reglas tiene las 16 filas iniciales y restricciones
-    await t.test('M15-03: notificacion_reglas tiene 16 filas con modos correctos y restricciones', async () => {
+    // M15-03: notificacion_reglas tiene las 18 filas iniciales y restricciones (PV5: PREVENTIVO_VENCIMIENTO)
+    await t.test('M15-03: notificacion_reglas tiene 18 filas con modos correctos y restricciones', async () => {
       const res = await client.query('SELECT tipo_evento, canal, modo FROM notificacion_reglas');
-      assert.strictEqual(res.rows.length, 16);
+      assert.strictEqual(res.rows.length, 18);
 
       const mapaModos: Record<string, Record<string, string>> = {};
       for (const row of res.rows) {
@@ -153,6 +153,7 @@ test('Migración 015 — Avisos por email: base de datos', async (t) => {
       assert.strictEqual(mapaModos['INTERVENCION_FINALIZADA']?.['EMAIL'], 'NUNCA');
       assert.strictEqual(mapaModos['INTERVENCION_CANCELADA']?.['EMAIL'], 'NUNCA');
       assert.strictEqual(mapaModos['INTERVENCION_REABIERTA']?.['EMAIL'], 'NUNCA');
+      assert.strictEqual(mapaModos['PREVENTIVO_VENCIMIENTO']?.['EMAIL'], 'SOLO_ALTA');
 
       // Probar restricciones en transacciones independientes con ROLLBACK
       // 1. Tipo inventado

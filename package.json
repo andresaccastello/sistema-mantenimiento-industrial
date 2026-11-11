@@ -29,6 +29,7 @@
     "test:migration-016": "tsx --env-file=.env --test backend/tests/migration_016.test.ts",
     "test:migration-017": "tsx --env-file=.env --test backend/tests/migration_017.test.ts",
     "test:migration-018": "tsx --env-file=.env --test backend/tests/migration_018.test.ts",
+    "test:migration-019": "tsx --env-file=.env --test backend/tests/migration_019.test.ts",
     "test:permisos": "tsx --env-file=.env --test backend/tests/permisos_granulares.test.ts",
     "test:intervenciones": "tsx --env-file=.env --test backend/tests/intervenciones.test.ts",
     "test:tiempos": "tsx --env-file=.env --test backend/tests/tiempos.test.ts",
