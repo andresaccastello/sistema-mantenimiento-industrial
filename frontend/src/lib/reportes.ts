@@ -1,5 +1,14 @@
-import { formatCantidad, parsearId } from './formato';
-import type { AgrupacionPreventivos, GrupoCumplimientoPreventivos } from '../api/tipos';
+import { formatCantidad, formatDuracion, formatMoneda, parsearId } from './formato';
+import { etiquetaMaquina } from './maquinas';
+import { verificarPermiso, type PermisosEntrada } from './menu';
+import type {
+  AgrupacionPreventivos,
+  GrupoCumplimientoPreventivos,
+  InactividadMaquinaFila,
+  IndicadoresReporte,
+  ReporteCostosRespuesta,
+  ReportePreventivosRespuesta,
+} from '../api/tipos';
 
 export type { AgrupacionPreventivos };
 
@@ -615,5 +624,190 @@ export function filasReportePreventivos(
     g.atraso_promedio_dias,
   ]);
   return { columnas, filas };
+}
+
+// ---------------------------------------------------------------------------
+// Resumen de reportes en el celular (Etapa A2, sección 3)
+// ---------------------------------------------------------------------------
+
+export type PeriodoResumenCelular = '7d' | '30d' | 'mes';
+
+/**
+ * Calcula el rango `{ desde, hasta }` en ISO para el resumen del celular:
+ * - '7d': últimos 7 días hasta ahora
+ * - '30d' (por omisión): últimos 30 días hasta ahora
+ * - 'mes': desde el 1.º del mes a las 00:00 locales hasta ahora
+ */
+export function rangoResumenCelular(
+  opcion: PeriodoResumenCelular | string = '30d',
+  ahoraInput: Date | string = new Date()
+): { desde: string; hasta: string } {
+  const ahora = typeof ahoraInput === 'string' ? new Date(ahoraInput) : ahoraInput;
+
+  if (opcion === 'mes') {
+    const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1, 0, 0, 0, 0);
+    return {
+      desde: inicioMes.toISOString(),
+      hasta: ahora.toISOString(),
+    };
+  }
+
+  const dias = opcion === '7d' ? 7 : 30;
+  const desde = new Date(ahora.getTime() - dias * 24 * 60 * 60 * 1000);
+  return {
+    desde: desde.toISOString(),
+    hasta: ahora.toISOString(),
+  };
+}
+
+export interface FilaInactividadResumen {
+  maquina: {
+    id?: number;
+    codigo?: string | null;
+    nombre: string;
+  };
+  inactividad_minutos: number;
+}
+
+/**
+ * Devuelve las `limite` máquinas con más inactividad (> 0 min), de mayor a menor,
+ * con formato "PIN-01 · Cámara de pintura — 5 h 10 min".
+ */
+export function topInactividad(
+  filas: FilaInactividadResumen[] | null | undefined,
+  limite = 3
+): string[] {
+  if (!filas || filas.length === 0 || limite <= 0) {
+    return [];
+  }
+
+  return [...filas]
+    .filter((f) => Number(f.inactividad_minutos) > 0)
+    .sort((a, b) => Number(b.inactividad_minutos) - Number(a.inactividad_minutos))
+    .slice(0, limite)
+    .map((f) => `${etiquetaMaquina(f.maquina)} — ${formatDuracion(Number(f.inactividad_minutos))}`);
+}
+
+export interface DatosResumenCelular {
+  indicadores?: Partial<IndicadoresReporte> | null;
+  preventivos?: Partial<ReportePreventivosRespuesta> | null;
+  costos?: Partial<ReporteCostosRespuesta> | null;
+  inactividad?: FilaInactividadResumen[] | InactividadMaquinaFila[] | null;
+  cargando?: {
+    indicadores?: boolean;
+    preventivos?: boolean;
+    costos?: boolean;
+    inactividad?: boolean;
+  };
+  error?: {
+    indicadores?: boolean;
+    preventivos?: boolean;
+    costos?: boolean;
+    inactividad?: boolean;
+  };
+}
+
+export interface TarjetaResumenCelular {
+  id: 'fallas' | 'disponibilidad' | 'reparacion' | 'preventivos' | 'costos' | 'inactividad';
+  titulo: string;
+  valor: string;
+  lineaChica: string | null;
+  color?: 'green' | 'yellow' | 'red' | 'gray';
+  items?: string[];
+  cargando: boolean;
+  error: string | null;
+}
+
+function formatDisponibilidadResumen(disponibilidad: number | null | undefined): string {
+  if (disponibilidad === null || disponibilidad === undefined || isNaN(disponibilidad)) {
+    return '—';
+  }
+  const pct = disponibilidad <= 1 ? disponibilidad * 100 : disponibilidad;
+  return `${Number(pct).toFixed(1).replace('.', ',')} %`;
+}
+
+/**
+ * Construye las tarjetas del resumen en el celular según los datos recibidos y los permisos del usuario.
+ * La tarjeta "Costo de mantenimiento" solo se incluye cuando el usuario tiene COSTOS_VER.
+ */
+export function tarjetasResumenCelular(
+  datos: DatosResumenCelular = {},
+  permisos?: PermisosEntrada
+): TarjetaResumenCelular[] {
+  const ind = datos.indicadores;
+  const prev = datos.preventivos;
+  const cos = datos.costos;
+  const inac = datos.inactividad;
+
+  const cargandoInd = Boolean(datos.cargando?.indicadores);
+  const cargandoPrev = Boolean(datos.cargando?.preventivos);
+  const cargandoCos = Boolean(datos.cargando?.costos);
+  const cargandoInac = Boolean(datos.cargando?.inactividad);
+
+  const errorInd = datos.error?.indicadores ? 'No se pudo cargar' : null;
+  const errorPrev = datos.error?.preventivos ? 'No se pudo cargar' : null;
+  const errorCos = datos.error?.costos ? 'No se pudo cargar' : null;
+  const errorInac = datos.error?.inactividad ? 'No se pudo cargar' : null;
+
+  const topMaquinas = topInactividad(inac, 3);
+
+  const tarjetas: TarjetaResumenCelular[] = [
+    {
+      id: 'fallas',
+      titulo: 'Fallas reportadas',
+      valor: ind && ind.fallas !== undefined ? String(ind.fallas) : '—',
+      lineaChica: ind ? `${ind.correctivas_finalizadas ?? 0} reparadas` : null,
+      cargando: cargandoInd,
+      error: errorInd,
+    },
+    {
+      id: 'disponibilidad',
+      titulo: 'Disponibilidad',
+      valor: ind ? formatDisponibilidadResumen(ind.disponibilidad) : '—',
+      lineaChica: ind ? `Máquinas paradas: ${formatDuracion(ind.inactividad_minutos ?? 0)}` : null,
+      cargando: cargandoInd,
+      error: errorInd,
+    },
+    {
+      id: 'reparacion',
+      titulo: 'Tiempo de reparación',
+      valor: ind ? formatDuracion(ind.mttr_minutos ?? null) : '—',
+      lineaChica: 'Promedio por falla',
+      cargando: cargandoInd,
+      error: errorInd,
+    },
+    {
+      id: 'preventivos',
+      titulo: 'Preventivos a tiempo',
+      valor: prev?.resumen ? textoCumplimiento(prev.resumen.cumplimiento) : '—',
+      color: prev?.resumen ? colorCumplimiento(prev.resumen.cumplimiento) : 'gray',
+      lineaChica: prev?.resumen ? `${prev.resumen.vencidas_sin_hacer ?? 0} vencidas sin hacer` : null,
+      cargando: cargandoPrev,
+      error: errorPrev,
+    },
+  ];
+
+  if (verificarPermiso(permisos, 'COSTOS_VER')) {
+    tarjetas.push({
+      id: 'costos',
+      titulo: 'Costo de mantenimiento',
+      valor: cos && cos.total !== undefined ? formatMoneda(cos.total) : '—',
+      lineaChica: cos ? `${cos.intervenciones ?? 0} intervenciones` : null,
+      cargando: cargandoCos,
+      error: errorCos,
+    });
+  }
+
+  tarjetas.push({
+    id: 'inactividad',
+    titulo: 'Más tiempo paradas',
+    valor: topMaquinas.length > 0 ? topMaquinas.join('\n') : '—',
+    lineaChica: null,
+    items: topMaquinas,
+    cargando: cargandoInac,
+    error: errorInac,
+  });
+
+  return tarjetas;
 }
 

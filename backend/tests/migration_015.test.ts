@@ -223,10 +223,14 @@ test('Migración 015 — Avisos por email: base de datos', async (t) => {
     // M15-05: CONFIGURACION_GESTIONAR existe con usa_alcance = false y solo para ADMINISTRADOR
     await t.test('M15-05: Permiso CONFIGURACION_GESTIONAR existe y pertenece solo a ADMINISTRADOR', async () => {
       const resPermiso = await client.query(
-        "SELECT codigo, nombre, usa_alcance FROM permisos WHERE codigo = 'CONFIGURACION_GESTIONAR'"
+        "SELECT codigo, nombre, descripcion, usa_alcance FROM permisos WHERE codigo = 'CONFIGURACION_GESTIONAR'"
       );
       assert.strictEqual(resPermiso.rows.length, 1);
       assert.strictEqual(resPermiso.rows[0].usa_alcance, false);
+      assert.strictEqual(
+        resPermiso.rows[0].descripcion,
+        'Permite cambiar la configuración general del sistema, como los avisos por email'
+      );
 
       const resPerfiles = await client.query(`
         SELECT p.nombre AS perfil

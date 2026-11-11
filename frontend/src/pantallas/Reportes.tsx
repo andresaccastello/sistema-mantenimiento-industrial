@@ -1,8 +1,11 @@
 import { useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import { Stack, Title, Tabs, Skeleton, Alert, Text } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import { useQuery } from '@tanstack/react-query';
 import { clienteApi } from '../api/cliente';
+import { CORTE_CELULAR } from '../lib/celular';
+import { ResumenCelular } from '../componentes/reportes/ResumenCelular';
 import {
   Planta,
   SectorLista,
@@ -37,6 +40,23 @@ import { TabReporteCostos } from '../componentes/reportes/TabReporteCostos';
 import { useAuth } from '../auth/AuthContext';
 
 export function Reportes() {
+  const esCelular = Boolean(useMediaQuery(CORTE_CELULAR));
+
+  if (esCelular) {
+    return (
+      <Stack gap="lg">
+        <Title order={2} c="#0f172a">
+          Reportes
+        </Title>
+        <ResumenCelular />
+      </Stack>
+    );
+  }
+
+  return <ReportesEscritorio />;
+}
+
+function ReportesEscritorio() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // 1. Filtros actuales desde la URL

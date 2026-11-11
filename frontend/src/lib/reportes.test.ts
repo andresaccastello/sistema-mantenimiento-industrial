@@ -18,6 +18,9 @@ import {
   nombreGrupoPreventivos,
   filasReportePreventivos,
   agruparDePreventivos,
+  rangoResumenCelular,
+  topInactividad,
+  tarjetasResumenCelular,
   FILTROS_REPORTES_POR_DEFECTO,
   FiltrosReportes,
 } from './reportes';
@@ -522,6 +525,157 @@ describe('FE-128: filasReportePreventivos y filtros de preventivos en URL', () =
     const params = escribirFiltrosReportes(leido);
     assert.equal(params.get('vista'), 'preventivos');
     assert.equal(params.get('agrupar'), 'plan');
+  });
+});
+
+describe('FE-132: rangoResumenCelular', () => {
+  const ahora = new Date(2026, 10, 11, 18, 30, 0, 0); // 11 de noviembre de 2026, 18:30 local
+
+  it('calcula 7d, 30d (por omisión) y mes con la zona local', () => {
+    const r7 = rangoResumenCelular('7d', ahora);
+    assert.equal(r7.desde, new Date(ahora.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString());
+    assert.equal(r7.hasta, ahora.toISOString());
+
+    const r30 = rangoResumenCelular('30d', ahora);
+    assert.equal(r30.desde, new Date(ahora.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString());
+    assert.equal(r30.hasta, ahora.toISOString());
+
+    const rOmision = rangoResumenCelular(undefined, ahora);
+    assert.deepEqual(rOmision, r30);
+
+    const rMes = rangoResumenCelular('mes', ahora);
+    assert.equal(rMes.desde, new Date(2026, 10, 1, 0, 0, 0, 0).toISOString());
+    assert.equal(rMes.hasta, ahora.toISOString());
+  });
+});
+
+describe('FE-133: topInactividad', () => {
+  it('devuelve hasta 3 máquinas con más inactividad (> 0) ordenadas y formateadas', () => {
+    const filas = [
+      { maquina: { id: 1, codigo: 'TOR-02', nombre: 'Torno CNC' }, inactividad_minutos: 90 },
+      { maquina: { id: 2, codigo: 'PIN-01', nombre: 'Cámara de pintura' }, inactividad_minutos: 310 },
+      { maquina: { id: 3, codigo: 'PRE-04', nombre: 'Prensa hidráulica' }, inactividad_minutos: 0 },
+      { maquina: { id: 4, codigo: null, nombre: 'Compresor auxiliar' }, inactividad_minutos: 195 },
+      { maquina: { id: 5, codigo: 'SOL-01', nombre: 'Soldadora' }, inactividad_minutos: 45 },
+    ];
+
+    const top3 = topInactividad(filas, 3);
+    assert.deepEqual(top3, [
+      'PIN-01 · Cámara de pintura — 5 h 10 min',
+      'Compresor auxiliar — 3 h 15 min',
+      'TOR-02 · Torno CNC — 1 h 30 min',
+    ]);
+
+    assert.deepEqual(
+      topInactividad([{ maquina: { codigo: 'PRE-04', nombre: 'Prensa' }, inactividad_minutos: 0 }], 3),
+      []
+    );
+    assert.deepEqual(topInactividad([], 3), []);
+  });
+});
+
+describe('FE-134: tarjetasResumenCelular', () => {
+  const datosBase = {
+    indicadores: {
+      fallas: 8,
+      correctivas_finalizadas: 6,
+      disponibilidad: 0.985,
+      inactividad_minutos: 750,
+      mttr_minutos: 95,
+    },
+    preventivos: {
+      resumen: {
+        hechas: 10,
+        a_tiempo: 9,
+        tarde: 1,
+        vencidas_sin_hacer: 2,
+        cumplimiento: 81.8,
+        atraso_promedio_dias: 3,
+      },
+      grupos: [],
+    },
+    costos: {
+      total: 125400.5,
+      intervenciones: 7,
+    },
+    inactividad: [
+      { maquina: { id: 12, codigo: 'PIN-01', nombre: 'Cámara de pintura' }, inactividad_minutos: 310 },
+      { maquina: { id: 15, codigo: 'TOR-02', nombre: 'Torno CNC' }, inactividad_minutos: 260 },
+      { maquina: { id: 18, codigo: 'PRE-01', nombre: 'Prensa' }, inactividad_minutos: 180 },
+      { maquina: { id: 20, codigo: 'COM-01', nombre: 'Compresor' }, inactividad_minutos: 60 },
+    ],
+  };
+
+  it('con COSTOS_VER incluye las 6 tarjetas con sus textos y formatos', () => {
+    const tarjetas = tarjetasResumenCelular(datosBase, {
+      REPORTES_CONSULTAR: 'TODAS',
+      COSTOS_VER: 'TODAS',
+    });
+
+    assert.equal(tarjetas.length, 6);
+    assert.deepEqual(
+      tarjetas.map((t) => [t.titulo, t.valor, t.lineaChica]),
+      [
+        ['Fallas reportadas', '8', '6 reparadas'],
+        ['Disponibilidad', '98,5 %', 'Máquinas paradas: 12 h 30 min'],
+        ['Tiempo de reparación', '1 h 35 min', 'Promedio por falla'],
+        ['Preventivos a tiempo', '81,8 %', '2 vencidas sin hacer'],
+        ['Costo de mantenimiento', '$ 125.400,50', '7 intervenciones'],
+        [
+          'Más tiempo paradas',
+          'PIN-01 · Cámara de pintura — 5 h 10 min\nTOR-02 · Torno CNC — 4 h 20 min\nPRE-01 · Prensa — 3 h',
+          null,
+        ],
+      ]
+    );
+    assert.equal(tarjetas[3].color, 'yellow');
+  });
+
+  it('sin COSTOS_VER omite la tarjeta de Costo de mantenimiento', () => {
+    const tarjetas = tarjetasResumenCelular(datosBase, {
+      REPORTES_CONSULTAR: 'SECTORES',
+    });
+
+    assert.equal(tarjetas.length, 5);
+    assert.equal(
+      tarjetas.some((t) => t.id === 'costos' || t.titulo === 'Costo de mantenimiento'),
+      false
+    );
+  });
+
+  it('muestra "—" cuando disponibilidad o mttr_minutos son null, y "No se pudo cargar" si un pedido falla', () => {
+    const tarjetas = tarjetasResumenCelular(
+      {
+        indicadores: {
+          fallas: 0,
+          correctivas_finalizadas: 0,
+          disponibilidad: null,
+          inactividad_minutos: 0,
+          mttr_minutos: null,
+        },
+        inactividad: [],
+        error: {
+          preventivos: true,
+        },
+      },
+      { REPORTES_CONSULTAR: 'TODAS' }
+    );
+
+    const disp = tarjetas.find((t) => t.id === 'disponibilidad')!;
+    const rep = tarjetas.find((t) => t.id === 'reparacion')!;
+    const prev = tarjetas.find((t) => t.id === 'preventivos')!;
+    const inac = tarjetas.find((t) => t.id === 'inactividad')!;
+
+    assert.equal(disp.valor, '—');
+    assert.equal(disp.lineaChica, 'Máquinas paradas: 0 min');
+    assert.equal(disp.error, null);
+
+    assert.equal(rep.valor, '—');
+    assert.equal(rep.lineaChica, 'Promedio por falla');
+
+    assert.equal(prev.error, 'No se pudo cargar');
+    assert.equal(inac.valor, '—');
+    assert.equal(inac.error, null);
   });
 });
 

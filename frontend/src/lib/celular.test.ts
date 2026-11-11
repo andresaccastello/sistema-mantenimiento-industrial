@@ -1,6 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { permitidaEnCelular, itemsMenuCelular, destinoInicioCelular } from './celular';
+import {
+  CORTE_CELULAR,
+  esAnchoCelular,
+  permitidaEnCelular,
+  itemsMenuCelular,
+  destinoInicioCelular,
+} from './celular';
 import { itemsMenu } from './menu';
 import { destinoInicio } from './inicio';
 
@@ -101,24 +107,20 @@ describe('FE-129: permitidaEnCelular', () => {
 });
 
 describe('FE-130: menú del celular para operario, responsable y administrador', () => {
-  it('operario ve Reportar falla y Mis reportes', () => {
+  it('operario ve solo Mis reportes en el menú del celular', () => {
     const items = itemsMenu(permisosOperario, true);
     assert.deepEqual(
       items.map((i) => [i.etiqueta, i.ruta]),
-      [
-        ['Reportar falla', '/reportar'],
-        ['Mis reportes', '/mis-reportes'],
-      ]
+      [['Mis reportes', '/mis-reportes']]
     );
     assert.deepEqual(items, itemsMenuCelular(permisosOperario));
   });
 
-  it('responsable ve Reportar falla, Mis reportes, Tablero y Reportes', () => {
+  it('responsable ve Mis reportes, Tablero y Reportes', () => {
     const items = itemsMenu(permisosResponsable, true);
     assert.deepEqual(
       items.map((i) => [i.etiqueta, i.ruta]),
       [
-        ['Reportar falla', '/reportar'],
         ['Mis reportes', '/mis-reportes'],
         ['Tablero', '/tablero'],
         ['Reportes', '/reportes'],
@@ -131,7 +133,6 @@ describe('FE-130: menú del celular para operario, responsable y administrador',
     assert.deepEqual(
       enCelular.map((i) => [i.etiqueta, i.ruta]),
       [
-        ['Reportar falla', '/reportar'],
         ['Mis reportes', '/mis-reportes'],
         ['Tablero', '/tablero'],
         ['Reportes', '/reportes'],
@@ -143,13 +144,13 @@ describe('FE-130: menú del celular para operario, responsable y administrador',
   });
 });
 
-describe('FE-131: destino al entrar en el celular y en la computadora', () => {
-  it('en el celular: con INTERVENCIONES_CREAR va a /reportar; si no, a /tablero o a /reportes', () => {
-    // Con INTERVENCIONES_CREAR -> /reportar
-    assert.equal(destinoInicio(permisosOperario, true), '/reportar');
-    assert.equal(destinoInicio(permisosResponsable, true), '/reportar');
-    assert.equal(destinoInicio(permisosAdmin, true), '/reportar');
-    assert.equal(destinoInicioCelular(permisosOperario), '/reportar');
+describe('FE-131: destino al entrar en el celular y en la computadora, y corte en 767/768 px', () => {
+  it('en el celular: con INTERVENCIONES_CREAR va a /mis-reportes; si no, a /tablero o a /reportes', () => {
+    // Con INTERVENCIONES_CREAR -> /mis-reportes
+    assert.equal(destinoInicio(permisosOperario, true), '/mis-reportes');
+    assert.equal(destinoInicio(permisosResponsable, true), '/mis-reportes');
+    assert.equal(destinoInicio(permisosAdmin, true), '/mis-reportes');
+    assert.equal(destinoInicioCelular(permisosOperario), '/mis-reportes');
 
     // Sin INTERVENCIONES_CREAR y con INTERVENCIONES_VER en TODAS/SECTORES -> /tablero
     assert.equal(destinoInicio(permisosConsulta, true), '/tablero');
@@ -170,4 +171,11 @@ describe('FE-131: destino al entrar en el celular y en la computadora', () => {
     assert.equal(destinoInicio(permisosAdmin), '/tablero');
     assert.equal(destinoInicio(permisosConsulta), '/tablero');
   });
+
+  it('corte del celular: 767 px es celular y 768 px (48em) es computadora', () => {
+    assert.equal(CORTE_CELULAR, '(max-width: 47.99em)');
+    assert.equal(esAnchoCelular(767), true);
+    assert.equal(esAnchoCelular(768), false);
+  });
 });
+

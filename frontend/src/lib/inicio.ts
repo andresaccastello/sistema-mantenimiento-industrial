@@ -15,7 +15,7 @@ export type PermisosAlcanceEntrada =
  *   - Si INTERVENCIONES_VER tiene alcance TODAS o SECTORES -> /tablero
  *   - En cualquier otro caso -> /mis-reportes
  * - En celular (enCelular = true):
- *   - Con INTERVENCIONES_CREAR -> /reportar
+ *   - Con INTERVENCIONES_CREAR -> /mis-reportes
  *   - Si no, al tablero si lo tiene -> /tablero
  *   - O a reportes si tiene REPORTES_CONSULTAR -> /reportes
  *   - En cualquier otro caso -> /mis-reportes
@@ -24,14 +24,14 @@ export function destinoInicio(permisos: PermisosAlcanceEntrada, enCelular?: fals
 export function destinoInicio(
   permisos: PermisosAlcanceEntrada,
   enCelular: boolean
-): '/tablero' | '/mis-reportes' | '/reportar' | '/reportes';
+): '/tablero' | '/mis-reportes' | '/reportes';
 export function destinoInicio(
   permisos: PermisosAlcanceEntrada,
   enCelular = false
-): '/tablero' | '/mis-reportes' | '/reportar' | '/reportes' {
+): '/tablero' | '/mis-reportes' | '/reportes' {
   if (enCelular) {
     if (verificarPermiso(permisos as PermisosEntrada, 'INTERVENCIONES_CREAR')) {
-      return '/reportar';
+      return '/mis-reportes';
     }
     if (destinoInicio(permisos, false) === '/tablero') {
       return '/tablero';

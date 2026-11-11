@@ -13,11 +13,13 @@ import {
   Center,
 } from '@mantine/core';
 import { IconAlertTriangle } from '@tabler/icons-react';
+import { useMediaQuery } from '@mantine/hooks';
 import { useNavigate, Navigate } from 'react-router';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
 import { clienteApi } from '../api/cliente';
 import { destinoInicio } from '../lib/inicio';
+import { CORTE_CELULAR } from '../lib/celular';
 import { etiquetaMaquina } from '../lib/maquinas';
 import { formatHace } from '../lib/formato';
 import { nombreCompleto } from '../lib/personas';
@@ -98,16 +100,17 @@ function TarjetaReporte({
 
 export function MisReportes() {
   const { usuario } = useAuth();
+  const esCelular = Boolean(useMediaQuery(CORTE_CELULAR));
 
-  // Redirección si no es el destino de inicio del perfil (sin hooks internos)
-  if (destinoInicio(usuario?.permisos) !== '/mis-reportes') {
+  // En computadora, redirigir si no es el destino de inicio del perfil
+  if (!esCelular && destinoInicio(usuario?.permisos) !== '/mis-reportes') {
     return <Navigate to="/" replace />;
   }
 
-  return <MisReportesContenido />;
+  return <MisReportesContenido esCelular={esCelular} />;
 }
 
-function MisReportesContenido() {
+function MisReportesContenido({ esCelular }: { esCelular: boolean }) {
   const { usuario } = useAuth();
   const navigate = useNavigate();
 
@@ -145,19 +148,21 @@ function MisReportesContenido() {
     <Button
       size="xl"
       color="marca"
+      fullWidth={esCelular}
       leftSection={<IconAlertTriangle size={24} />}
       onClick={() => navigate('/reportar')}
       w={{ base: '100%', sm: 'auto' }}
     >
-      Reportar falla
+      {esCelular ? 'Reportar una falla' : 'Reportar falla'}
     </Button>
   ) : null;
 
   if (!tieneVer) {
     return (
       <Stack gap="lg">
+        {esCelular && botonReportar && <Box>{botonReportar}</Box>}
         <EncabezadoPagina titulo="Mis reportes" />
-        {botonReportar && <Box>{botonReportar}</Box>}
+        {!esCelular && botonReportar && <Box>{botonReportar}</Box>}
       </Stack>
     );
   }
@@ -171,13 +176,23 @@ function MisReportesContenido() {
 
   return (
     <Stack gap="xl">
-      <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
-        <EncabezadoPagina
-          titulo="Mis reportes"
-          subtitulo="Seguimiento de fallas que reportaste"
-        />
-        {botonReportar && <Box w={{ base: '100%', sm: 'auto' }}>{botonReportar}</Box>}
-      </Group>
+      {esCelular ? (
+        <Stack gap="md">
+          {botonReportar}
+          <EncabezadoPagina
+            titulo="Mis reportes"
+            subtitulo="Seguimiento de fallas que reportaste"
+          />
+        </Stack>
+      ) : (
+        <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
+          <EncabezadoPagina
+            titulo="Mis reportes"
+            subtitulo="Seguimiento de fallas que reportaste"
+          />
+          {botonReportar && <Box w={{ base: '100%', sm: 'auto' }}>{botonReportar}</Box>}
+        </Group>
+      )}
 
       {primeraCarga && (
         <Center py="xl">
@@ -189,7 +204,7 @@ function MisReportesContenido() {
         <PantallaVacia
           titulo="Todavía no reportaste fallas."
           mensaje="Cuando cargues una falla la vas a poder seguir desde acá."
-          accion={botonReportar}
+          accion={esCelular ? undefined : botonReportar}
         />
       )}
 

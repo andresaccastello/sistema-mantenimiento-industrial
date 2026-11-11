@@ -94,7 +94,7 @@ INSERT INTO permisos (codigo, nombre, descripcion, usa_alcance)
 VALUES (
     'CONFIGURACION_GESTIONAR',
     'Gestionar la configuración',
-    'Permite cambiar la configuración general del sistema, como los avisos por email y WhatsApp',
+    'Permite cambiar la configuración general del sistema, como los avisos por email',
     FALSE
 )
 ON CONFLICT (codigo) DO UPDATE

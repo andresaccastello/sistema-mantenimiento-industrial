@@ -5,8 +5,17 @@ import { destinoInicio, type PermisosAlcanceEntrada } from './inicio';
 import { vistaDetalle } from './intervenciones';
 import { verificarPermiso, type ItemMenu, type PermisosEntrada } from './menu';
 
-/** El mismo corte que usa el Layout: debajo de sm (48em). */
-export const CORTE_CELULAR = '(max-width: 48em)';
+/** El mismo corte que usa el Layout: menos de sm (48em = 768px). */
+export const CORTE_CELULAR = '(max-width: 47.99em)';
+
+/**
+ * Evalúa si un ancho en píxeles (con base 1em = 16px) entra en CORTE_CELULAR (< 48em = 768px).
+ */
+export function esAnchoCelular(anchoPx: number): boolean {
+  const match = CORTE_CELULAR.match(/max-width:\s*([\d.]+)em/);
+  const maxEm = match ? Number(match[1]) : 47.99;
+  return anchoPx <= maxEm * 16;
+}
 
 const RUTAS_SIEMPRE_CELULAR = new Set([
   '/ingreso',
@@ -51,24 +60,16 @@ export function permitidaEnCelular(ruta: string, permisos?: PermisosAlcanceEntra
 }
 
 /**
- * Ítems del menú y botones de secciones permitidas en el celular según los permisos del usuario.
+ * Ítems del menú y botones de secciones permitidas en el celular según los permisos del usuario (Etapa A2, sección 2).
  */
 export function itemsMenuCelular(permisos: PermisosEntrada): ItemMenu[] {
-  const items: ItemMenu[] = [];
-
-  if (verificarPermiso(permisos, 'INTERVENCIONES_CREAR')) {
-    items.push({
-      etiqueta: 'Reportar falla',
-      ruta: '/reportar',
-      icono: 'IconAlertTriangle',
-    });
-  }
-
-  items.push({
-    etiqueta: 'Mis reportes',
-    ruta: '/mis-reportes',
-    icono: 'IconTool',
-  });
+  const items: ItemMenu[] = [
+    {
+      etiqueta: 'Mis reportes',
+      ruta: '/mis-reportes',
+      icono: 'IconTool',
+    },
+  ];
 
   if (destinoInicio(permisos as PermisosAlcanceEntrada) === '/tablero') {
     items.push({
@@ -90,17 +91,17 @@ export function itemsMenuCelular(permisos: PermisosEntrada): ItemMenu[] {
 }
 
 /**
- * Destino al entrar a `/` en el celular (Etapa A1, 3.2):
- * - con INTERVENCIONES_CREAR -> /reportar
+ * Destino al entrar a `/` en el celular (Etapa A2, sección 2):
+ * - con INTERVENCIONES_CREAR -> /mis-reportes
  * - si no, al tablero si lo tiene -> /tablero
  * - o a reportes -> /reportes
  * - si no tiene ninguno -> /mis-reportes
  */
 export function destinoInicioCelular(
   permisos: PermisosAlcanceEntrada
-): '/reportar' | '/tablero' | '/reportes' | '/mis-reportes' {
+): '/tablero' | '/reportes' | '/mis-reportes' {
   if (verificarPermiso(permisos as PermisosEntrada, 'INTERVENCIONES_CREAR')) {
-    return '/reportar';
+    return '/mis-reportes';
   }
   if (destinoInicio(permisos) === '/tablero') {
     return '/tablero';
@@ -110,3 +111,4 @@ export function destinoInicioCelular(
   }
   return '/mis-reportes';
 }
+
