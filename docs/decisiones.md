@@ -344,3 +344,19 @@ El circuito ya está cubierto: el operario hace la revisión como hoy, y si encu
 5. **El atraso promedio** es el promedio de días entre `fecha_programada` y la fecha local de finalización, solo en las tareas hechas tarde que tienen fecha programada.
 
 **Motivo:** una medida simple, que se explica en una oración y se controla a mano con los datos de una intervención.
+
+## D-027 — Alcance final
+
+**Estado:** Aceptada
+
+1. **Documentos (requisito 11): no se implementan.** Adjuntar manuales, facturas o remitos no cambia el circuito de GI-RE: los comprobantes ya están en SAE y el 87 % del trabajo lo hacen externos. Queda como mejora futura.
+2. **WhatsApp (requisito 12): no se implementa en esta versión.** La bandeja de salida y la API quedan preparadas (D-36), pero la interfaz no muestra el canal: ni la configuración, ni las reglas, ni el teléfono del usuario. Los avisos salen por la campana y por email.
+3. **El sistema es de escritorio.** GI-RE trabaja en puestos con PC. En el celular solo se puede:
+   - el operario: reportar una falla, ver sus reportes y sus notificaciones;
+   - quien gestiona: ver el tablero y los reportes, sin cargar nada.
+
+   Todo lo demás se usa desde la computadora. Las pantallas ya se adaptan al celular, así que ampliar el uso es una mejora futura y no un rediseño.
+4. **Esto es de interfaz, no de seguridad:** la API no distingue el dispositivo, y los permisos siguen siendo los mismos.
+
+**Motivo:** los sistemas líderes son móviles para el técnico, pero en GI-RE quien repara suele ser externo y la gestión se hace en el escritorio. Cargar costos, repuestos y horas en un celular es donde más errores se cometen.
+
