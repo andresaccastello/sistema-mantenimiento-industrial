@@ -36,7 +36,7 @@ El sistema es de escritorio (D-027). En el celular solo se usa para:
 | 15 | Notificaciones (campana del sistema y avisos por email) | Hecho |
 | 16 | Avisos por WhatsApp | Descartado (D-027) |
 | 17 | Revisiones de rutina del operario | Descartado (D-024) |
-| 18 | Calendario de preventivos | Pendiente |
+| 18 | Calendario de preventivos | Hecho (Etapa CAL1) |
 | 19 | Archivo para SAE | Pendiente, a la espera del formato |
 
 ## Límites

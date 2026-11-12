@@ -3,7 +3,7 @@ import { SQL_HOY, columnasPersona, persona, planNoEncontrado } from './comun.ts'
 import { TareaValida, Unidad } from './validaciones.ts';
 
 /** Las columnas del criterio de uso, para usoDeTarea(); md es el medidor de la tarea. */
-const COLUMNAS_USO = `v.estado_fecha, v.medidor_id, v.uso_cada, v.uso_primera, v.uso_anticipacion,
+export const COLUMNAS_USO = `v.estado_fecha, v.medidor_id, v.uso_cada, v.uso_primera, v.uso_anticipacion,
          v.lectura_actual, v.lectura_actual_en, v.ultimo_uso, v.proximo_uso, v.faltan_uso, v.estado_uso,
          md.nombre AS medidor_nombre, md.unidad AS medidor_unidad, md.activo AS medidor_activo`;
 
@@ -60,7 +60,7 @@ function numeroONull(v: unknown): number | null {
 }
 
 /** `uso` de una tarea (4.2), o null si no vence por uso. */
-function usoDeTarea(r: Record<string, any>) {
+export function usoDeTarea(r: Record<string, any>) {
   if (r.medidor_id === null) return null;
   return {
     medidor: { id: Number(r.medidor_id), nombre: r.medidor_nombre, unidad: r.medidor_unidad, activo: Boolean(r.medidor_activo) },
@@ -170,7 +170,7 @@ export interface FiltrosMaquina {
   sectores: number[] | null;
 }
 
-function condicionesMaquina(f: FiltrosMaquina, params: unknown[]): string[] {
+export function condicionesMaquina(f: FiltrosMaquina, params: unknown[]): string[] {
   const cond: string[] = [];
   if (f.sectores !== null) {
     params.push(f.sectores);

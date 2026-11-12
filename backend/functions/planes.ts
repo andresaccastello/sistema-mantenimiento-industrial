@@ -39,6 +39,7 @@ import {
 import { generarDesdePlan, validarTareaIds } from './preventivos/generar.ts';
 import { responsablesHabilitados } from './intervenciones/responsables.ts';
 import { procesarVencimientos } from './preventivos/vencimientos.ts';
+import { calendarioPreventivos } from './preventivos/calendario.ts';
 
 /**
  * Etapa PV1, secciones 4, 5 y 6.1: planes preventivos, sus tareas, los vencimientos
@@ -166,6 +167,41 @@ planesApp.get('/vencimientos', async (c) => {
     const { total, cuerpo } = await listarVencimientos(pool, filtros, estados, limit, offset);
     c.header('X-Total-Count', String(total));
     return c.json(cuerpo);
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+// -------------------------------------------------------------
+// CAL1, 2 Calendario de preventivos (antes de /:id)
+// -------------------------------------------------------------
+
+/** Máximo de días del rango del calendario, contando las dos puntas. */
+const DIAS_CALENDARIO = 62;
+
+/** Un parámetro de fecha obligatorio, YYYY-MM-DD y que exista. */
+function fechaParametro(c: any, nombre: string): string {
+  const val = c.req.query(nombre);
+  if (val === undefined || val.trim() === '') throw invalido(`El parámetro ${nombre} es obligatorio`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(val)) throw invalido(`El parámetro ${nombre} debe tener el formato AAAA-MM-DD`);
+  const d = new Date(`${val}T00:00:00Z`);
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== val) {
+    throw invalido(`El parámetro ${nombre} no es una fecha que exista`);
+  }
+  return val;
+}
+
+planesApp.get('/calendario', async (c) => {
+  try {
+    const desde = fechaParametro(c, 'desde');
+    const hasta = fechaParametro(c, 'hasta');
+    if (desde > hasta) throw invalido('El parámetro desde no puede ser posterior a hasta');
+    const dias = (Date.parse(`${hasta}T00:00:00Z`) - Date.parse(`${desde}T00:00:00Z`)) / 86_400_000 + 1;
+    if (dias > DIAS_CALENDARIO) {
+      throw invalido(`El rango entre desde y hasta no puede pasar de ${DIAS_CALENDARIO} días`);
+    }
+    const filtros = filtrosMaquina(c);
+    return c.json(await calendarioPreventivos(pool, filtros, desde, hasta));
   } catch (error) {
     return responderError(c, error);
   }

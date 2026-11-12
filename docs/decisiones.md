@@ -360,3 +360,18 @@ El circuito ya está cubierto: el operario hace la revisión como hoy, y si encu
 
 **Motivo:** los sistemas líderes son móviles para el técnico, pero en GI-RE quien repara suele ser externo y la gestión se hace en el escritorio. Cargar costos, repuestos y horas en un celular es donde más errores se cometen.
 
+
+## D-028 — Calendario de preventivos
+
+**Estado:** Aceptada
+
+1. **El calendario es una consulta, no guarda nada.** Muestra lo que sale de `v_plan_tareas_estado` y del historial, como D-021 y D-023.
+2. **Tres clases de evento:**
+   - **hecha:** en la fecha en que se finalizó;
+   - **pendiente:** la próxima de cada tarea, con su estado;
+   - **prevista:** las siguientes, si se hiciera cada una en su fecha.
+3. **Una vencida se proyecta desde hoy,** porque lo antes que puede hacerse es hoy. Una tarea que venció por uso antes de su fecha va en hoy.
+4. **Las tareas que vencen solo por uso no tienen fecha.** No se inventa una con el ritmo de uso, porque cambia con la producción. Van en una lista aparte.
+5. **Las tareas por fecha y por uso** se ven por su fecha, con el aviso de que pueden tocar antes.
+
+**Motivo:** el responsable de mantenimiento planifica por semana y por mes. La lista de vencimientos dice qué urge, pero no cómo se reparte el trabajo. La proyección permite ver semanas cargadas antes de que lleguen.

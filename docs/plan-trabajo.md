@@ -47,7 +47,7 @@ El sistema cuenta con las etapas funcionales implementadas y probadas contra la 
 1. [ ] Recorrido de punta a punta.
 2. [ ] Limpieza técnica.
 3. [ ] Experiencia de uso.
-4. [ ] Calendario (calendario de preventivos).
+4. [x] Calendario (calendario de preventivos, Etapa CAL1).
 5. [ ] SAE (archivo para SAE, a la espera del formato).
 6. [ ] Datos de demostración.
 7. [ ] Publicación.
