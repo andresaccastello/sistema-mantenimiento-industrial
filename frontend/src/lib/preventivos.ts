@@ -660,7 +660,9 @@ export function avisoTareasSinMarcar(resumen: { total: number; hechas: number })
 // Filtros de P1 en la dirección
 // ---------------------------------------------------------------------------
 
-export type VistaPreventivos = 'vencimientos' | 'planes';
+export type VistaPreventivos = 'vencimientos' | 'planes' | 'calendario';
+
+const VISTAS: VistaPreventivos[] = ['vencimientos', 'planes', 'calendario'];
 
 /** Los de la API por omisión (PV3, 4.2): el front manda la lista, y sin SIN_LECTURA esas tareas no aparecen. */
 export const ESTADOS_POR_OMISION: EstadoVencimiento[] = ['VENCIDA', 'PROXIMA', 'SIN_LECTURA', 'EN_CURSO'];
@@ -684,7 +686,7 @@ export function leerFiltrosPreventivos(params: URLSearchParams): FiltrosPreventi
   const rawEstado = params.get('estado');
   const pagina = Number(params.get('pagina'));
   return {
-    vista: params.get('vista') === 'planes' ? 'planes' : 'vencimientos',
+    vista: VISTAS.includes(params.get('vista') as VistaPreventivos) ? (params.get('vista') as VistaPreventivos) : 'vencimientos',
     estado: ESTADOS_VALIDOS.includes(rawEstado as EstadoVencimiento) ? (rawEstado as EstadoVencimiento) : null,
     plantaId: parsearId(params.get('planta')),
     sectorId: parsearId(params.get('sector')),
@@ -696,7 +698,7 @@ export function leerFiltrosPreventivos(params: URLSearchParams): FiltrosPreventi
 
 export function escribirFiltrosPreventivos(f: FiltrosPreventivos): URLSearchParams {
   const params = new URLSearchParams();
-  if (f.vista === 'planes') params.set('vista', 'planes');
+  if (f.vista !== 'vencimientos') params.set('vista', f.vista);
   if (f.estado) params.set('estado', f.estado);
   if (f.plantaId) params.set('planta', String(f.plantaId));
   if (f.sectorId) params.set('sector', String(f.sectorId));

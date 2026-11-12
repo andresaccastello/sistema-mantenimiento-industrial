@@ -1224,6 +1224,52 @@ export interface VencimientosRespuesta {
   tareas: VencimientoTarea[];
 }
 
+/** CAL1: hecha, pendiente o prevista (D-028). */
+export type TipoEventoCalendario = 'HECHA' | 'PENDIENTE' | 'PREVISTA';
+
+/** Un evento de `GET /api/planes/calendario`. */
+export interface EventoCalendario {
+  fecha: string;
+  tipo: TipoEventoCalendario;
+  /** Solo en las pendientes; en hechas y previstas, null. */
+  estado: EstadoVencimiento | null;
+  /** La pendiente venció por uso antes de su fecha: va en hoy. */
+  vencida_por_uso: boolean;
+  /** La tarea vence por fecha y por uso: puede tocar antes. */
+  tambien_por_uso: boolean;
+  tarea_id: number;
+  accion: string;
+  plan: PlanResumen;
+  maquina: VencimientoTarea['maquina'];
+  sector: SectorSimple;
+  /** El responsable del plan. */
+  responsable: Persona | null;
+  /** En una hecha, la que la finalizó; en una pendiente EN_CURSO, la que está en curso. */
+  intervencion: IntervencionEnCurso | null;
+}
+
+/** Una tarea que vence solo por uso, sin fecha: va aparte del calendario. */
+export interface TareaPorUso {
+  tarea_id: number;
+  accion: string;
+  estado: EstadoVencimiento;
+  uso: UsoTareaPlan;
+  plan: PlanResumen;
+  maquina: VencimientoTarea['maquina'];
+  intervencion: IntervencionEnCurso | null;
+}
+
+/** `GET /api/planes/calendario?desde=…&hasta=…` (CAL1, 2.2). */
+export interface CalendarioPreventivos {
+  hoy: string;
+  desde: string;
+  hasta: string;
+  /** Las tareas VENCIDA con los filtros, sin mirar el rango. */
+  vencidas: number;
+  eventos: EventoCalendario[];
+  por_uso: TareaPorUso[];
+}
+
 /** `POST /api/planes/:id/generar` (201). */
 export interface GeneracionRespuesta {
   intervencion: { id: number; estado: string; responsable: Persona | null };
