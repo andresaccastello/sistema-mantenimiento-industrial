@@ -280,7 +280,7 @@ export function DetalleIntervencion() {
             />
             <BloquePedidosIntervencion
               intervencionId={reporte.id}
-              estadoIntervencion={reporte.estado}
+              estadoIntervencion={reporte.estado} acciones={reporte.acciones_disponibles} maquinaDetenida={tieneDetencionAbierta}
             />
             <BloqueCostosIntervencion intervencionId={reporte.id} estadoIntervencion={reporte.estado} />
 

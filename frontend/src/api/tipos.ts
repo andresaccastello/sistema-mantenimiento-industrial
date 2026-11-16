@@ -739,7 +739,8 @@ export interface IntervencionRepuestosRespuesta {
 
 export type EstadoPedidoRepuesto = 'PENDIENTE' | 'PEDIDO' | 'RECIBIDO' | 'CANCELADO';
 
-export interface PedidoIntervencionItem {
+/** Lo común a un pedido de la intervención y a uno de la lista general. */
+export interface PedidoBase {
   id: number;
   intervencion_id: number;
   repuesto: {
@@ -764,13 +765,30 @@ export interface PedidoIntervencionItem {
   actualizado_en: string;
 }
 
+/** Un pedido de `GET /api/intervenciones/:id/pedidos` y de sus acciones (PC1, 4). */
+export interface PedidoIntervencionItem extends PedidoBase {
+  /** El precio de la compra; null sin permiso de costos o si no se cargó. */
+  costo_unitario: number | null;
+  comprobante: string | null;
+  /** El uso que se creó al recibirlo, si se usó. */
+  consumo_id: number | null;
+}
+
+/** `POST /api/intervenciones/:id/pedidos/:pedidoId/recibir` (PC1, 4). */
+export interface RecepcionPedidoRespuesta extends PedidoIntervencionItem {
+  intervencion_estado: string;
+  /** Cuántos pedidos de la intervención quedan pendientes o pedidos. */
+  pedidos_abiertos: number;
+}
+
 export interface IntervencionPedidosRespuesta {
   pedidos: PedidoIntervencionItem[];
   puede_crear: boolean;
   puede_gestionar: boolean;
 }
 
-export interface PedidoRepuestoItem extends PedidoIntervencionItem {
+/** Un pedido de `GET /api/pedidos-repuesto`: no trae costo, comprobante ni uso. */
+export interface PedidoRepuestoItem extends PedidoBase {
   intervencion: {
     id: number;
     estado: string;
@@ -848,6 +866,44 @@ export interface CuerpoRecepcion {
   ingresar_stock?: boolean;
   costo_unitario?: number;
   comprobante?: string | null;
+  /** PC1: solo en un pedido de texto libre, para usarlo. */
+  repuesto_id?: number;
+  /** PC1: usar lo recibido en esta intervención. */
+  usar?: { cantidad: number };
+}
+
+/** Una compra de `GET /api/reportes/compras` (PC1, 5). */
+export interface CompraFila {
+  /** El día local del ingreso o de la recepción. */
+  fecha: string;
+  proveedor: { id: number; nombre: string } | null;
+  comprobante: string | null;
+  repuesto: { id: number; codigo: string | null; nombre: string } | null;
+  /** La de un pedido de texto libre. */
+  descripcion: string | null;
+  cantidad: number;
+  unidad: string;
+  /** null en una compra sin costo. */
+  costo_unitario: number | null;
+  importe: number | null;
+  origen: {
+    tipo: 'STOCK' | 'INTERVENCION';
+    /** La intervención del pedido; null en un ingreso manual. */
+    intervencion: { id: number; maquina: { id: number; codigo: string | null } } | null;
+  };
+}
+
+/** `GET /api/reportes/compras?desde=&hasta=&proveedor_id=` (PC1, 5). */
+export interface ReporteComprasRespuesta {
+  desde: string;
+  hasta: string;
+  total: number;
+  compras: number;
+  sin_costo: number;
+  ingresos_sin_proveedor: number;
+  /** De mayor a menor importe; proveedor null es "Sin proveedor". */
+  por_proveedor: Array<{ proveedor: { id: number; nombre: string } | null; compras: number; importe: number }>;
+  filas: CompraFila[];
 }
 
 export interface ReporteRepuestosRespuesta {

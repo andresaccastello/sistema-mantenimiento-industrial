@@ -9,6 +9,8 @@ interface Props {
   plantas?: Planta[];
   sectores?: SectorLista[];
   rango: { desde: string; hasta: string };
+  /** PC1, 7: Compras no filtra por planta ni sector. */
+  conPlantaYSector?: boolean;
 }
 
 const OPCIONES_PERIODO = [
@@ -26,6 +28,7 @@ export function FiltrosReportesBarra({
   plantas = [],
   sectores = [],
   rango,
+  conPlantaYSector = true,
 }: Props) {
   // Sectores filtrados por la planta elegida
   const sectoresFiltrados = filtros.planta
@@ -87,7 +90,7 @@ export function FiltrosReportesBarra({
 
   return (
     <Stack gap="xs">
-      <SimpleGrid cols={{ base: 1, sm: esPersonalizado ? 4 : 3 }} spacing="sm">
+      <SimpleGrid cols={{ base: 1, sm: conPlantaYSector ? (esPersonalizado ? 4 : 3) : 3 }} spacing="sm">
         <Select
           label="Período"
           data={OPCIONES_PERIODO}
@@ -108,28 +111,32 @@ export function FiltrosReportesBarra({
           />
         )}
 
-        <Select
-          label="Planta"
-          placeholder="Todas las plantas"
-          data={plantas.map((p) => ({ value: String(p.id), label: p.nombre }))}
-          value={filtros.planta ? String(filtros.planta) : null}
-          onChange={(val) =>
-            onFiltrosChange({
-              planta: val ? Number(val) : null,
-              sector: null,
-            })
-          }
-          clearable
-        />
+        {conPlantaYSector && (
+          <>
+            <Select
+              label="Planta"
+              placeholder="Todas las plantas"
+              data={plantas.map((p) => ({ value: String(p.id), label: p.nombre }))}
+              value={filtros.planta ? String(filtros.planta) : null}
+              onChange={(val) =>
+                onFiltrosChange({
+                  planta: val ? Number(val) : null,
+                  sector: null,
+                })
+              }
+              clearable
+            />
 
-        <Select
-          label="Sector"
-          placeholder="Todos los sectores"
-          data={sectoresFiltrados.map((s) => ({ value: String(s.id), label: s.nombre }))}
-          value={filtros.sector ? String(filtros.sector) : null}
-          onChange={(val) => onFiltrosChange({ sector: val ? Number(val) : null })}
-          clearable
-        />
+            <Select
+              label="Sector"
+              placeholder="Todos los sectores"
+              data={sectoresFiltrados.map((s) => ({ value: String(s.id), label: s.nombre }))}
+              value={filtros.sector ? String(filtros.sector) : null}
+              onChange={(val) => onFiltrosChange({ sector: val ? Number(val) : null })}
+              clearable
+            />
+          </>
+        )}
       </SimpleGrid>
 
       <Text c="dimmed" size="sm">

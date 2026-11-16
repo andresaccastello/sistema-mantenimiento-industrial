@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import {
   Modal,
   Stack,
+  Text,
   Textarea,
   Group,
   Button,
   Alert,
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { IconAlertCircle } from '@tabler/icons-react';
+import { IconAlertCircle, IconAlertTriangle } from '@tabler/icons-react';
 import { clienteApi } from '../../api/cliente';
 import { useAccionIntervencion } from './useAccionIntervencion';
 
@@ -17,6 +18,15 @@ export interface ModalEsperaRepuestosProps {
   onCerrar: () => void;
   intervencionId: number;
   estadoAlAbrir: string;
+  /** PC1, 6.1: el texto de arriba, por ejemplo después de cargar un pedido. */
+  textoArriba?: string;
+  /** PC1, 6.1: el aviso de la máquina parada por esta intervención. */
+  avisoMaquina?: string;
+  /** PC1, 6.1: la observación precargada. */
+  observacionInicial?: string;
+  /** Los textos de los botones; sin ellos, "Esperar repuestos" y "Volver". */
+  textoConfirmar?: string;
+  textoCancelar?: string;
 }
 
 export function ModalEsperaRepuestos({
@@ -24,6 +34,11 @@ export function ModalEsperaRepuestos({
   onCerrar,
   intervencionId,
   estadoAlAbrir,
+  textoArriba,
+  avisoMaquina,
+  observacionInicial,
+  textoConfirmar = 'Esperar repuestos',
+  textoCancelar = 'Volver',
 }: ModalEsperaRepuestosProps) {
   const isMobile = useMediaQuery('(max-width: 48em)');
   const [observacionTexto, setObservacionTexto] = useState('');
@@ -36,10 +51,10 @@ export function ModalEsperaRepuestos({
 
   useEffect(() => {
     if (abierto) {
-      setObservacionTexto('');
+      setObservacionTexto(observacionInicial ?? '');
       setErrorModal(null);
     }
-  }, [abierto, setErrorModal]);
+  }, [abierto, observacionInicial, setErrorModal]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,6 +83,12 @@ export function ModalEsperaRepuestos({
     >
       <form onSubmit={handleSubmit} noValidate>
         <Stack gap="md">
+          {textoArriba && <Text size="sm">{textoArriba}</Text>}
+          {avisoMaquina && (
+            <Alert color="orange" variant="light" icon={<IconAlertTriangle size={16} />}>
+              {avisoMaquina}
+            </Alert>
+          )}
           {errorModal && (
             <Alert color="red" variant="light" icon={<IconAlertCircle size={16} />}>
               {errorModal}
@@ -85,10 +106,10 @@ export function ModalEsperaRepuestos({
 
           <Group justify="flex-end" gap="sm" mt="md">
             <Button variant="default" onClick={onCerrar} disabled={guardando}>
-              Volver
+              {textoCancelar}
             </Button>
             <Button type="submit" color="marca" loading={guardando}>
-              Esperar repuestos
+              {textoConfirmar}
             </Button>
           </Group>
         </Stack>

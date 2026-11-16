@@ -12,6 +12,7 @@ import {
   ActionIcon,
   Alert,
   Skeleton,
+  Anchor,
 } from '@mantine/core';
 import {
   IconPlus,
@@ -23,9 +24,17 @@ import {
   IconInfoCircle,
 } from '@tabler/icons-react';
 import { clienteApi } from '../../api/cliente';
-import { IntervencionPedidosRespuesta, PedidoIntervencionItem } from '../../api/tipos';
-import { formatCantidad } from '../../lib/formato';
+import {
+  IntervencionPedidosRespuesta,
+  IntervencionRepuestosRespuesta,
+  PedidoIntervencionItem,
+  RecepcionPedidoRespuesta,
+} from '../../api/tipos';
+import { formatCantidad, formatMoneda } from '../../lib/formato';
 import { infoPedido, badgeColorStock } from '../../lib/repuestos';
+import { observacionEspera, ofrecerReanudar, preguntarEspera, textoUsado } from '../../lib/compras';
+import { ModalEsperaRepuestos } from '../acciones/ModalEsperaRepuestos';
+import { ModalReanudar } from '../acciones/ModalReanudar';
 import { ModalPedido } from './ModalPedido';
 import { ModalRecibirPedido } from './ModalRecibirPedido';
 import { ModalCancelarPedido } from './ModalCancelarPedido';
@@ -33,21 +42,46 @@ import { ModalCancelarPedido } from './ModalCancelarPedido';
 export interface BloquePedidosIntervencionProps {
   intervencionId: number;
   estadoIntervencion: string;
+  /** PC1: las acciones disponibles de la intervención, para preguntar por la espera y ofrecer reanudar. */
+  acciones?: readonly string[];
+  /** PC1, 6.1: la máquina está parada por esta intervención. */
+  maquinaDetenida?: boolean;
 }
 
 export function BloquePedidosIntervencion({
   intervencionId,
   estadoIntervencion,
+  acciones = [],
+  maquinaDetenida = false,
 }: BloquePedidosIntervencionProps) {
   const [modalNuevoAbierto, setModalNuevoAbierto] = useState(false);
   const [pedidoParaEditar, setPedidoParaEditar] = useState<PedidoIntervencionItem | null>(null);
   const [pedidoParaRecibir, setPedidoParaRecibir] = useState<PedidoIntervencionItem | null>(null);
   const [pedidoParaCancelar, setPedidoParaCancelar] = useState<PedidoIntervencionItem | null>(null);
+  // PC1, 6.1 y 6.3: después de cargar un pedido, la espera; después de recibir, reanudar
+  const [pedidoParaEsperar, setPedidoParaEsperar] = useState<PedidoIntervencionItem | null>(null);
+  const [estadoParaReanudar, setEstadoParaReanudar] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery<IntervencionPedidosRespuesta>({
     queryKey: ['intervencion', intervencionId, 'pedidos'],
     queryFn: () => clienteApi.get<IntervencionPedidosRespuesta>(`/api/intervenciones/${intervencionId}/pedidos`),
   });
+
+  // Los usos de la intervención: si el usuario puede cargarlos, y cuánto se usó de cada pedido
+  const { data: repuestos } = useQuery<IntervencionRepuestosRespuesta>({
+    queryKey: ['intervencion', intervencionId, 'repuestos'],
+    queryFn: () => clienteApi.get<IntervencionRepuestosRespuesta>(`/api/intervenciones/${intervencionId}/repuestos`),
+  });
+
+  const alCrear = (p: PedidoIntervencionItem) => {
+    if (preguntarEspera(estadoIntervencion, acciones)) setPedidoParaEsperar(p);
+  };
+  const alRecibir = (r: RecepcionPedidoRespuesta) => {
+    if (ofrecerReanudar(r, acciones.includes('REANUDAR'))) setEstadoParaReanudar(r.intervencion_estado);
+  };
+  const irAlUso = (consumoId: number) => {
+    document.getElementById(`consumo-${consumoId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
 
   if (isLoading) {
     return (
@@ -68,6 +102,12 @@ export function BloquePedidosIntervencion({
   if (pedidos.length === 0 && !puede_crear) {
     return null;
   }
+
+  /** "Usado: 4 de 10", con la cantidad del uso; si todavía no cargó, "Ver el uso". */
+  const textoUsoDePedido = (p: PedidoIntervencionItem) => {
+    const uso = repuestos?.consumos.find((c) => c.id === p.consumo_id);
+    return uso ? textoUsado(uso.cantidad, p.cantidad) : 'Ver el uso';
+  };
 
   const tienePedidosAbiertos = pedidos.some(
     (p) => p.estado === 'PENDIENTE' || p.estado === 'PEDIDO'
@@ -151,6 +191,32 @@ export function BloquePedidosIntervencion({
                           </Text>
                         )}
                       </Group>
+                      {(p.comprobante || p.costo_unitario !== null || p.consumo_id !== null) && (
+                        <Group gap="xs" align="center">
+                          {p.comprobante && (
+                            <Text size="xs" c="dimmed">
+                              Comprobante: {p.comprobante}
+                            </Text>
+                          )}
+                          {p.costo_unitario !== null && (
+                            <Text size="xs" c="dimmed">
+                              · {formatMoneda(p.costo_unitario)} c/u
+                            </Text>
+                          )}
+                          {p.consumo_id !== null && (
+                            <Anchor
+                              size="xs"
+                              href={`#consumo-${p.consumo_id}`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                if (p.consumo_id !== null) irAlUso(p.consumo_id);
+                              }}
+                            >
+                              {textoUsoDePedido(p)}
+                            </Anchor>
+                          )}
+                        </Group>
+                      )}
                     </Stack>
 
                     {puede_gestionar && estaAbierto && (
@@ -197,6 +263,7 @@ export function BloquePedidosIntervencion({
         abierto={modalNuevoAbierto}
         onCerrar={() => setModalNuevoAbierto(false)}
         intervencionId={intervencionId}
+        onCreado={alCrear}
       />
 
       <ModalPedido
@@ -210,6 +277,30 @@ export function BloquePedidosIntervencion({
         abierto={Boolean(pedidoParaRecibir)}
         onCerrar={() => setPedidoParaRecibir(null)}
         pedido={pedidoParaRecibir}
+        usoEnIntervencion={{ estado: estadoIntervencion, puedeRegistrar: Boolean(repuestos?.puede_registrar) }}
+        onRecibido={alRecibir}
+      />
+
+      <ModalEsperaRepuestos
+        abierto={Boolean(pedidoParaEsperar)}
+        onCerrar={() => setPedidoParaEsperar(null)}
+        intervencionId={intervencionId}
+        estadoAlAbrir={estadoIntervencion}
+        textoArriba="Cargaste un pedido. ¿La intervención queda esperando este repuesto?"
+        avisoMaquina={maquinaDetenida ? 'La máquina va a figurar como Detenida mientras se espera' : undefined}
+        observacionInicial={pedidoParaEsperar ? observacionEspera(pedidoParaEsperar) : undefined}
+        textoConfirmar="Sí, esperar"
+        textoCancelar="No, sigue en proceso"
+      />
+
+      <ModalReanudar
+        abierto={estadoParaReanudar !== null}
+        onCerrar={() => setEstadoParaReanudar(null)}
+        intervencionId={intervencionId}
+        estadoAlAbrir={estadoParaReanudar ?? ''}
+        textoArriba="Llegó lo último que faltaba. ¿Reanudar la intervención?"
+        textoConfirmar="Reanudar"
+        textoCancelar="Todavía no"
       />
 
       <ModalCancelarPedido

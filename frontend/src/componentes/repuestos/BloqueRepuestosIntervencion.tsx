@@ -133,6 +133,7 @@ export function BloqueRepuestosIntervencion({
                   return (
                     <Table.Tr
                       key={c.id}
+                      id={`consumo-${c.id}`}
                       style={{
                         opacity: c.anulado ? 0.6 : 1,
                         textDecoration: c.anulado ? 'line-through' : 'none',

@@ -13,7 +13,7 @@ import type {
 export type { AgrupacionPreventivos };
 
 export type PeriodoOpcion = '7d' | '30d' | '90d' | 'mes' | 'mes-anterior' | 'personalizado';
-export type VistaReporte = 'indicadores' | 'inactividad' | 'tiempos' | 'repuestos' | 'preventivos' | 'costos';
+export type VistaReporte = 'indicadores' | 'inactividad' | 'tiempos' | 'repuestos' | 'preventivos' | 'costos' | 'compras';
 export type AgrupacionTiempos = 'ejecucion' | 'tipo' | 'sector';
 export type AgrupacionReporte = AgrupacionTiempos | AgrupacionPreventivos;
 
@@ -38,7 +38,7 @@ export const FILTROS_REPORTES_POR_DEFECTO: FiltrosReportes = {
 };
 
 const PERIODOS_VALIDOS: Set<string> = new Set(['7d', '30d', '90d', 'mes', 'mes-anterior', 'personalizado']);
-const VISTAS_VALIDAS: Set<string> = new Set(['indicadores', 'inactividad', 'tiempos', 'repuestos', 'preventivos', 'costos']);
+const VISTAS_VALIDAS: Set<string> = new Set(['indicadores', 'inactividad', 'tiempos', 'repuestos', 'preventivos', 'costos', 'compras']);
 const AGRUPACIONES_VALIDAS: Set<string> = new Set(['ejecucion', 'tipo', 'sector', 'maquina', 'plan']);
 
 const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -482,9 +482,10 @@ export function filasReporteRepuestos(datos?: DatosReporteRepuestos | null): {
 
 /**
  * La pestaña Costos solo se muestra con COSTOS_VER. Sin ese permiso,
- * vista=costos vuelve a Indicadores.
+ * vista=costos vuelve a Indicadores. Lo mismo Compras, con los permisos de D6 (PC1).
  */
-export function vistaReporteVisible(vista: VistaReporte, veCostos: boolean): VistaReporte {
+export function vistaReporteVisible(vista: VistaReporte, veCostos: boolean, veCompras = false): VistaReporte {
+  if (vista === 'compras') return veCompras ? vista : 'indicadores';
   return vista === 'costos' && !veCostos ? 'indicadores' : vista;
 }
 

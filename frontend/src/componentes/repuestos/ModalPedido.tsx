@@ -28,6 +28,8 @@ export interface ModalPedidoProps {
   intervencionId: number;
   pedido?: PedidoIntervencionItem | null;
   onExito?: () => void;
+  /** PC1, 6.1: después de crear un pedido, con el pedido creado. */
+  onCreado?: (pedido: PedidoIntervencionItem) => void;
 }
 
 /**
@@ -44,6 +46,7 @@ export function ModalPedido({
   intervencionId,
   pedido,
   onExito,
+  onCreado,
 }: ModalPedidoProps) {
   const queryClient = useQueryClient();
   const esEdicion = Boolean(pedido);
@@ -159,11 +162,12 @@ export function ModalPedido({
         observacion: observacion.trim() ? observacion.trim() : null,
       };
 
+      let creado: PedidoIntervencionItem | null = null;
       if (esEdicion && pedido) {
-        await clienteApi.patch(`/api/intervenciones/${intervencionId}/pedidos/${pedido.id}`, payload);
+        await clienteApi.patch<PedidoIntervencionItem>(`/api/intervenciones/${intervencionId}/pedidos/${pedido.id}`, payload);
         notifications.show({ message: 'Pedido actualizado.', color: 'green' });
       } else {
-        await clienteApi.post(`/api/intervenciones/${intervencionId}/pedidos`, payload);
+        creado = await clienteApi.post<PedidoIntervencionItem>(`/api/intervenciones/${intervencionId}/pedidos`, payload);
         notifications.show({ message: 'Pedido creado.', color: 'green' });
       }
 
@@ -172,6 +176,7 @@ export function ModalPedido({
       queryClient.invalidateQueries({ queryKey: ['repuestos'] });
       onCerrar();
       if (onExito) onExito();
+      if (creado && onCreado) onCreado(creado);
     } catch (err: unknown) {
       notifications.show({ message: mensajeError(err), color: 'red' });
     } finally {

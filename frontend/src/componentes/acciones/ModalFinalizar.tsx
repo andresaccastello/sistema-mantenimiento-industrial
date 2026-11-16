@@ -10,12 +10,14 @@ import {
   Alert,
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
-import { IconAlertCircle } from '@tabler/icons-react';
+import { useQuery } from '@tanstack/react-query';
+import { IconAlertCircle, IconPackage } from '@tabler/icons-react';
 import { clienteApi } from '../../api/cliente';
 import { SelectorMomento } from '../SelectorMomento';
 import { SeccionRecuperacionMaquina } from '../SeccionRecuperacionMaquina';
 import { validarMomento, momentoAIso, Momento } from '../../lib/fechas';
-import type { PeriodoDetencion } from '../../api/tipos';
+import type { IntervencionPedidosRespuesta, PeriodoDetencion } from '../../api/tipos';
+import { pedidosSinRecibir, textoPedidosSinRecibir } from '../../lib/compras';
 import { useAccionIntervencion } from './useAccionIntervencion';
 import { AvisoTareasSinMarcar } from '../preventivos/AvisoTareasSinMarcar';
 
@@ -60,6 +62,14 @@ export function ModalFinalizar({
     onCerrar,
     avisoExito: 'Intervención finalizada.',
   });
+
+  // PC1, 6.5: los pedidos sin recibir se avisan, pero no frenan (D5)
+  const { data: datosPedidos } = useQuery<IntervencionPedidosRespuesta>({
+    queryKey: ['intervencion', intervencionId, 'pedidos'],
+    queryFn: () => clienteApi.get<IntervencionPedidosRespuesta>(`/api/intervenciones/${intervencionId}/pedidos`),
+    enabled: abierto,
+  });
+  const avisoPedidos = textoPedidosSinRecibir(pedidosSinRecibir(datosPedidos?.pedidos ?? []));
 
   useEffect(() => {
     if (abierto) {
@@ -150,6 +160,11 @@ export function ModalFinalizar({
       <form onSubmit={handleSubmit} noValidate>
         <Stack gap="md">
           <AvisoTareasSinMarcar intervencionId={intervencionId} activo={abierto && conTareas} />
+          {avisoPedidos && (
+            <Alert color="yellow" variant="light" icon={<IconPackage size={16} />}>
+              {avisoPedidos}
+            </Alert>
+          )}
           {errorModal && (
             <Alert color="red" variant="light" icon={<IconAlertCircle size={16} />}>
               {errorModal}

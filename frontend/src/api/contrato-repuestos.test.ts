@@ -110,13 +110,14 @@ const intervencionRepuestos: IntervencionRepuestosRespuesta = {
 const intervencionPedidos: IntervencionPedidosRespuesta = {
   "pedidos": [
     {
-      "id": 20, "intervencion_id": 4509,
-      "repuesto": { "id": 187, "codigo": "ZZR1-001", "nombre": "ZZR1 Rodamiento de prueba", "unidad": "unidad", "lleva_stock": true },
+      "id": 173, "intervencion_id": 19851,
+      "repuesto": { "id": 1438, "codigo": "ZZPC-001", "nombre": "ZZPC Rodamiento de prueba", "unidad": "unidad", "lleva_stock": true },
       "descripcion": null, "cantidad": 3, "proveedor": null, "estado": "RECIBIDO",
-      "pedido_en": null, "esperado_para": null, "recibido_en": "2026-11-06T11:33:10.869Z",
+      "pedido_en": null, "esperado_para": null, "recibido_en": "2026-11-16T20:26:30.051Z",
       "observacion": null, "motivo_cancelacion": null, "ingreso_stock": true,
-      "creado_por": { "id": 552, "nombre": "Responsable", "apellido": "Demo" },
-      "creado_en": "2026-11-06T11:33:05.012Z", "actualizado_en": "2026-11-06T11:33:10.865Z"
+      "costo_unitario": 823, "comprobante": "R-0001-00000020", "consumo_id": null,
+      "creado_por": { "id": 5360, "nombre": "Responsable", "apellido": "Demo" },
+      "creado_en": "2026-11-16T20:26:27.722Z", "actualizado_en": "2026-11-16T20:26:29.243Z"
     }
   ],
   "puede_crear": true, "puede_gestionar": true

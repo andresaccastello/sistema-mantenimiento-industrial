@@ -37,6 +37,8 @@ import {
 } from '../componentes/reportes/TabReporteRepuestos';
 import { TabPreventivos } from '../componentes/reportes/TabPreventivos';
 import { TabReporteCostos } from '../componentes/reportes/TabReporteCostos';
+import { TabReporteCompras } from '../componentes/reportes/TabReporteCompras';
+import { veReporteCompras } from '../lib/compras';
 import { useAuth } from '../auth/AuthContext';
 
 export function Reportes() {
@@ -63,9 +65,11 @@ function ReportesEscritorio() {
   const filtros = useMemo(() => leerFiltrosReportes(searchParams), [searchParams]);
 
   // La pestaña Costos solo se muestra con COSTOS_VER; sin ese permiso, vuelve a Indicadores
-  const { tienePermiso } = useAuth();
+  const { tienePermiso, alcance } = useAuth();
   const veCostos = tienePermiso('COSTOS_VER');
-  const vista = vistaReporteVisible(filtros.vista, veCostos);
+  // PC1, 7: Compras, con reportes de todas las máquinas y COSTOS_VER (D6)
+  const veCompras = veReporteCompras(alcance('REPORTES_CONSULTAR'), veCostos);
+  const vista = vistaReporteVisible(filtros.vista, veCostos, veCompras);
 
   // 2. Rango de fechas ISO calculado a partir del período
   const rango = useMemo(() => rangoDePeriodo(filtros), [filtros]);
@@ -183,9 +187,10 @@ function ReportesEscritorio() {
         plantas={plantas}
         sectores={sectores}
         rango={rango}
+        conPlantaYSector={vista !== 'compras'}
       />
 
-      {/* Pestañas: Indicadores · Inactividad · Tiempos · Repuestos · Preventivos · Costos */}
+      {/* Pestañas: Indicadores · Inactividad · Tiempos · Repuestos · Preventivos · Costos · Compras */}
       <Tabs value={vista} onChange={handleTabChange}>
         <Tabs.List>
           <Tabs.Tab value="indicadores">Indicadores</Tabs.Tab>
@@ -194,6 +199,7 @@ function ReportesEscritorio() {
           <Tabs.Tab value="repuestos">Repuestos</Tabs.Tab>
           <Tabs.Tab value="preventivos">Preventivos</Tabs.Tab>
           {veCostos && <Tabs.Tab value="costos">Costos</Tabs.Tab>}
+          {veCompras && <Tabs.Tab value="compras">Compras</Tabs.Tab>}
         </Tabs.List>
 
         <Tabs.Panel value="indicadores">
@@ -271,6 +277,12 @@ function ReportesEscritorio() {
               </Alert>
             )}
             {queryCostos.data && <TabReporteCostos datos={queryCostos.data} />}
+          </Tabs.Panel>
+        )}
+
+        {veCompras && (
+          <Tabs.Panel value="compras">
+            {vista === 'compras' && <TabReporteCompras desde={rango.desde} hasta={rango.hasta} />}
           </Tabs.Panel>
         )}
       </Tabs>

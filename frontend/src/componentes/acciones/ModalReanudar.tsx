@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Modal,
   Stack,
+  Text,
   Textarea,
   Group,
   Button,
@@ -17,6 +18,11 @@ export interface ModalReanudarProps {
   onCerrar: () => void;
   intervencionId: number;
   estadoAlAbrir: string;
+  /** PC1, 6.3: el texto de arriba, por ejemplo cuando llegó lo último que faltaba. */
+  textoArriba?: string;
+  /** Los textos de los botones; sin ellos, "Reanudar" y "Volver". */
+  textoConfirmar?: string;
+  textoCancelar?: string;
 }
 
 export function ModalReanudar({
@@ -24,6 +30,9 @@ export function ModalReanudar({
   onCerrar,
   intervencionId,
   estadoAlAbrir,
+  textoArriba,
+  textoConfirmar = 'Reanudar',
+  textoCancelar = 'Volver',
 }: ModalReanudarProps) {
   const isMobile = useMediaQuery('(max-width: 48em)');
   const [observacionTexto, setObservacionTexto] = useState('');
@@ -64,6 +73,7 @@ export function ModalReanudar({
     >
       <form onSubmit={handleSubmit} noValidate>
         <Stack gap="md">
+          {textoArriba && <Text size="sm">{textoArriba}</Text>}
           {errorModal && (
             <Alert color="red" variant="light" icon={<IconAlertCircle size={16} />}>
               {errorModal}
@@ -80,10 +90,10 @@ export function ModalReanudar({
 
           <Group justify="flex-end" gap="sm" mt="md">
             <Button variant="default" onClick={onCerrar} disabled={guardando}>
-              Volver
+              {textoCancelar}
             </Button>
             <Button type="submit" color="marca" loading={guardando}>
-              Reanudar
+              {textoConfirmar}
             </Button>
           </Group>
         </Stack>
