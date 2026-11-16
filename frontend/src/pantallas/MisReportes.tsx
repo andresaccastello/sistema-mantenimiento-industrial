@@ -100,7 +100,9 @@ function TarjetaReporte({
 
 export function MisReportes() {
   const { usuario } = useAuth();
-  const esCelular = Boolean(useMediaQuery(CORTE_CELULAR));
+  // Se lee en el primer render: si arrancara en false, en el celular redirigiría a "/" y
+  // "/" volvería acá, en un bucle sin fin (pantalla en blanco)
+  const esCelular = Boolean(useMediaQuery(CORTE_CELULAR, undefined, { getInitialValueInEffect: false }));
 
   // En computadora, redirigir si no es el destino de inicio del perfil
   if (!esCelular && destinoInicio(usuario?.permisos) !== '/mis-reportes') {

@@ -50,7 +50,8 @@ const DevAppLazy = import.meta.env.DEV
 
 function RedireccionInicio() {
   const { usuario } = useAuth();
-  const esCelular = Boolean(useMediaQuery(CORTE_CELULAR));
+  // Se lee en el primer render, como en MisReportes: el destino no puede cambiar a mitad de camino
+  const esCelular = Boolean(useMediaQuery(CORTE_CELULAR, undefined, { getInitialValueInEffect: false }));
   const destino = destinoInicio(usuario?.permisos, esCelular);
   return <Navigate to={destino} replace />;
 }
