@@ -7,6 +7,7 @@ import { UsuarioVisibilidad } from './intervenciones/visibilidad.ts';
 import { validarIntervaloReporte } from './intervalos.ts';
 import { veCostos } from './repuestos/permisos.ts';
 import { reportePreventivos } from './reportes/cumplimiento.ts';
+import { reporteCompras } from './reportes/compras.ts';
 
 const reportesApp = new Hono();
 reportesApp.use('*', jwtVerify, dbVerify);
@@ -897,5 +898,8 @@ reportesApp.get('/costos', requirePermission('REPORTES_CONSULTAR'), async (c) =>
 });
 
 reportesApp.get('/preventivos', requirePermission('REPORTES_CONSULTAR'), reportePreventivos);
+
+// PC1, 5: lo que se compró en el período (D-029)
+reportesApp.get('/compras', requirePermission('REPORTES_CONSULTAR'), reporteCompras);
 
 export default reportesApp;

@@ -183,7 +183,8 @@ function armarConsumoRespuesta(row: any, tienePermisoCostos: boolean) {
   };
 }
 
-function armarPedidoRespuesta(row: any) {
+/** Un pedido de la intervención. PC1, 4: suma costo_unitario (solo con permiso de costos), comprobante y consumo_id. */
+function armarPedidoRespuesta(row: any, tienePermisoCostos: boolean) {
   return {
     id: Number(row.id),
     intervencion_id: Number(row.intervencion_id),
@@ -211,6 +212,12 @@ function armarPedidoRespuesta(row: any) {
     observacion: row.observacion || null,
     motivo_cancelacion: row.motivo_cancelacion || null,
     ingreso_stock: row.movimiento_id !== null,
+    costo_unitario:
+      tienePermisoCostos && row.costo_unitario !== null && row.costo_unitario !== undefined
+        ? Number(row.costo_unitario)
+        : null,
+    comprobante: row.comprobante || null,
+    consumo_id: row.consumo_id ? Number(row.consumo_id) : null,
     creado_por: row.creador_id
       ? {
           id: Number(row.creador_id),
@@ -473,7 +480,7 @@ intervencionRepuestosApp.get('/:id/pedidos', requirePermission('INTERVENCIONES_V
     `;
 
     const res = await pool.query(sql, [id]);
-    const pedidos = res.rows.map(armarPedidoRespuesta);
+    const pedidos = res.rows.map((row) => armarPedidoRespuesta(row, veCostos(c)));
 
     return c.json(
       {
@@ -622,7 +629,7 @@ intervencionRepuestosApp.post('/:id/pedidos', async (c) => {
       WHERE pr.id = $1
     `;
     const resDet = await pool.query(sqlDet, [pedidoId]);
-    return c.json(armarPedidoRespuesta(resDet.rows[0]), 201);
+    return c.json(armarPedidoRespuesta(resDet.rows[0], veCostos(c)), 201);
   } catch (err) {
     await client.query('ROLLBACK');
     return responderError(c, err);
@@ -802,7 +809,7 @@ intervencionRepuestosApp.patch('/:id/pedidos/:pedidoId', async (c) => {
       WHERE pr.id = $1
     `;
     const resDet = await pool.query(sqlDet, [pedidoId]);
-    return c.json(armarPedidoRespuesta(resDet.rows[0]), 200);
+    return c.json(armarPedidoRespuesta(resDet.rows[0], veCostos(c)), 200);
   } catch (err) {
     await client.query('ROLLBACK');
     return responderError(c, err);
@@ -869,14 +876,98 @@ intervencionRepuestosApp.post('/:id/pedidos/:pedidoId/recibir', async (c) => {
     }
     let movimientoId: number | null = null;
 
+    // PC1, 4: el comprobante y el costo se guardan en el pedido, entre o no al stock
+    let comprobante: string | null = null;
+    if (body.comprobante !== undefined && body.comprobante !== null) {
+      if (typeof body.comprobante !== 'string') {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El comprobante debe ser texto');
+      }
+      const cTrim = body.comprobante.trim();
+      if (cTrim.length > 60) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El comprobante no puede superar los 60 caracteres');
+      }
+      comprobante = cTrim.length > 0 ? cTrim : null;
+    }
+
+    let costoUnitario: number | null = null;
+    if (body.costo_unitario !== undefined && body.costo_unitario !== null) {
+      if (!puedeCargarCostos(c)) {
+        throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No tiene permiso para registrar costos');
+      }
+      costoUnitario = validarCosto(body.costo_unitario, 'costo_unitario');
+    }
+
+    // PC1, 4: usar lo recibido en esta intervención (D3), y el repuesto de un pedido de texto libre (D2)
+    let usar: { cantidad?: unknown } | null = null;
+    if (body.usar !== undefined && body.usar !== null) {
+      if (typeof body.usar !== 'object' || Array.isArray(body.usar)) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El campo usar debe ser un objeto con la cantidad');
+      }
+      usar = body.usar;
+    }
+
+    let repuestoCuerpoId: number | null = null;
+    if (body.repuesto_id !== undefined && body.repuesto_id !== null) {
+      if (pedido.repuesto_id) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El pedido ya tiene un repuesto del catálogo');
+      }
+      if (!usar) {
+        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El repuesto del catálogo se elige solo para usar el pedido');
+      }
+      repuestoCuerpoId = validarIdCuerpo(body.repuesto_id, 'DATOS_INVALIDOS', 'repuesto_id');
+    }
+
+    // El repuesto del pedido: el que tiene, o el que se elige para usarlo
+    const repuestoPedidoId: number | null = pedido.repuesto_id ? Number(pedido.repuesto_id) : repuestoCuerpoId;
+
+    let cantidadUso = 0;
+    if (usar) {
+      // 1. El estado, antes que autorizarRegistroConsumo: con una finalizada aceptaría una corrección (D5)
+      if (intervencion.estado !== 'EN_PROCESO' && intervencion.estado !== 'EN_ESPERA_REPUESTOS') {
+        throw new ErrorNegocio(
+          409,
+          'ESTADO_NO_PERMITE_REPUESTOS',
+          'Solo se puede usar en una intervención en proceso o esperando repuestos'
+        );
+      }
+      // 2. Quién recibe, igual que al cargar un uso
+      autorizarRegistroConsumo(usuario, intervencion, undefined);
+      // 3. El repuesto
+      if (repuestoPedidoId === null) {
+        throw new ErrorNegocio(422, 'PEDIDO_SIN_REPUESTO', 'Para usarlo, elegí el repuesto del catálogo');
+      }
+      const repUso = await client.query('SELECT id, lleva_stock FROM repuestos WHERE id = $1 FOR UPDATE', [
+        repuestoPedidoId,
+      ]);
+      if (repUso.rows.length === 0) {
+        throw new ErrorNegocio(422, 'REPUESTO_INVALIDO', 'El repuesto no existe');
+      }
+      // 4. La cantidad: con stock, de más de 0 a lo recibido; sin stock, todo lo recibido
+      const cantidadPedido = Number(pedido.cantidad);
+      if (repUso.rows[0].lleva_stock) {
+        if (!ingresarStock) {
+          throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'Para usarlo, primero tiene que entrar al stock');
+        }
+        cantidadUso = validarCantidad(usar.cantidad, 'usar.cantidad');
+        if (cantidadUso > cantidadPedido + 1e-9) {
+          throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'No se puede usar más de lo recibido');
+        }
+      } else {
+        cantidadUso = validarCantidad(usar.cantidad, 'usar.cantidad');
+        if (Math.abs(cantidadUso - cantidadPedido) > 1e-9) {
+          throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'Un repuesto sin stock se usa entero: la cantidad es la del pedido');
+        }
+      }
+    }
+
     if (ingresarStock) {
-      if (!pedido.repuesto_id) {
+      if (!repuestoPedidoId) {
         throw new ErrorNegocio(422, 'PEDIDO_SIN_REPUESTO', 'El pedido no tiene un repuesto del catálogo asociado');
       }
 
       const repRes = await client.query(
         'SELECT id, activo, lleva_stock, costo_unitario FROM repuestos WHERE id = $1 FOR UPDATE',
-        [pedido.repuesto_id]
+        [repuestoPedidoId]
       );
       if (repRes.rows.length === 0) {
         throw new ErrorNegocio(404, 'REPUESTO_NO_ENCONTRADO', 'Repuesto no encontrado');
@@ -890,23 +981,8 @@ intervencionRepuestosApp.post('/:id/pedidos/:pedidoId/recibir', async (c) => {
         throw new ErrorNegocio(409, 'REPUESTO_SIN_CONTROL_STOCK', 'El repuesto no lleva control de stock');
       }
 
-      let costoUnitario: number | null = null;
-      if (body.costo_unitario !== undefined && body.costo_unitario !== null) {
-        if (!puedeCargarCostos(c)) {
-          throw new ErrorNegocio(403, 'PERMISO_INSUFICIENTE', 'No tiene permiso para registrar costos');
-        }
-        costoUnitario = validarCosto(body.costo_unitario, 'costo_unitario');
-      }
-
-      const comprobante = typeof body.comprobante === 'string' && body.comprobante.trim()
-        ? body.comprobante.trim()
-        : null;
-      if (comprobante && comprobante.length > 60) {
-        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El comprobante no puede superar los 60 caracteres');
-      }
-
       const mov = await moverStock(client, {
-        repuestoId: Number(pedido.repuesto_id),
+        repuestoId: repuestoPedidoId,
         tipo: 'INGRESO',
         delta: Number(pedido.cantidad),
         usuarioId: usuario.id,
@@ -920,7 +996,7 @@ intervencionRepuestosApp.post('/:id/pedidos/:pedidoId/recibir', async (c) => {
 
       if (costoUnitario !== null) {
         await cambiarCosto(client, {
-          repuestoId: Number(pedido.repuesto_id),
+          repuestoId: repuestoPedidoId,
           costo: costoUnitario,
           origen: 'INGRESO',
           usuarioId: usuario.id,
@@ -928,13 +1004,41 @@ intervencionRepuestosApp.post('/:id/pedidos/:pedidoId/recibir', async (c) => {
       }
     }
 
+    // El uso, con la misma función que un uso cargado a mano. Con stock, sale al costo
+    // del repuesto (ya actualizado por el ingreso); sin stock, al del cuerpo o al del repuesto.
+    let consumoId: number | null = null;
+    if (usar && repuestoPedidoId !== null) {
+      const sinStock = !ingresarStock;
+      consumoId = await registrarConsumo(client, {
+        intervencionId: id,
+        estadoIntervencion: intervencion.estado,
+        usuarioId: usuario.id,
+        repuestoId: repuestoPedidoId,
+        cantidad: cantidadUso,
+        observacion: `Pedido N.º ${pedidoId}`,
+        motivo: null,
+        costoUnitario: sinStock && costoUnitario !== null ? costoUnitario : undefined,
+        puedeCargarCostos: puedeCargarCostos(c),
+      });
+    }
+
     await client.query(
       `UPDATE pedidos_repuesto
        SET estado = 'RECIBIDO', recibido_en = $1, movimiento_id = $2,
-           actualizado_por_usuario_id = $3, actualizado_en = NOW()
-       WHERE id = $4`,
-      [recibidoEn, movimientoId, usuario.id, pedidoId]
+           costo_unitario = $3, comprobante = $4, consumo_id = $5,
+           repuesto_id = COALESCE(repuesto_id, $6),
+           actualizado_por_usuario_id = $7, actualizado_en = NOW()
+       WHERE id = $8`,
+      [recibidoEn, movimientoId, costoUnitario, comprobante, consumoId, repuestoCuerpoId, usuario.id, pedidoId]
     );
+
+    // Para ofrecer "Reanudar" (6.3): cuántos pedidos de la intervención quedan abiertos
+    const resAbiertos = await client.query(
+      `SELECT count(*)::int AS abiertos FROM pedidos_repuesto
+       WHERE intervencion_id = $1 AND estado IN ('PENDIENTE', 'PEDIDO')`,
+      [id]
+    );
+    const pedidosAbiertos = Number(resAbiertos.rows[0].abiertos);
 
     await client.query('COMMIT');
 
@@ -958,7 +1062,14 @@ intervencionRepuestosApp.post('/:id/pedidos/:pedidoId/recibir', async (c) => {
       WHERE pr.id = $1
     `;
     const resDet = await pool.query(sqlDet, [pedidoId]);
-    return c.json(armarPedidoRespuesta(resDet.rows[0]), 200);
+    return c.json(
+      {
+        ...armarPedidoRespuesta(resDet.rows[0], veCostos(c)),
+        intervencion_estado: intervencion.estado,
+        pedidos_abiertos: pedidosAbiertos,
+      },
+      200
+    );
   } catch (err) {
     await client.query('ROLLBACK');
     return responderError(c, err);
@@ -1039,7 +1150,7 @@ intervencionRepuestosApp.post('/:id/pedidos/:pedidoId/cancelar', async (c) => {
       WHERE pr.id = $1
     `;
     const resDet = await pool.query(sqlDet, [pedidoId]);
-    return c.json(armarPedidoRespuesta(resDet.rows[0]), 200);
+    return c.json(armarPedidoRespuesta(resDet.rows[0], veCostos(c)), 200);
   } catch (err) {
     await client.query('ROLLBACK');
     return responderError(c, err);

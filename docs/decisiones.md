@@ -375,3 +375,26 @@ El circuito ya está cubierto: el operario hace la revisión como hoy, y si encu
 5. **Las tareas por fecha y por uso** se ven por su fecha, con el aviso de que pueden tocar antes.
 
 **Motivo:** el responsable de mantenimiento planifica por semana y por mes. La lista de vencimientos dice qué urge, pero no cómo se reparte el trabajo. La proyección permite ver semanas cargadas antes de que lleguen.
+
+## D-029 — Pedidos y compras
+
+**Estado:** Aceptada
+
+1. **Compras y costo de mantenimiento son dos números distintos, que no se mezclan.**
+   - **Compras:** la plata que salió, con factura de un proveedor. Se ve en el reporte de compras y es lo que algún día va al SAE.
+   - **Costo de mantenimiento:** lo que se usó en cada máquina: repuestos usados, mano de obra y servicios (D-019). Se ve en la intervención y en el reporte de costos. No va al SAE: los repuestos ya entraron como compra.
+2. **Qué cuenta como compra:**
+   - un **pedido recibido**, siempre: entre o no al stock, y aunque no tenga proveedor (va en "Sin proveedor");
+   - un **ingreso manual** de stock, solo si tiene **proveedor**. Sin proveedor suele ser una carga inicial o un hallazgo en el depósito: no es compra y el reporte lo cuenta aparte.
+   - **Cada compra cuenta una vez.** Un pedido que entró al stock cuenta por su ingreso, y el uso de algo comprado no es otra compra.
+3. **Usar al recibir.**
+   - **El pedido y la espera:** al guardar un pedido con la intervención en proceso, se pregunta si pasa a esperar repuestos. No pasa sola, porque a veces se pide algo para después y se sigue trabajando. Si la máquina está parada por esa falla, el diálogo avisa que va a figurar "Detenida".
+   - **Recibir y usar es un solo paso.** Con stock, entra todo lo recibido y se usa la cantidad indicada, como mucho lo recibido; lo que sobra queda en stock. Sin stock, se usa todo lo recibido: si sobra seguido, ese repuesto tiene que llevar stock.
+   - **Un pedido de texto libre,** para usarlo, se asocia a un repuesto del catálogo. Si no se usa, se recibe sin elegir nada. No se carga como renglón de costo "Otro", porque quedaría afuera del reporte de repuestos y de su historial de precios.
+   - **Con la intervención cerrada,** el pedido se recibe igual, porque es una compra, pero no se ofrece usarlo ahí: se corrige con permiso y motivo, como cualquier uso. Al finalizar con pedidos sin recibir, el diálogo avisa pero no frena: un arreglo provisorio es normal.
+4. **Lo que no es este reporte.**
+   - **No es contabilidad:** no distingue IVA, tipo de factura ni condición de pago. Muestra los importes como se cargaron.
+   - **Lo ve** quien consulta reportes con alcance a todas las máquinas y ve costos. Una compra para stock no es de ningún sector.
+   - **Queda afuera:** el archivo para el SAE, que espera el documento (esta etapa deja los datos listos); la regla de la mano de obra (la externa tiene factura, la interna es sueldo); y recibir un pedido en partes.
+
+**Motivo:** el pedido no cambiaba nada solo, recibir y usar eran dos pasos, un repuesto sin stock no guardaba ni costo ni comprobante al recibirlo, y lo comprado no aparecía en ningún reporte. Separar lo que se compró de lo que se usó evita contar dos veces el mismo repuesto y deja listo el dato que pide el SAE.

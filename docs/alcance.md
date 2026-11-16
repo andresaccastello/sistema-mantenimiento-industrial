@@ -38,6 +38,7 @@ El sistema es de escritorio (D-027). En el celular solo se usa para:
 | 17 | Revisiones de rutina del operario | Descartado (D-024) |
 | 18 | Calendario de preventivos | Hecho (Etapa CAL1) |
 | 19 | Archivo para SAE | Pendiente, a la espera del formato |
+| 20 | Reporte de compras | Hecho (Etapa PC1) |
 
 ## Límites
 
