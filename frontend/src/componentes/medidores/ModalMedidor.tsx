@@ -14,6 +14,7 @@ import {
   cuerpoMedidor,
   validarMedidor,
 } from '../../lib/medidores';
+import { LEER_CADA_POR_OMISION, errorLeerCada, leerCadaDias } from '../../lib/lecturas';
 import { CampoNumero } from '../CampoNumero';
 import { refrescarMedidores } from './refrescar';
 
@@ -29,17 +30,27 @@ function borradorDe(m: MedidorLista | null): BorradorMedidor {
   return m ? { nombre: m.nombre, unidad: m.unidad, lecturaInicial: '' } : borradorMedidorVacio();
 }
 
+/** LE1, 4.5: "Leer cada", 7 en uno nuevo; vacío, sin aviso de atraso. */
+function leerCadaDe(m: MedidorLista | null): number | string {
+  if (!m) return LEER_CADA_POR_OMISION;
+  return m.lectura_cada_dias ?? '';
+}
+
 /** 3.2 Nuevo medidor y editar medidor. */
 export function ModalMedidor({ abierto, maquinaId, medidor, onCerrar }: Props) {
   const queryClient = useQueryClient();
   const [b, setB] = useState<BorradorMedidor>(borradorDe(medidor));
   const [errores, setErrores] = useState<ErroresMedidor>({});
+  const [leerCada, setLeerCada] = useState<number | string>(leerCadaDe(medidor));
+  const [errorCada, setErrorCada] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
     if (!abierto) return;
     setB(borradorDe(medidor));
+    setLeerCada(leerCadaDe(medidor));
+    setErrorCada(null);
     setErrores({});
     setError(null);
     // Solo al abrir
@@ -54,17 +65,25 @@ export function ModalMedidor({ abierto, maquinaId, medidor, onCerrar }: Props) {
     const encontrados = validarMedidor(b);
     setErrores(encontrados);
     setError(null);
-    if (Object.keys(encontrados).length > 0) return;
+    const malCada = errorLeerCada(leerCada);
+    setErrorCada(malCada);
+    if (Object.keys(encontrados).length > 0 || malCada) return;
+    const cada = leerCadaDias(leerCada) as number | null;
 
     setGuardando(true);
     try {
       if (medidor) {
-        const cambios = cuerpoMedidor(b, borradorDe(medidor));
+        const cambios: Record<string, unknown> = { ...cuerpoMedidor(b, borradorDe(medidor)) };
+        if (cada !== medidor.lectura_cada_dias) cambios.lectura_cada_dias = cada;
         if (Object.keys(cambios).length > 0) {
           await clienteApi.patch<MedidorDetalle>(`/api/medidores/${medidor.id}`, cambios);
         }
       } else {
-        await clienteApi.post<MedidorDetalle>('/api/medidores', { maquina_id: maquinaId, ...cuerpoMedidor(b) });
+        await clienteApi.post<MedidorDetalle>('/api/medidores', {
+          maquina_id: maquinaId,
+          ...cuerpoMedidor(b),
+          lectura_cada_dias: cada,
+        });
       }
       await refrescarMedidores(queryClient);
       notifications.show({ message: medidor ? 'Medidor guardado.' : 'Se creó el medidor.', color: 'green' });
@@ -120,6 +139,25 @@ export function ModalMedidor({ abierto, maquinaId, medidor, onCerrar }: Props) {
             error={errores.lecturaInicial}
           />
         )}
+        <CampoNumero
+          label="Leer cada"
+          description="Vacío: sin aviso de atraso"
+          placeholder="Sin aviso"
+          allowDecimal={false}
+          allowNegative={false}
+          rightSection={
+            <Text size="xs" c="dimmed" pr="xs">
+              días
+            </Text>
+          }
+          rightSectionWidth={50}
+          value={leerCada}
+          onChange={(v) => {
+            setLeerCada(v);
+            setErrorCada(null);
+          }}
+          error={errorCada}
+        />
 
         {error && (
           <Alert color="red" icon={<IconAlertCircle size={16} />}>

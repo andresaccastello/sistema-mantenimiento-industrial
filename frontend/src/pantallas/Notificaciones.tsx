@@ -16,6 +16,7 @@ import { useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { clienteApi } from '../api/cliente';
 import { formatHace } from '../lib/formato';
+import { destinoAviso } from '../lib/avisos';
 import { EncabezadoPagina } from '../componentes/EncabezadoPagina';
 import { PantallaVacia } from '../componentes/PantallaVacia';
 import type { Notificacion } from '../api/tipos';
@@ -129,11 +130,9 @@ export function Notificaciones() {
       }
     }
 
-    if (notif.intervencion_id) {
-      navigate(`/intervenciones/${notif.intervencion_id}`);
-    } else if (notif.maquina_id) {
-      navigate(`/maquinas/${notif.maquina_id}`);
-    }
+    // LE1, 4.5: las lecturas atrasadas llevan a la ronda; las demás, a su intervención o máquina
+    const destino = destinoAviso(notif);
+    if (destino) navigate(destino);
   };
 
   const handleMarcarTodasLeidas = async () => {
@@ -197,7 +196,7 @@ export function Notificaciones() {
                 padding="md"
                 onClick={() => handleClickNotificacion(notif)}
                 style={{
-                  cursor: notif.intervencion_id || notif.maquina_id ? 'pointer' : 'default',
+                  cursor: destinoAviso(notif) ? 'pointer' : 'default',
                   backgroundColor: noLeida ? '#f0fdf4' : '#ffffff',
                   borderColor: noLeida ? '#bbf7d0' : 'rgba(0, 0, 0, 0.08)',
                   transition: 'background-color 150ms ease',
@@ -222,7 +221,8 @@ export function Notificaciones() {
                         • {formatHace(notif.creada_en)}
                       </Text>
                     </Group>
-                    <Text size="sm" c="#475569">
+                    {/* pre-line: el aviso de lecturas atrasadas trae una línea por medidor */}
+                    <Text size="sm" c="#475569" style={{ whiteSpace: 'pre-line' }}>
                       {notif.mensaje}
                     </Text>
                   </Stack>

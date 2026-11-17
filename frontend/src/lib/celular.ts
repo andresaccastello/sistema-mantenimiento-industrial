@@ -42,6 +42,7 @@ function limpiarRuta(ruta: string): string {
  * - /reportar y /mis-reportes: sí
  * - /intervenciones/:id: solo cuando se muestra el reporte del operario (vistaDetalle !== 'completa')
  * - /tablero y /reportes: sí
+ * - /lecturas: con MAQUINAS_REGISTRAR_LECTURAS (LE1, 4.4, D-030)
  * - todo lo demás: no
  */
 export function permitidaEnCelular(ruta: string, permisos?: PermisosAlcanceEntrada): boolean {
@@ -54,6 +55,10 @@ export function permitidaEnCelular(ruta: string, permisos?: PermisosAlcanceEntra
 
   if (/^\/intervenciones\/[^/]+$/.test(path)) {
     return vistaDetalle(permisos) !== 'completa';
+  }
+
+  if (path === '/lecturas') {
+    return verificarPermiso(permisos as PermisosEntrada, 'MAQUINAS_REGISTRAR_LECTURAS');
   }
 
   return false;
@@ -70,6 +75,15 @@ export function itemsMenuCelular(permisos: PermisosEntrada): ItemMenu[] {
       icono: 'IconTool',
     },
   ];
+
+  // LE1, 4.4: la ronda de lecturas, después de Mis reportes
+  if (verificarPermiso(permisos, 'MAQUINAS_REGISTRAR_LECTURAS')) {
+    items.push({
+      etiqueta: 'Lecturas',
+      ruta: '/lecturas',
+      icono: 'IconGauge',
+    });
+  }
 
   if (destinoInicio(permisos as PermisosAlcanceEntrada) === '/tablero') {
     items.push({

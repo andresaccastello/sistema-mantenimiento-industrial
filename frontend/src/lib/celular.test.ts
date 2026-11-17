@@ -104,6 +104,15 @@ describe('FE-129: permitidaEnCelular', () => {
     assert.equal(permitidaEnCelular('/no-existe', permisosAdmin), false);
     assert.equal(permitidaEnCelular('/otra/ruta/inexistente', permisosOperario), false);
   });
+
+  it('/lecturas está permitida con MAQUINAS_REGISTRAR_LECTURAS (LE1, 4.4)', () => {
+    const conLecturas = { ...permisosOperario, MAQUINAS_REGISTRAR_LECTURAS: 'TODAS' };
+    assert.equal(permitidaEnCelular('/lecturas', conLecturas), true);
+    assert.equal(permitidaEnCelular('/lecturas?solo_atrasados=true', conLecturas), true);
+    assert.equal(permitidaEnCelular('/lecturas', permisosOperario), false);
+    // Con solo PLANES_GESTIONAR se mira en la computadora
+    assert.equal(permitidaEnCelular('/lecturas', { PLANES_GESTIONAR: 'TODAS' }), false);
+  });
 });
 
 describe('FE-130: menú del celular para operario, responsable y administrador', () => {
@@ -141,6 +150,24 @@ describe('FE-130: menú del celular para operario, responsable y administrador',
 
     const enComputadora = itemsMenu(permisosAdmin, false);
     assert.equal(enComputadora.length, 10);
+  });
+
+  it('con MAQUINAS_REGISTRAR_LECTURAS, Lecturas va después de Mis reportes (LE1, 4.4)', () => {
+    const lecturas = { MAQUINAS_REGISTRAR_LECTURAS: 'TODAS' };
+    assert.deepEqual(
+      itemsMenu({ ...permisosOperario, ...lecturas }, true).map((i) => [i.etiqueta, i.ruta, i.icono]),
+      [
+        ['Mis reportes', '/mis-reportes', 'IconTool'],
+        ['Lecturas', '/lecturas', 'IconGauge'],
+      ]
+    );
+    assert.deepEqual(
+      itemsMenu({ ...permisosAdmin, ...lecturas }, true).map((i) => i.etiqueta),
+      ['Mis reportes', 'Lecturas', 'Tablero', 'Reportes']
+    );
+    // El destino al entrar no cambia: el operario sigue entrando a Mis reportes
+    assert.equal(destinoInicio({ ...permisosOperario, ...lecturas }, true), '/mis-reportes');
+    assert.equal(destinoInicioCelular({ ...permisosOperario, ...lecturas }), '/mis-reportes');
   });
 });
 

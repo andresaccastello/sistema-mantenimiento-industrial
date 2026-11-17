@@ -6,10 +6,11 @@ import {
   etiquetaModo,
   estadoEnvio,
   detalleEnvio,
+  destinoAviso,
 } from './avisos';
 
 describe('FE-39: lib/avisos.ts', () => {
-  it('orden de TIPOS_AVISO: los 9 códigos coinciden exactamente con REGLAS_EVENTOS_NOTIFICACION del backend', () => {
+  it('orden de TIPOS_AVISO: los 10 códigos coinciden exactamente con REGLAS_EVENTOS_NOTIFICACION del backend', () => {
     // Debe coincidir estrictamente con REGLAS_EVENTOS_NOTIFICACION de backend/functions/intervenciones/notificaciones.ts
     const codigosEsperados = [
       'FALLA_REGISTRADA',
@@ -21,6 +22,7 @@ describe('FE-39: lib/avisos.ts', () => {
       'INTERVENCION_REABIERTA',
       'DETENCION_PENDIENTE_CONFIRMACION',
       'PREVENTIVO_VENCIMIENTO',
+      'LECTURA_ATRASADA',
     ];
 
     const codigosActuales = TIPOS_AVISO.map((t) => t.tipo_evento);
@@ -93,6 +95,26 @@ describe('FE-39: lib/avisos.ts', () => {
 describe('FE-125: el tipo de aviso de vencimientos (PV5, 5)', () => {
   it('con su nombre en la configuración de avisos', () => {
     assert.equal(nombreTipoAviso('PREVENTIVO_VENCIMIENTO'), 'Vencimiento de un preventivo');
-    assert.equal(TIPOS_AVISO[TIPOS_AVISO.length - 1].tipo_evento, 'PREVENTIVO_VENCIMIENTO');
+    assert.ok(TIPOS_AVISO.some((t) => t.tipo_evento === 'PREVENTIVO_VENCIMIENTO'));
+  });
+});
+
+describe('FE-155: el aviso de lecturas atrasadas (LE1, 4.5)', () => {
+  it('con su nombre, último en la configuración de avisos', () => {
+    assert.equal(nombreTipoAviso('LECTURA_ATRASADA'), 'Lecturas atrasadas');
+    assert.equal(TIPOS_AVISO[TIPOS_AVISO.length - 1].tipo_evento, 'LECTURA_ATRASADA');
+    assert.ok(TIPOS_AVISO[TIPOS_AVISO.length - 1].destinatarios.length > 0);
+  });
+
+  it('al tocarlo, lleva a la ronda con solo los atrasados', () => {
+    assert.equal(
+      destinoAviso({ tipo_evento: 'LECTURA_ATRASADA', intervencion_id: null, maquina_id: 3 }),
+      '/lecturas?solo_atrasados=true'
+    );
+    assert.equal(destinoAviso({ tipo_evento: 'LECTURA_ATRASADA', intervencion_id: null, maquina_id: null }), '/lecturas?solo_atrasados=true');
+    // Los demás, como antes: la intervención y, si no, la máquina
+    assert.equal(destinoAviso({ tipo_evento: 'FALLA_REGISTRADA', intervencion_id: 85, maquina_id: 3 }), '/intervenciones/85');
+    assert.equal(destinoAviso({ tipo_evento: 'PREVENTIVO_VENCIMIENTO', intervencion_id: null, maquina_id: 3 }), '/maquinas/3');
+    assert.equal(destinoAviso({ intervencion_id: null }), null);
   });
 });

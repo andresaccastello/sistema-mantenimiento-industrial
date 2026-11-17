@@ -1428,6 +1428,50 @@ export interface MedidorDetalle extends MedidorLista {
   tareas: Array<{ id: number; accion: string; plan: { id: number; nombre: string; activo: boolean } }>;
 }
 
+// LE1, 3.1 y 3.2: la ronda de lecturas
+
+/** Una tarea que usa el medidor, con su estado y su uso de v_plan_tareas_estado. */
+export interface TareaRonda {
+  tarea_id: number;
+  accion: string;
+  plan: { id: number; nombre: string };
+  estado: EstadoTareaPlan;
+  proximo_uso: number | null;
+  /** Negativo si se pasó; null sin lecturas. */
+  faltan_uso: number | null;
+}
+
+/** Un medidor de `GET /api/medidores/ronda`, en el orden de una recorrida. */
+export interface MedidorRonda {
+  id: number;
+  nombre: string;
+  unidad: string;
+  lectura_cada_dias: number | null;
+  maquina: { id: number; codigo: string | null; nombre: string };
+  sector: { id: number; nombre: string };
+  ultima: { valor: number; registrada_en: string } | null;
+  dias_sin_lectura: number;
+  atrasado: boolean;
+  tareas: TareaRonda[];
+}
+
+/** El cuerpo de `POST /api/medidores/ronda`. */
+export interface CuerpoRonda {
+  lecturas: Array<{ medidor_id: number; valor: number; observacion: string | null }>;
+}
+
+/** El resultado de una lectura de la ronda, en el orden en que se mandó. */
+export type ResultadoLecturaRonda =
+  | { medidor_id: number; ok: true; lectura_id: number; tareas: TareaRonda[] }
+  | { medidor_id: number; ok: false; codigo: string; error: string };
+
+/** La respuesta de `POST /api/medidores/ronda`. */
+export interface RespuestaRonda {
+  resultados: ResultadoLecturaRonda[];
+  generadas: Array<{ plan_id: number; intervencion_id: number }>;
+  avisos: number;
+}
+
 export type OrigenLectura = 'MANUAL' | 'TAREA';
 
 /** Una lectura de `GET /api/medidores/:id/lecturas`, también la respuesta de cargarla y de anularla. */

@@ -132,3 +132,24 @@ describe('FE-76: Preventivos en el menú', () => {
     assert.ok(!sin.some((i) => i.etiqueta === 'Preventivos'));
   });
 });
+
+describe('FE-156: Lecturas en el menú de la computadora (LE1, 4.4)', () => {
+  it('aparece con MAQUINAS_REGISTRAR_LECTURAS, después de Preventivos', () => {
+    const con = itemsMenu({ INTERVENCIONES_VER: 'TODAS', PLANES_GESTIONAR: 'TODAS', MAQUINAS_REGISTRAR_LECTURAS: 'TODAS' });
+    assert.deepEqual(
+      con.map((i) => [i.etiqueta, i.ruta, i.icono]).slice(2, 5),
+      [
+        ['Preventivos', '/preventivos', 'IconCalendarCheck'],
+        ['Lecturas', '/lecturas', 'IconGauge'],
+        ['Máquinas', '/maquinas', 'IconCpu'],
+      ]
+    );
+    // Un operario de fábrica, sin Preventivos
+    const operario = itemsMenu({ INTERVENCIONES_CREAR: 'TODAS', INTERVENCIONES_VER: 'PROPIAS', MAQUINAS_REGISTRAR_LECTURAS: 'TODAS' });
+    assert.deepEqual(operario.map((i) => i.etiqueta), ['Inicio', 'Reportar falla', 'Intervenciones', 'Lecturas', 'Máquinas']);
+  });
+
+  it('con solo PLANES_GESTIONAR no aparece', () => {
+    assert.ok(!itemsMenu({ PLANES_GESTIONAR: 'TODAS' }).some((i) => i.etiqueta === 'Lecturas'));
+  });
+});

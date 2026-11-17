@@ -32,6 +32,7 @@ import {
   IconPackage,
   IconCalendarCheck,
   IconDeviceDesktop,
+  IconGauge,
 } from '@tabler/icons-react';
 import { useLocation, useNavigate, Outlet } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
@@ -40,6 +41,7 @@ import { clienteApi } from '../api/cliente';
 import { itemsMenu } from '../lib/menu';
 import { permitidaEnCelular } from '../lib/celular';
 import { useEsCelular } from '../lib/useEsCelular';
+import { confirmarSalida } from './salida';
 import { esRutaInicio } from '../lib/inicio';
 import { nombrePerfil } from '../lib/perfiles';
 import { nombreCompleto } from '../lib/personas';
@@ -59,6 +61,7 @@ const ICONOS_MENU: Record<string, React.ComponentType<{ size?: number }>> = {
   IconSettings,
   IconPackage,
   IconCalendarCheck,
+  IconGauge,
 };
 
 export function Layout() {
@@ -87,9 +90,15 @@ export function Layout() {
     location.pathname !== '/' &&
     !permitidaEnCelular(location.pathname, usuario?.permisos);
 
+  // LE1, 4.2: con lecturas sin guardar, se confirma antes de salir de la pantalla
   const handleNavegar = (ruta: string) => {
+    if (!confirmarSalida()) return;
     navigate(ruta);
     close();
+  };
+
+  const handleSalir = () => {
+    if (confirmarSalida()) salir();
   };
 
   const perfilLegible = nombrePerfil(usuario?.perfil?.nombre) || 'Usuario';
@@ -191,7 +200,7 @@ export function Layout() {
               variant="subtle"
               color="red"
               size="xs"
-              onClick={salir}
+              onClick={handleSalir}
               leftSection={<IconLogout size={14} />}
             >
               Salir
@@ -204,7 +213,7 @@ export function Layout() {
                 variant="subtle"
                 color="red"
                 size="md"
-                onClick={salir}
+                onClick={handleSalir}
                 aria-label="Salir"
               >
                 <IconLogout size={18} />
@@ -267,7 +276,7 @@ export function Layout() {
               c="red"
               onClick={() => {
                 close();
-                salir();
+                handleSalir();
               }}
               style={{ borderRadius: 4 }}
             />

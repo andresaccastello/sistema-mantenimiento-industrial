@@ -32,6 +32,7 @@ import { DetalleRepuesto } from '../pantallas/DetalleRepuesto';
 import { Preventivos } from '../pantallas/Preventivos';
 import { DetallePlan } from '../pantallas/DetallePlan';
 import { NuevoPlan } from '../pantallas/NuevoPlan';
+import { Lecturas } from '../pantallas/Lecturas';
 import { vistaDetalle } from '../lib/intervenciones';
 
 // Componentes generales
@@ -163,6 +164,8 @@ export function RutasApp() {
             </RutaProtegida>
           }
         />
+        {/* LE1, 4.4: con MAQUINAS_REGISTRAR_LECTURAS o PLANES_GESTIONAR; lo controla la pantalla */}
+        <Route path="/lecturas" element={<Lecturas />} />
         <Route
           path="/maquinas"
           element={<MaquinasLista />}

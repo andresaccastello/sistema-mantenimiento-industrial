@@ -4,6 +4,7 @@ import { IconBell } from '@tabler/icons-react';
 import { useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { clienteApi } from '../api/cliente';
+import { confirmarSalida } from '../app/salida';
 import type { ContadorNotificaciones } from '../api/tipos';
 
 export function Campana() {
@@ -34,7 +35,7 @@ export function Campana() {
           color="gray"
           size="lg"
           radius="sm"
-          onClick={() => navigate('/notificaciones')}
+          onClick={() => confirmarSalida() && navigate('/notificaciones')}
           aria-label="Notificaciones"
         >
           <IconBell size={20} stroke={1.5} />

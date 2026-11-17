@@ -84,6 +84,15 @@ export function itemsMenu(permisos: PermisosEntrada, enCelular = false): ItemMen
     });
   }
 
+  // LE1, 4.4: la ronda de lecturas, después de Preventivos
+  if (verificarPermiso(permisos, 'MAQUINAS_REGISTRAR_LECTURAS')) {
+    items.push({
+      etiqueta: 'Lecturas',
+      ruta: '/lecturas',
+      icono: 'IconGauge',
+    });
+  }
+
   // Máquinas siempre visible
   items.push({
     etiqueta: 'Máquinas',

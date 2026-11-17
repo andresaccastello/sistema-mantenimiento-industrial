@@ -12,7 +12,7 @@ export interface TipoAvisoInfo {
 }
 
 /**
- * Los 9 tipos de eventos notificables en el mismo orden que REGLAS_EVENTOS_NOTIFICACION del backend.
+ * Los 10 tipos de eventos notificables en el mismo orden que REGLAS_EVENTOS_NOTIFICACION del backend.
  */
 export const TIPOS_AVISO: readonly TipoAvisoInfo[] = [
   {
@@ -63,7 +63,28 @@ export const TIPOS_AVISO: readonly TipoAvisoInfo[] = [
     destinatarios:
       'Al responsable del plan o, si no tiene, a quienes gestionan los planes del sector. Es de prioridad alta si vence una tarea de una máquina de criticidad de prioridad alta.',
   },
+  {
+    tipo_evento: 'LECTURA_ATRASADA',
+    nombre: 'Lecturas atrasadas',
+    destinatarios:
+      'Al responsable de cada plan que usa el medidor o, si no tiene, a quienes gestionan los planes del sector. Va uno por persona, con todos sus medidores atrasados juntos, y una sola vez por atraso.',
+  },
 ] as const;
+
+/**
+ * Adónde lleva un aviso al tocarlo: las lecturas atrasadas, a la ronda con solo los atrasados
+ * (LE1, 4.5); si no, a su intervención o a su máquina. Sin destino, null.
+ */
+export function destinoAviso(n: {
+  tipo_evento?: string;
+  intervencion_id: number | null;
+  maquina_id?: number | null;
+}): string | null {
+  if (n.tipo_evento === 'LECTURA_ATRASADA') return '/lecturas?solo_atrasados=true';
+  if (n.intervencion_id) return `/intervenciones/${n.intervencion_id}`;
+  if (n.maquina_id) return `/maquinas/${n.maquina_id}`;
+  return null;
+}
 
 export function nombreTipoAviso(tipo: string): string {
   const item = TIPOS_AVISO.find((t) => t.tipo_evento === tipo);

@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { Paper, Stack, Group, Title, Button, Divider, Table, Text, Badge, Skeleton, Menu, ActionIcon, Tooltip } from '@mantine/core';
-import { IconPlus, IconDotsVertical, IconList, IconEdit, IconBan, IconRotateClockwise, IconGauge } from '@tabler/icons-react';
+import { IconPlus, IconDotsVertical, IconList, IconEdit, IconBan, IconRotateClockwise, IconGauge, IconRoute } from '@tabler/icons-react';
 import { clienteApi } from '../../api/cliente';
 import type { MedidorLista } from '../../api/tipos';
 import { useAuth } from '../../auth/AuthContext';
@@ -48,6 +49,14 @@ export function BloqueMedidoresMaquina({ maquinaId, maquinaActiva }: Props) {
     !m.activo && (
       <Badge color="gray" variant="outline" size="sm" style={{ flexShrink: 0 }}>
         Inactivo
+      </Badge>
+    );
+
+  // LE1, 4.5: con alguna tarea activa y más días sin lectura que los que dice el medidor
+  const insigniaAtrasado = (m: MedidorLista) =>
+    m.atrasado && (
+      <Badge color="red" variant="filled" size="sm" style={{ flexShrink: 0 }}>
+        Atrasado
       </Badge>
     );
 
@@ -120,11 +129,26 @@ export function BloqueMedidoresMaquina({ maquinaId, maquinaActiva }: Props) {
       <Stack gap="sm">
         <Group justify="space-between" wrap="wrap">
           <Title order={4}>Medidores</Title>
-          {gestiona && (
-            <Button size="xs" variant="light" color="marca" leftSection={<IconPlus size={14} />} onClick={() => setEnEdicion('nuevo')}>
-              Nuevo medidor
-            </Button>
-          )}
+          <Group gap="xs" wrap="wrap">
+            {/* LE1, 4.5: la ronda, con solo esta máquina */}
+            {lista.some((m) => m.activo) && (
+              <Button
+                component={Link}
+                to={`/lecturas?maquina_id=${maquinaId}`}
+                size="xs"
+                variant="subtle"
+                color="marca"
+                leftSection={<IconRoute size={14} />}
+              >
+                Cargar en ronda
+              </Button>
+            )}
+            {gestiona && (
+              <Button size="xs" variant="light" color="marca" leftSection={<IconPlus size={14} />} onClick={() => setEnEdicion('nuevo')}>
+                Nuevo medidor
+              </Button>
+            )}
+          </Group>
         </Group>
         <Divider />
 
@@ -147,6 +171,7 @@ export function BloqueMedidoresMaquina({ maquinaId, maquinaActiva }: Props) {
                           {m.nombre}
                         </Text>
                         {insigniaInactivo(m)}
+                        {insigniaAtrasado(m)}
                       </Group>
                       {menu(m)}
                     </Group>
@@ -178,6 +203,7 @@ export function BloqueMedidoresMaquina({ maquinaId, maquinaActiva }: Props) {
                             {m.nombre}
                           </Text>
                           {insigniaInactivo(m)}
+                          {insigniaAtrasado(m)}
                         </Group>
                       </Table.Td>
                       <Table.Td>
