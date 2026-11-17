@@ -48,18 +48,29 @@ export interface RecepcionPlaneada {
   usar: boolean;
   cantidadUso: number;
   costoUnitario: number | null;
+  /** LE1, 7.2: el stock disponible antes de recibir; null si todavía no se conoce. */
+  stockAntes: number | null;
+}
+
+const redondear = (n: number) => Math.round(n * 1000) / 1000;
+
+/** " (total: 7)": el stock que queda después de recibir, si se conoce el de antes. */
+function textoTotal(stockAntes: number | null, suma: number): string {
+  return stockAntes === null ? '' : ` (total: ${formatCantidad(redondear(stockAntes + suma))})`;
 }
 
 /**
  * La línea que resume lo que va a pasar al recibir, por ejemplo:
- * "Entran 10 al stock y se usan 4 en esta intervención. Quedan 6 en stock."
+ * "Entran 5 al stock y se usan 2 en esta intervención. Quedan 3 más en stock (total: 5)."
+ * "Entran 5 al stock (total: 7)."
  * "Se usa en esta intervención: 1 × $ 85.000,00."
  */
 export function textoResumenRecepcion(r: RecepcionPlaneada): string {
   const recibido = formatCantidad(r.cantidad);
   if (r.usar && r.llevaStock) {
-    const quedan = Math.round((r.cantidad - r.cantidadUso) * 1000) / 1000;
-    const resto = quedan > 0 ? `Quedan ${formatCantidad(quedan)} en stock.` : 'No queda nada en stock.';
+    const quedan = redondear(r.cantidad - r.cantidadUso);
+    const total = textoTotal(r.stockAntes, quedan);
+    const resto = quedan > 0 ? `Quedan ${formatCantidad(quedan)} más en stock${total}.` : `No queda nada más en stock${total}.`;
     return `Entran ${recibido} al stock y se usan ${formatCantidad(r.cantidadUso)} en esta intervención. ${resto}`;
   }
   if (r.usar) {
@@ -68,7 +79,7 @@ export function textoResumenRecepcion(r: RecepcionPlaneada): string {
       : `Se usa en esta intervención: ${recibido}.`;
   }
   if (r.ingresarStock) {
-    return `Entran ${recibido} al stock.`;
+    return `Entran ${recibido} al stock${textoTotal(r.stockAntes, r.cantidad)}.`;
   }
   return 'Se recibe sin entrar al stock.';
 }

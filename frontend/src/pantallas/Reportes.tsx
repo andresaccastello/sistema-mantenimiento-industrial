@@ -1,10 +1,9 @@
 import { useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import { Stack, Title, Tabs, Skeleton, Alert, Text } from '@mantine/core';
-import { useMediaQuery } from '@mantine/hooks';
 import { useQuery } from '@tanstack/react-query';
 import { clienteApi } from '../api/cliente';
-import { CORTE_CELULAR } from '../lib/celular';
+import { useEsCelular } from '../lib/useEsCelular';
 import { ResumenCelular } from '../componentes/reportes/ResumenCelular';
 import {
   Planta,
@@ -42,7 +41,7 @@ import { veReporteCompras } from '../lib/compras';
 import { useAuth } from '../auth/AuthContext';
 
 export function Reportes() {
-  const esCelular = Boolean(useMediaQuery(CORTE_CELULAR));
+  const esCelular = useEsCelular();
 
   if (esCelular) {
     return (

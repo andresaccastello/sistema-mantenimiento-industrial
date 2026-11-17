@@ -1,12 +1,11 @@
 import React, { Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router';
 import { Center, Loader } from '@mantine/core';
-import { useMediaQuery } from '@mantine/hooks';
 import { Layout } from './Layout';
 import { RutaProtegida } from './RutaProtegida';
 import { useAuth } from '../auth/AuthContext';
 import { destinoInicio } from '../lib/inicio';
-import { CORTE_CELULAR } from '../lib/celular';
+import { useEsCelular } from '../lib/useEsCelular';
 
 // Pantallas completas
 import { Ingreso } from '../pantallas/Ingreso';
@@ -50,8 +49,8 @@ const DevAppLazy = import.meta.env.DEV
 
 function RedireccionInicio() {
   const { usuario } = useAuth();
-  // Se lee en el primer render, como en MisReportes: el destino no puede cambiar a mitad de camino
-  const esCelular = Boolean(useMediaQuery(CORTE_CELULAR, undefined, { getInitialValueInEffect: false }));
+  // Se lee en el primer render (useEsCelular): el destino no puede cambiar a mitad de camino
+  const esCelular = useEsCelular();
   const destino = destinoInicio(usuario?.permisos, esCelular);
   return <Navigate to={destino} replace />;
 }

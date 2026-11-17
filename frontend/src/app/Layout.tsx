@@ -16,7 +16,7 @@ import {
   Card,
   ThemeIcon,
 } from '@mantine/core';
-import { useDisclosure, useMediaQuery } from '@mantine/hooks';
+import { useDisclosure } from '@mantine/hooks';
 import {
   IconHome,
   IconAlertTriangle,
@@ -38,7 +38,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
 import { clienteApi } from '../api/cliente';
 import { itemsMenu } from '../lib/menu';
-import { CORTE_CELULAR, permitidaEnCelular } from '../lib/celular';
+import { permitidaEnCelular } from '../lib/celular';
+import { useEsCelular } from '../lib/useEsCelular';
 import { esRutaInicio } from '../lib/inicio';
 import { nombrePerfil } from '../lib/perfiles';
 import { nombreCompleto } from '../lib/personas';
@@ -67,7 +68,7 @@ export function Layout() {
   const navigate = useNavigate();
 
   const esObligatorio = Boolean(usuario?.debe_cambiar_password);
-  const esCelular = Boolean(useMediaQuery(CORTE_CELULAR));
+  const esCelular = useEsCelular();
 
   const { data: config } = useQuery<ConfiguracionPublica>({
     queryKey: ['configuracion-publica'],

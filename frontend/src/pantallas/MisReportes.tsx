@@ -13,13 +13,12 @@ import {
   Center,
 } from '@mantine/core';
 import { IconAlertTriangle } from '@tabler/icons-react';
-import { useMediaQuery } from '@mantine/hooks';
 import { useNavigate, Navigate } from 'react-router';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
 import { clienteApi } from '../api/cliente';
 import { destinoInicio } from '../lib/inicio';
-import { CORTE_CELULAR } from '../lib/celular';
+import { useEsCelular } from '../lib/useEsCelular';
 import { etiquetaMaquina } from '../lib/maquinas';
 import { formatHace } from '../lib/formato';
 import { nombreCompleto } from '../lib/personas';
@@ -102,7 +101,7 @@ export function MisReportes() {
   const { usuario } = useAuth();
   // Se lee en el primer render: si arrancara en false, en el celular redirigiría a "/" y
   // "/" volvería acá, en un bucle sin fin (pantalla en blanco)
-  const esCelular = Boolean(useMediaQuery(CORTE_CELULAR, undefined, { getInitialValueInEffect: false }));
+  const esCelular = useEsCelular();
 
   // En computadora, redirigir si no es el destino de inicio del perfil
   if (!esCelular && destinoInicio(usuario?.permisos) !== '/mis-reportes') {

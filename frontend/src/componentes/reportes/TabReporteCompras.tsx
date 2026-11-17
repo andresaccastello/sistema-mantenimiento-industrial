@@ -221,7 +221,7 @@ export function TabReporteCompras({ desde, hasta }: TabReporteComprasProps) {
                     <Table.Tr>
                       <Table.Th style={sinCorte}>Fecha</Table.Th>
                       <Table.Th>Proveedor</Table.Th>
-                      <Table.Th>Comprobante</Table.Th>
+                      <Table.Th style={sinCorte}>Comprobante</Table.Th>
                       <Table.Th>Repuesto o descripción</Table.Th>
                       <Table.Th style={sinCorte}>Cantidad</Table.Th>
                       <Table.Th style={sinCorte}>Costo unitario</Table.Th>
@@ -240,7 +240,7 @@ export function TabReporteCompras({ desde, hasta }: TabReporteComprasProps) {
                             {nombreProveedor(f.proveedor)}
                           </Text>
                         </Table.Td>
-                        <Table.Td>
+                        <Table.Td style={sinCorte}>
                           <Text size="sm" c={f.comprobante ? undefined : 'dimmed'}>
                             {f.comprobante ?? '—'}
                           </Text>

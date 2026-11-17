@@ -20,7 +20,6 @@ import {
   IconCircleCheck,
   IconInfoCircle,
 } from '@tabler/icons-react';
-import { useMediaQuery } from '@mantine/hooks';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
@@ -28,7 +27,7 @@ import { useAuth } from '../auth/AuthContext';
 import { clienteApi } from '../api/cliente';
 import { EncabezadoPagina } from '../componentes/EncabezadoPagina';
 import { EstadoBadge } from '../componentes/EstadoBadge';
-import { CORTE_CELULAR } from '../lib/celular';
+import { useEsCelular } from '../lib/useEsCelular';
 import {
   etiquetaMaquina,
   agruparMaquinas,
@@ -46,7 +45,7 @@ export function ReportarFalla() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
-  const esCelular = Boolean(useMediaQuery(CORTE_CELULAR));
+  const esCelular = useEsCelular();
 
   // Estados del formulario
   const [maquinaId, setMaquinaId] = useState<string | null>(null);

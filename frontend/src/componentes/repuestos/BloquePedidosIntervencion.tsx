@@ -156,9 +156,10 @@ export function BloquePedidosIntervencion({
                   key={p.id}
                   p="xs"
                   withBorder
-                  style={{
-                    backgroundColor: estaAbierto ? 'var(--mantine-color-body)' : 'var(--mantine-color-gray-0)',
-                  }}
+                  // LE1, 7.3: con bg y no con style.backgroundColor. El tema le pone bg a todo Paper
+                  // (background, la propiedad corta), y mezclarla con backgroundColor hacía saltar
+                  // el aviso de React cuando el pedido cambiaba de abierto a recibido
+                  bg={estaAbierto ? 'var(--mantine-color-body)' : 'var(--mantine-color-gray-0)'}
                 >
                   <Group justify="space-between" align="center" wrap="wrap">
                     <Stack gap={2}>

@@ -105,7 +105,10 @@ export function ModalRecibirPedido({
   const cantidadPedido = pedido.cantidad;
   const costoNumero = puedeCargarCostos && costoUnitario !== '' && !isNaN(Number(costoUnitario)) ? Number(costoUnitario) : null;
   const usoListo = usarMarcado && repuesto !== null;
+  // LE1, 7.2: el stock de antes, para el total que queda
+  const opcionRepuesto = repuesto ? opciones?.find((o) => o.id === repuesto.id) : undefined;
   const resumen = textoResumenRecepcion({
+    stockAntes: opcionRepuesto ? opcionRepuesto.cantidad_disponible : null,
     cantidad: cantidadPedido,
     llevaStock,
     ingresarStock: ingresarEfectivo,

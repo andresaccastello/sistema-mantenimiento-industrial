@@ -596,8 +596,6 @@ test('Etapa PC1 — Pedidos que se usan al recibir y compras (PC-01 a PC-15)', a
       const pedLibre = await crearPedido(intId, { descripcion: 'Junta de tapa especial', cantidad: 1 });
       const pedSinProv = await crearPedido(intId, { repuesto_id: repSinProv, cantidad: 1 });
 
-      const desde = new Date((await client.query('SELECT NOW() AS t')).rows[0].t).toISOString();
-
       // 1. Ingreso manual con proveedor
       const m1 = await pedir('POST', `/api/repuestos/${repManual}/movimientos`, R.token, {
         tipo: 'INGRESO', cantidad: 100, costo_unitario: 5000, proveedor_id: provA, comprobante: `A-0001-${suf}`,
@@ -621,7 +619,26 @@ test('Etapa PC1 — Pedidos que se usan al recibir y compras (PC-01 a PC-15)', a
       const r6 = await recibir(intId, pedSinProv, { ingresar_stock: true, costo_unitario: 50 });
       assert.strictEqual(r6.status, 200, JSON.stringify(r6.cuerpo));
 
-      const hasta = new Date((await client.query('SELECT NOW() AS t')).rows[0].t).toISOString();
+      // LE1, 7.1: la ventana va del primero al último momento de estas seis compras, como quedaron
+      // guardados, con microsegundos. Un ingreso lleva la hora de la base y un pedido sin stock, la
+      // de la API: así entran todas sin depender de la velocidad ni de la diferencia entre los relojes
+      const ventana = (await client.query(
+        `WITH m AS (
+           SELECT realizado_en AS t FROM movimientos_stock WHERE id = ANY($1)
+           UNION ALL
+           SELECT COALESCE(ms.realizado_en, pr.recibido_en)
+           FROM pedidos_repuesto pr
+           LEFT JOIN movimientos_stock ms ON ms.id = pr.movimiento_id
+           WHERE pr.id = ANY($2)
+         )
+         SELECT to_char(min(t) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS desde,
+                to_char(max(t) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS hasta
+         FROM m`,
+        [[m1.cuerpo.movimiento.id, m2.cuerpo.movimiento.id], [pedStock, pedSin, pedLibre, pedSinProv]]
+      )).rows[0];
+      assert.ok(Number(m1.cuerpo.movimiento.id) > 0 && Number(m2.cuerpo.movimiento.id) > 0, 'Los dos ingresos manuales tienen id');
+      const desde: string = ventana.desde;
+      const hasta: string = ventana.hasta;
       const hoy: string = (await client.query(`SELECT to_char(hoy_instalacion(), 'YYYY-MM-DD') AS h`)).rows[0].h;
 
       const r = await pedir('GET', `/api/reportes/compras?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`, A.token);
@@ -691,9 +708,19 @@ test('Etapa PC1 — Pedidos que se usan al recibir y compras (PC-01 a PC-15)', a
       assert.deepStrictEqual(porProv.cuerpo.por_proveedor.map((g: any) => g.proveedor.id), [provB]);
 
       // Período: antes de la ventana no está ninguna de estas compras; con el proveedor A están
-      // solo las recepciones de PC-01 (3, sin costo) y PC-02 (10 a $150)
-      const antesDesde = new Date(new Date(pc13.desde).getTime() - 86400000).toISOString();
-      const antesHasta = new Date(new Date(pc13.desde).getTime() - 1000).toISOString();
+      // solo las recepciones de PC-01 (3, sin costo) y PC-02 (10 a $150).
+      // LE1, 7.1: la ventana "antes" termina en el momento real del último ingreso de esas dos
+      // recepciones, leído de la base con microsegundos. Las compras del proveedor A son todas
+      // ingresos al stock, con la hora de la base, y el de PC-13 es posterior.
+      const ventanaAntes = (await client.query(
+        `SELECT to_char((min(realizado_en) - INTERVAL '1 day') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS desde,
+                to_char(max(realizado_en) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS hasta
+         FROM movimientos_stock
+         WHERE tipo = 'INGRESO' AND proveedor_id = $1 AND comprobante IS DISTINCT FROM $2`,
+        [provA, pc13.comprobantes[0]]
+      )).rows[0];
+      const antesDesde: string = ventanaAntes.desde;
+      const antesHasta: string = ventanaAntes.hasta;
       const antes = await pedir(
         'GET',
         `/api/reportes/compras?desde=${encodeURIComponent(antesDesde)}&hasta=${encodeURIComponent(antesHasta)}&proveedor_id=${provA}`,

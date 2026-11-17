@@ -77,24 +77,38 @@ describe('FE-145: cuándo ofrecer reanudar (6.3)', () => {
 });
 
 describe('FE-146: el texto que resume la recepción (6.2)', () => {
-  const base = { cantidad: 10, llevaStock: true, ingresarStock: true, usar: true, cantidadUso: 4, costoUnitario: 150 };
+  const base = { cantidad: 10, llevaStock: true, ingresarStock: true, usar: true, cantidadUso: 4, costoUnitario: 150, stockAntes: 0 };
   it('con stock: entran, se usan y quedan', () => {
     assert.equal(
       textoResumenRecepcion(base),
-      'Entran 10 al stock y se usan 4 en esta intervención. Quedan 6 en stock.'
+      'Entran 10 al stock y se usan 4 en esta intervención. Quedan 6 más en stock (total: 6).'
     );
     assert.equal(
       textoResumenRecepcion({ ...base, cantidadUso: 10 }),
-      'Entran 10 al stock y se usan 10 en esta intervención. No queda nada en stock.'
+      'Entran 10 al stock y se usan 10 en esta intervención. No queda nada más en stock (total: 0).'
+    );
+    // LE1, 7.2: con stock de antes, el total suma lo que había
+    assert.equal(
+      textoResumenRecepcion({ ...base, cantidad: 5, cantidadUso: 2, stockAntes: 2 }),
+      'Entran 5 al stock y se usan 2 en esta intervención. Quedan 3 más en stock (total: 5).'
+    );
+    assert.equal(
+      textoResumenRecepcion({ ...base, cantidad: 5, usar: false, stockAntes: 2 }),
+      'Entran 5 al stock (total: 7).'
+    );
+    // Sin conocer el stock de antes, sin total
+    assert.equal(
+      textoResumenRecepcion({ ...base, stockAntes: null }),
+      'Entran 10 al stock y se usan 4 en esta intervención. Quedan 6 más en stock.'
     );
   });
   it('sin stock: se usa todo, con o sin costo', () => {
-    const sinStock = { cantidad: 1, llevaStock: false, ingresarStock: false, usar: true, cantidadUso: 1, costoUnitario: 85000 };
+    const sinStock = { cantidad: 1, llevaStock: false, ingresarStock: false, usar: true, cantidadUso: 1, costoUnitario: 85000, stockAntes: null };
     assert.equal(textoResumenRecepcion(sinStock), 'Se usa en esta intervención: 1 × $ 85.000,00.');
     assert.equal(textoResumenRecepcion({ ...sinStock, costoUnitario: null }), 'Se usa en esta intervención: 1.');
   });
   it('sin usar', () => {
-    assert.equal(textoResumenRecepcion({ ...base, usar: false }), 'Entran 10 al stock.');
+    assert.equal(textoResumenRecepcion({ ...base, usar: false }), 'Entran 10 al stock (total: 10).');
     assert.equal(
       textoResumenRecepcion({ ...base, usar: false, ingresarStock: false, llevaStock: false }),
       'Se recibe sin entrar al stock.'
