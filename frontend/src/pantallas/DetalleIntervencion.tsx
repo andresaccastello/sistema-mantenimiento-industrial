@@ -1,9 +1,9 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import {
-  Stack, Group, Card, Text, Badge, Button, Box,
-  Title, Timeline, Loader, Center, Anchor, Menu, Grid,
+  Stack, Group, Card, Text, Badge, Button,
+  Title, Loader, Center, Anchor, Menu, Grid,
 } from '@mantine/core';
-import { IconDotsVertical, IconCheck } from '@tabler/icons-react';
+import { IconDotsVertical } from '@tabler/icons-react';
 import { useParams, useNavigate, useLocation, Link } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
@@ -28,18 +28,17 @@ import {
 } from '../componentes/acciones';
 
 import { useAuth } from '../auth/AuthContext';
-import { etiquetaMaquina } from '../lib/maquinas';
-import { formatFechaHora, formatDuracion, parsearId } from '../lib/formato';
-import { nombreCompleto, textoAutor } from '../lib/personas';
-import { eventosHistorial } from '../lib/intervenciones';
+import { formatFechaHora, parsearId } from '../lib/formato';
 import { ordenarAcciones, etiquetaAccion, CodigoAccion } from '../lib/acciones';
 import { BloqueRepuestosIntervencion } from '../componentes/repuestos/BloqueRepuestosIntervencion';
 import { BloquePedidosIntervencion } from '../componentes/repuestos/BloquePedidosIntervencion';
 import { BloqueCostosIntervencion } from '../componentes/costos/BloqueCostosIntervencion';
 import { BloqueTareasIntervencion } from '../componentes/preventivos/BloqueTareasIntervencion';
 import { PlanDeIntervencion } from '../componentes/preventivos/PlanDeIntervencion';
-import { minutosEntre } from '../lib/fechas';
-import { obtenerInfoEstado } from '../lib/estados';
+import { DatosIntervencion } from '../componentes/intervenciones/DatosIntervencion';
+import { DetencionesIntervencion } from '../componentes/intervenciones/DetencionesIntervencion';
+import { HistorialIntervencion } from '../componentes/intervenciones/HistorialIntervencion';
+import { TiemposIntervencion } from '../componentes/intervenciones/TiemposIntervencion';
 import { mensajeError, requiereRecargar, ApiError } from '../lib/errores';
 import type { IntervencionDetalle, PeriodoDetencion } from '../api/tipos';
 
@@ -171,7 +170,6 @@ export function DetalleIntervencion() {
   const menuPeligrosas = menu.filter((a) => a === 'CANCELAR' || a === 'ELIMINAR');
 
   const tieneDetencionAbierta = Boolean(periodoAbierto);
-  const eventos = eventosHistorial(reporte);
   const esPreventivo = reporte.tipo === 'PREVENTIVO';
 
   return (
@@ -285,31 +283,7 @@ export function DetalleIntervencion() {
             <BloqueCostosIntervencion intervencionId={reporte.id} estadoIntervencion={reporte.estado} />
 
             {/* 3. Historial */}
-            <Card withBorder radius="md" p="md">
-              <Stack gap="md">
-                <Text fw={700} size="sm" tt="uppercase" c="#64748b">Historial</Text>
-                {eventos.length === 0 ? (
-                  <Text size="sm" c="dimmed">Sin eventos registrados.</Text>
-                ) : (
-                  <Timeline active={eventos.length} bulletSize={20} lineWidth={2}>
-                    {eventos.map((ev) => {
-                      const colorPunto = ev.estado ? obtenerInfoEstado('intervencion', ev.estado).color : 'gray';
-                      return (
-                        <Timeline.Item key={ev.clave} color={colorPunto} title={<Text fw={600} size="sm">{ev.titulo}</Text>}>
-                          <Text size="xs" c="dimmed">{formatFechaHora(ev.fecha)} · por {nombreCompleto(ev.persona)}</Text>
-                          {ev.mostrarRegistrado && (
-                            <Text size="xs" c="dimmed">cargado el {formatFechaHora(ev.registrado)}</Text>
-                          )}
-                          {ev.detalle && (
-                            <Text size="xs" c="#64748b" lineClamp={3} mt={2}>{ev.detalle}</Text>
-                          )}
-                        </Timeline.Item>
-                      );
-                    })}
-                  </Timeline>
-                )}
-              </Stack>
-            </Card>
+            <HistorialIntervencion reporte={reporte} />
           </Stack>
         </Grid.Col>
 
@@ -317,155 +291,20 @@ export function DetalleIntervencion() {
         <Grid.Col span={{ base: 12, lg: 4 }}>
           <Stack gap="md">
             {/* 1. Datos */}
-            <Card withBorder radius="md" p="md">
-              <Stack gap="xs">
-                <Text fw={700} size="sm" tt="uppercase" c="#64748b">Datos</Text>
-                <Group justify="space-between" align="flex-start">
-                  <Text size="sm" c="dimmed">Máquina</Text>
-                  <Text
-                    component={Link}
-                    to={`/maquinas/${reporte.maquina.id}`}
-                    size="sm"
-                    fw={600}
-                    c="blue"
-                    ta="right"
-                    style={{ textDecoration: 'none' }}
-                  >
-                    {etiquetaMaquina(reporte.maquina)}
-                  </Text>
-                </Group>
-                <Group justify="space-between" align="flex-start">
-                  <Text size="sm" c="dimmed">Sector</Text>
-                  <Text size="sm">{reporte.maquina.sector.nombre}</Text>
-                </Group>
-                <Group justify="space-between" align="flex-start">
-                  <Text size="sm" c="dimmed">Estado de la máquina</Text>
-                  <EstadoBadge entidad="maquina" estado={reporte.maquina.estado} />
-                </Group>
-                <Group justify="space-between" align="flex-start">
-                  <Text size="sm" c="dimmed">{esPreventivo ? 'Generada por' : 'Reportada por'}</Text>
-                  <Text size="sm">{textoAutor(reporte.creado_por)}</Text>
-                </Group>
-                <Group justify="space-between" align="flex-start">
-                  <Text size="sm" c="dimmed">{esPreventivo ? 'Generada' : 'Reportada'}</Text>
-                  <Text size="sm">{formatFechaHora(reporte.fecha_creacion)}</Text>
-                </Group>
-                <Group justify="space-between" align="flex-start">
-                  <Text size="sm" c="dimmed">Responsable</Text>
-                  <Text size="sm">{reporte.responsable ? nombreCompleto(reporte.responsable) : 'Sin asignar'}</Text>
-                </Group>
-                <Group justify="space-between" align="flex-start">
-                  <Text size="sm" c="dimmed">Inicio del trabajo</Text>
-                  <Text size="sm">{reporte.fecha_inicio ? formatFechaHora(reporte.fecha_inicio) : '—'}</Text>
-                </Group>
-                {reporte.fecha_finalizacion && (
-                  <Group justify="space-between" align="flex-start">
-                    <Text size="sm" c="dimmed">Finalización</Text>
-                    <Text size="sm">{formatFechaHora(reporte.fecha_finalizacion)}</Text>
-                  </Group>
-                )}
-              </Stack>
-            </Card>
+            <DatosIntervencion reporte={reporte} />
 
             {/* 2. Tiempos */}
-            <Card withBorder radius="md" p="md">
-              <Stack gap="xs">
-                <Text fw={700} size="sm" tt="uppercase" c="#64748b">Tiempos</Text>
-                <Group justify="space-between" align="center">
-                  <Text size="sm" c="dimmed">Espera hasta empezar</Text>
-                  <Group gap={6}>
-                    <Text size="sm" fw={600}>{formatDuracion(reporte.tiempos.espera_minutos)}</Text>
-                    {reporte.tiempos.espera_en_curso && <Badge color="yellow" variant="light" size="xs">en curso</Badge>}
-                  </Group>
-                </Group>
-                <Group justify="space-between" align="center">
-                  <Text size="sm" c="dimmed">Duración del trabajo</Text>
-                  <Group gap={6}>
-                    <Text size="sm" fw={600}>{formatDuracion(reporte.tiempos.duracion_bruta_minutos)}</Text>
-                    {reporte.tiempos.trabajo_en_curso && <Badge color="yellow" variant="light" size="xs">en curso</Badge>}
-                  </Group>
-                </Group>
-                <Box>
-                  <Group justify="space-between" align="center">
-                    <Text size="sm" c="dimmed">Trabajo efectivo</Text>
-                    <Group gap={6}>
-                      <Text size="sm" fw={600}>{formatDuracion(reporte.tiempos.duracion_neta_minutos)}</Text>
-                      {reporte.estado === 'EN_PROCESO' && <Badge color="yellow" variant="light" size="xs">en curso</Badge>}
-                    </Group>
-                  </Group>
-                  <Text size="xs" c="dimmed">sin contar la espera de repuestos</Text>
-                </Box>
-                <Box>
-                  <Group justify="space-between" align="center">
-                    <Text size="sm" c="dimmed">Tiempo total</Text>
-                    <Text size="sm" fw={600}>{formatDuracion(reporte.tiempos.tiempo_total_minutos)}</Text>
-                  </Group>
-                  <Text size="xs" c="dimmed">del reporte al cierre</Text>
-                </Box>
-                <Group justify="space-between" align="center">
-                  <Text size="sm" c="dimmed">Máquina detenida</Text>
-                  <Group gap={6}>
-                    <Text size="sm" fw={600}>{formatDuracion(reporte.tiempos.inactividad_minutos)}</Text>
-                    {reporte.tiempos.inactividad_en_curso && <Badge color="yellow" variant="light" size="xs">en curso</Badge>}
-                  </Group>
-                </Group>
-              </Stack>
-            </Card>
+            <TiemposIntervencion reporte={reporte} />
 
             {/* 3. Detenciones de la máquina */}
-            <Card withBorder radius="md" p="md">
-              <Stack gap="sm">
-                <Text fw={700} size="sm" tt="uppercase" c="#64748b">Detenciones de la máquina</Text>
-                {!reporte.periodos_detencion || reporte.periodos_detencion.length === 0 ? (
-                  <Text size="sm" c="dimmed">{esPreventivo ? 'Esta intervención no detuvo la máquina.' : 'Esta falla no detuvo la máquina.'}</Text>
-                ) : (
-                  reporte.periodos_detencion.map((p) => {
-                    const estaAbierto = p.esta_abierto || p.hasta === null;
-                    return (
-                      <Card key={p.id} withBorder radius="sm" p="xs" bg="#f8fafc">
-                        <Stack gap={4}>
-                          <Group justify="space-between" align="center" wrap="wrap">
-                            <Text size="sm" fw={600}>
-                              {formatFechaHora(p.desde)} →{' '}
-                              {estaAbierto ? <Text span c="red" fw={700}>sigue detenida</Text> : formatFechaHora(p.hasta)}
-                            </Text>
-                            <Group gap={6}>
-                              <Text size="xs">{formatDuracion(minutosEntre(p.desde, p.hasta, new Date()))}</Text>
-                              {estaAbierto && <Badge color="yellow" variant="light" size="xs">en curso</Badge>}
-                            </Group>
-                          </Group>
-                          <Text size="xs" c="dimmed">
-                            Registrada por {nombreCompleto(p.abierto_por)}
-                            {p.observacion ? `: ${p.observacion}` : ''}
-                          </Text>
-                          {!estaAbierto && p.confirmado_por && (
-                            <Text size="xs" c="dimmed">
-                              Volvió a funcionar, confirmado por {nombreCompleto(p.confirmado_por)}
-                              {p.observacion_confirmacion ? ` (${p.observacion_confirmacion})` : ''}
-                            </Text>
-                          )}
-                          {estaAbierto && puedeConfirmarRecuperacion && (
-                            <Button
-                              size="xs"
-                              variant="light"
-                              color="green"
-                              mt={4}
-                              leftSection={<IconCheck size={14} />}
-                              onClick={() => {
-                                setPeriodoParaRecuperar(p);
-                                setModalActivo('CONFIRMAR_RECUPERACION');
-                              }}
-                            >
-                              Confirmar que volvió a funcionar
-                            </Button>
-                          )}
-                        </Stack>
-                      </Card>
-                    );
-                  })
-                )}
-              </Stack>
-            </Card>
+            <DetencionesIntervencion
+              reporte={reporte}
+              puedeConfirmarRecuperacion={puedeConfirmarRecuperacion}
+              onConfirmarRecuperacion={(p) => {
+                setPeriodoParaRecuperar(p);
+                setModalActivo('CONFIRMAR_RECUPERACION');
+              }}
+            />
           </Stack>
         </Grid.Col>
       </Grid>

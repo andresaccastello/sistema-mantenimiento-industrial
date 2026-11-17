@@ -7,17 +7,13 @@ import {
   Button,
   Text,
   Alert,
-  Card,
   Box,
-  Title,
-  Center,
   SimpleGrid,
   ComboboxParsedItem,
   OptionsFilter,
 } from '@mantine/core';
 import {
   IconAlertTriangle,
-  IconCircleCheck,
   IconInfoCircle,
 } from '@tabler/icons-react';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -27,6 +23,7 @@ import { useAuth } from '../auth/AuthContext';
 import { clienteApi } from '../api/cliente';
 import { EncabezadoPagina } from '../componentes/EncabezadoPagina';
 import { EstadoBadge } from '../componentes/EstadoBadge';
+import { ConfirmacionReporte } from '../componentes/reportar/ConfirmacionReporte';
 import { useEsCelular } from '../lib/useEsCelular';
 import {
   etiquetaMaquina,
@@ -239,71 +236,13 @@ export function ReportarFalla() {
 
   // Pantalla de Confirmación
   if (reporteCreado) {
-    const maqResp = reporteCreado.maquina;
-    const etiquetaConfirmacion = maquinaElegida
-      ? etiquetaMaquina(maquinaElegida)
-      : maqResp.nombre;
-
     return (
-      <Center py="xl">
-        <Card
-          withBorder
-          radius="md"
-          p="xl"
-          maw={560}
-          w="100%"
-          style={{ textAlign: 'center' }}
-        >
-          <Stack align="center" gap="md">
-            <Box c="#16a34a">
-              <IconCircleCheck size={64} stroke={1.5} />
-            </Box>
-
-            <Title order={2} size="h3" c="#0f172a">
-              Reporte N.º {reporteCreado.id} registrado
-            </Title>
-
-            <Text size="lg" fw={500} c="#334155">
-              {etiquetaConfirmacion}
-            </Text>
-
-            <Group gap="xs" justify="center">
-              <Text size="sm" c="#64748b">
-                Estado de la máquina:
-              </Text>
-              <EstadoBadge entidad="maquina" estado={maqResp.estado_actual} size="md" />
-            </Group>
-
-            <Stack gap="sm" w="100%" mt="lg">
-              <Button
-                size="lg"
-                color="marca"
-                onClick={() => navigate(`/intervenciones/${reporteCreado.id}`)}
-              >
-                Ver el reporte
-              </Button>
-
-              <Button
-                size="lg"
-                variant="light"
-                color="marca"
-                onClick={handleReportarOtra}
-              >
-                Reportar otra falla
-              </Button>
-
-              <Button
-                size="lg"
-                variant="subtle"
-                color="gray"
-                onClick={() => navigate(esCelular ? '/mis-reportes' : '/')}
-              >
-                {esCelular ? 'Ver mis reportes' : 'Ir al inicio'}
-              </Button>
-            </Stack>
-          </Stack>
-        </Card>
-      </Center>
+      <ConfirmacionReporte
+        reporteCreado={reporteCreado}
+        etiquetaMaquina={maquinaElegida ? etiquetaMaquina(maquinaElegida) : reporteCreado.maquina.nombre}
+        esCelular={esCelular}
+        onReportarOtra={handleReportarOtra}
+      />
     );
   }
 

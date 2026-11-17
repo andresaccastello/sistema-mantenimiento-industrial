@@ -1,32 +1,25 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Stack,
   Group,
   Title,
   Button,
   Tabs,
-  TextInput,
-  MultiSelect,
-  Select,
-  Table,
-  Badge,
   Text,
   Center,
   Loader,
   Alert,
   Pagination,
-  Box,
-  SimpleGrid,
 } from '@mantine/core';
-import { DatePickerInput } from '@mantine/dates';
-import { IconSearch, IconAlertCircle, IconPlus } from '@tabler/icons-react';
-import { useSearchParams, useNavigate, useLocation, Link } from 'react-router';
+import { IconAlertCircle, IconPlus } from '@tabler/icons-react';
+import { useSearchParams, useNavigate, useLocation } from 'react-router';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useDebouncedValue } from '@mantine/hooks';
 import { useAuth } from '../auth/AuthContext';
 import { clienteApi } from '../api/cliente';
-import { EstadoBadge } from '../componentes/EstadoBadge';
 import { PantallaVacia } from '../componentes/PantallaVacia';
+import { FiltrosIntervenciones } from '../componentes/intervenciones/FiltrosIntervenciones';
+import { TablaIntervenciones } from '../componentes/intervenciones/TablaIntervenciones';
 import {
   vistasDisponibles,
   leerFiltros,
@@ -37,45 +30,8 @@ import {
   FILTROS_POR_DEFECTO,
   VistaIntervenciones,
 } from '../lib/listado';
-import { tiempoLista } from '../lib/intervenciones';
-import { etiquetaMaquina, coincideMaquina } from '../lib/maquinas';
-import { nombreCompleto } from '../lib/personas';
-import { formatHace, formatFechaHora } from '../lib/formato';
-import { obtenerInfoEstado } from '../lib/estados';
 import { mensajeError } from '../lib/errores';
 import type { IntervencionLista, SectorLista, MaquinaLista, Planta } from '../api/tipos';
-
-const ESTADOS_OPCIONES: Record<VistaIntervenciones, Array<{ value: string; label: string }>> = {
-  'sin-asignar': [],
-  mias: [
-    { value: 'PENDIENTE', label: 'Pendiente' },
-    { value: 'EN_PROCESO', label: 'En proceso' },
-    { value: 'EN_ESPERA_REPUESTOS', label: 'En espera de repuestos' },
-  ],
-  abiertas: [
-    { value: 'PENDIENTE', label: 'Pendiente' },
-    { value: 'EN_PROCESO', label: 'En proceso' },
-    { value: 'EN_ESPERA_REPUESTOS', label: 'En espera de repuestos' },
-  ],
-  cerradas: [
-    { value: 'FINALIZADA', label: 'Finalizada' },
-    { value: 'CANCELADA', label: 'Cancelada' },
-  ],
-};
-
-function aYYYYMMDD(val: unknown): string | null {
-  if (!val) return null;
-  if (typeof val === 'string') {
-    return val.slice(0, 10);
-  }
-  if (val instanceof Date) {
-    const y = val.getFullYear();
-    const m = String(val.getMonth() + 1).padStart(2, '0');
-    const day = String(val.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  }
-  return null;
-}
 
 export function IntervencionesLista() {
   const { usuario } = useAuth();
@@ -274,6 +230,12 @@ export function IntervencionesLista() {
     );
   };
 
+  const handleTipoChange = (v: string | null) => {
+    const { tipo: _anterior, ...resto } = filtros;
+    const tipo = v === 'CORRECTIVO' || v === 'PREVENTIVO' ? v : undefined;
+    setSearchParams(escribirFiltros({ ...resto, ...(tipo ? { tipo } : {}), pagina: 1 }));
+  };
+
   const handleRangoFechasChange = (dates: [string | null, string | null]) => {
     const desde = dates[0] ? dates[0] : null;
     const hasta = dates[1] ? dates[1] : null;
@@ -340,120 +302,22 @@ export function IntervencionesLista() {
       </Tabs>
 
       {/* 5.2 Filtros */}
-      <SimpleGrid
-        cols={{ base: 1, sm: 2, lg: 3, xl: mostrarPlanta ? 7 : 6 }}
-        spacing="sm"
-      >
-        <TextInput
-          aria-label="Buscar"
-          placeholder="Máquina, código o descripción"
-          leftSection={<IconSearch size={16} />}
-          value={busquedaLocal}
-          onChange={(e) => setBusquedaLocal(e.currentTarget.value)}
-        />
-
-        <MultiSelect
-          aria-label="Estado"
-          placeholder={filtros.estados.length === 0 ? 'Estado' : undefined}
-          data={ESTADOS_OPCIONES[filtros.vista]}
-          value={filtros.estados}
-          onChange={handleEstadosChange}
-          clearable
-          disabled={filtros.vista === 'sin-asignar'}
-        />
-
-        {mostrarPlanta && (
-          <Select
-            aria-label="Planta"
-            placeholder="Planta"
-            data={(plantas || []).map((p) => ({
-              value: String(p.id),
-              label: p.nombre,
-            }))}
-            value={filtros.plantaId ? String(filtros.plantaId) : null}
-            onChange={handlePlantaChange}
-            clearable
-          />
-        )}
-
-        <Select
-          aria-label="Sector"
-          placeholder="Sector"
-          data={sectoresVisibles.map((s) => ({
-            value: String(s.id),
-            label: s.nombre,
-          }))}
-          value={filtros.sectorId ? String(filtros.sectorId) : null}
-          onChange={handleSectorChange}
-          clearable
-        />
-
-        <Select
-          aria-label="Máquina"
-          placeholder="Máquina"
-          searchable
-          data={maquinasFiltradas.map((m) => ({
-            value: String(m.id),
-            label: etiquetaMaquina(m),
-          }))}
-          filter={({ options, search }) => {
-            if (!search) return options;
-            return options.filter((opt) => {
-              if ('value' in opt) {
-                const maq = maquinas?.find((m) => String(m.id) === opt.value);
-                return maq ? coincideMaquina(maq, search) : opt.label.toLowerCase().includes(search.toLowerCase());
-              }
-              return true;
-            });
-          }}
-          value={filtros.maquinaId ? String(filtros.maquinaId) : null}
-          onChange={handleMaquinaChange}
-          clearable
-        />
-
-        <Select
-          aria-label="Tipo"
-          data={[
-            { value: 'TODAS', label: 'Todas' },
-            { value: 'CORRECTIVO', label: 'Correctivas' },
-            { value: 'PREVENTIVO', label: 'Preventivas' },
-          ]}
-          value={filtros.tipo ?? 'TODAS'}
-          allowDeselect={false}
-          onChange={(v) => {
-            const { tipo: _anterior, ...resto } = filtros;
-            const tipo = v === 'CORRECTIVO' || v === 'PREVENTIVO' ? v : undefined;
-            setSearchParams(escribirFiltros({ ...resto, ...(tipo ? { tipo } : {}), pagina: 1 }));
-          }}
-        />
-
-        <DatePickerInput
-          aria-label="Reportadas entre"
-          type="range"
-          allowSingleDateInRange
-          placeholder="Reportadas entre"
-          valueFormat="DD/MM/YYYY"
-          clearable
-          value={
-            filtros.desde || filtros.hasta
-              ? [
-                  filtros.desde ? new Date(`${filtros.desde}T00:00:00`) : null,
-                  filtros.hasta ? new Date(`${filtros.hasta}T00:00:00`) : null,
-                ]
-              : [null, null]
-          }
-          onChange={(dates) => {
-            if (!dates) {
-              handleRangoFechasChange([null, null]);
-            } else {
-              handleRangoFechasChange([
-                dates[0] ? aYYYYMMDD(dates[0]) : null,
-                dates[1] ? aYYYYMMDD(dates[1]) : null,
-              ]);
-            }
-          }}
-        />
-      </SimpleGrid>
+      <FiltrosIntervenciones
+        filtros={filtros}
+        busqueda={busquedaLocal}
+        onBusqueda={setBusquedaLocal}
+        mostrarPlanta={mostrarPlanta}
+        plantas={plantas}
+        sectoresVisibles={sectoresVisibles}
+        maquinasFiltradas={maquinasFiltradas}
+        maquinas={maquinas}
+        onEstados={handleEstadosChange}
+        onPlanta={handlePlantaChange}
+        onSector={handleSectorChange}
+        onMaquina={handleMaquinaChange}
+        onTipo={handleTipoChange}
+        onRangoFechas={handleRangoFechasChange}
+      />
 
       {/* 5.4 Mensaje de error al pedir */}
       {isError && (
@@ -498,105 +362,11 @@ export function IntervencionesLista() {
         )
       ) : (
         <Stack gap="md">
-          <Table.ScrollContainer minWidth={900}>
-            <Table highlightOnHover verticalSpacing="sm">
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th style={{ width: 80 }}>N.º</Table.Th>
-                  <Table.Th>Máquina</Table.Th>
-                  <Table.Th style={{ minWidth: 180 }}>Estado</Table.Th>
-                  <Table.Th style={{ minWidth: 160 }}>Responsable</Table.Th>
-                  <Table.Th style={{ minWidth: 130 }}>Reportada</Table.Th>
-                  <Table.Th style={{ minWidth: 210, whiteSpace: 'nowrap' }}>Tiempo</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {(data?.items || []).map((item) => {
-                  const t = tiempoLista(item);
-                  return (
-                    <Table.Tr
-                      key={item.id}
-                      onClick={() => handleFilaClick(item.id)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <Table.Td onClick={(e) => e.stopPropagation()}>
-                        <Link
-                          to={`/intervenciones/${item.id}`}
-                          state={{ volverA: location.pathname + location.search }}
-                          style={{
-                            textDecoration: 'none',
-                            color: 'inherit',
-                            fontWeight: 600,
-                          }}
-                        >
-                          #{item.id}
-                        </Link>
-                      </Table.Td>
-
-                      <Table.Td>
-                        <Text fw={600} size="sm">
-                          {etiquetaMaquina(item.maquina)}
-                        </Text>
-                        <Text size="xs" c="dimmed">
-                          {item.maquina.sector.nombre}
-                        </Text>
-                        <Group gap={6} wrap="nowrap">
-                          {item.tipo === 'PREVENTIVO' && (
-                            <Badge color="teal" variant="light" size="xs" style={{ flexShrink: 0 }}>
-                              Preventivo
-                            </Badge>
-                          )}
-                          <Text size="xs" c="dimmed" lineClamp={1}>
-                            {item.descripcion}
-                          </Text>
-                        </Group>
-                      </Table.Td>
-
-                      <Table.Td>
-                        <Group gap="xs" align="center" wrap="wrap">
-                          <EstadoBadge entidad="intervencion" estado={item.estado} />
-                          {item.detiene_maquina_actualmente && (
-                            <Badge color="red" variant="filled" size="sm">
-                              Máquina detenida
-                            </Badge>
-                          )}
-                        </Group>
-                      </Table.Td>
-
-                      <Table.Td>
-                        {item.responsable ? (
-                          <Text size="sm">{nombreCompleto(item.responsable)}</Text>
-                        ) : (
-                          <Text size="sm" c="dimmed">
-                            Sin asignar
-                          </Text>
-                        )}
-                      </Table.Td>
-
-                      <Table.Td>
-                        <Text size="sm" title={formatFechaHora(item.fecha_creacion)}>
-                          {formatHace(item.fecha_creacion)}
-                        </Text>
-                      </Table.Td>
-
-                      <Table.Td style={{ minWidth: 210, whiteSpace: 'nowrap' }}>
-                        <Group gap={6} align="center" wrap="nowrap">
-                          <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
-                            {t.etiqueta ? `${t.etiqueta} ${t.texto}` : t.texto}
-                          </Text>
-                          {t.enCurso && (
-                            <Badge color="yellow" variant="light" size="xs">
-                              en curso
-                            </Badge>
-                          )}
-                        </Group>
-                      </Table.Td>
-                    </Table.Tr>
-                  );
-                })}
-              </Table.Tbody>
-            </Table>
-          </Table.ScrollContainer>
+          <TablaIntervenciones
+            items={data?.items || []}
+            volverA={location.pathname + location.search}
+            onFilaClick={handleFilaClick}
+          />
 
           {/* 5.3 Paginación */}
           {totalPaginas > 1 && (
