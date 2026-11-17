@@ -246,6 +246,7 @@ test('Etapa CAL1 — Calendario de preventivos (CA-01 a CA-13)', async (t) => {
         ['desde > hasta', `/api/planes/calendario?desde=${sumarDias(hoy, 1)}&hasta=${hoy}`],
         ['63 días', `/api/planes/calendario?desde=${hoy}&hasta=${sumarDias(hoy, 62)}`],
         ['maquina_id inválido', `/api/planes/calendario?desde=${hoy}&hasta=${hoy}&maquina_id=abc`],
+        ['año 0', '/api/planes/calendario?desde=0000-01-01&hasta=0000-01-05'],
       ];
       for (const [caso, url] of casos) {
         const r = await pedir('GET', url, A.token);

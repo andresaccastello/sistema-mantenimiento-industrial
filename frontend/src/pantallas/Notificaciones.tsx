@@ -195,9 +195,11 @@ export function Notificaciones() {
                 radius="sm"
                 padding="md"
                 onClick={() => handleClickNotificacion(notif)}
+                // L1, 1.5: el color va con la prop bg, la misma que pone el tema; con
+                // style.backgroundColor, React avisa al cambiar de no leída a leída
+                bg={noLeida ? '#f0fdf4' : '#ffffff'}
                 style={{
                   cursor: destinoAviso(notif) ? 'pointer' : 'default',
-                  backgroundColor: noLeida ? '#f0fdf4' : '#ffffff',
                   borderColor: noLeida ? '#bbf7d0' : 'rgba(0, 0, 0, 0.08)',
                   transition: 'background-color 150ms ease',
                 }}

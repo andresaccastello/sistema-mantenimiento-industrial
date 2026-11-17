@@ -188,6 +188,8 @@ function fechaParametro(c: any, nombre: string): string {
   if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== val) {
     throw invalido(`El parámetro ${nombre} no es una fecha que exista`);
   }
+  // L1, 1.1: el año 0 pasa el control de JS, pero Postgres no lo acepta
+  if (Number(val.slice(0, 4)) < 1) throw invalido(`El parámetro ${nombre} debe tener un año de 1 en adelante`);
   return val;
 }
 

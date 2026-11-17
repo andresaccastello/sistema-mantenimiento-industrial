@@ -7,6 +7,7 @@
  * Formatea una cantidad de minutos en texto legible:
  * - null -> "—"
  * - 0 -> "0 min"
+ * - más de 0 y menos de 1 -> "menos de 1 min"
  * - menos de 60 -> "N min"
  * - menos de 24 h -> "H h M min" (si M es 0, solo "H h")
  * - 24 h o más -> "D d H h" (si H es 0, solo "D d")
@@ -18,6 +19,11 @@ export function formatDuracion(minutos: number | null): string {
 
   if (minutos === 0) {
     return '0 min';
+  }
+
+  // L1, 1.3: un tiempo que no llega al minuto no es "0 min"
+  if (minutos > 0 && minutos < 1) {
+    return 'menos de 1 min';
   }
 
   if (minutos < 60) {

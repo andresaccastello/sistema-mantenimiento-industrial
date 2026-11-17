@@ -124,7 +124,7 @@ export interface Consecuencia {
  * Lo que cambió en un medidor guardado:
  * - "Cambiar aceite pasó a Próxima: faltan 105 horas" (si antes no estaba próxima; si ya lo
  *   estaba, "está Próxima");
- * - "Cambiar aceite está Vencida: se pasó por 20 horas";
+ * - "Cambiar aceite pasó a Vencida: se pasó por 20 horas" (lo mismo: "está Vencida" si ya lo estaba);
  * - "Se generó la intervención N.º 85", una por intervención generada de sus planes.
  * Al día, sin lectura o ya en curso, no hay nada que contar.
  */
@@ -138,11 +138,11 @@ export function consecuenciasLectura(
   for (const t of despues) {
     const previa = antes.find((x) => x.tarea_id === t.tarea_id);
     const faltan = textoFaltan(t.faltan_uso, unidad);
-    if (t.estado === 'PROXIMA') {
-      const verbo = previa?.estado === 'PROXIMA' ? 'está' : 'pasó a';
-      lineas.push({ texto: `${t.accion} ${verbo} Próxima${faltan ? `: ${faltan}` : ''}` });
-    } else if (t.estado === 'VENCIDA') {
-      lineas.push({ texto: `${t.accion} está Vencida${faltan ? `: ${faltan}` : ''}` });
+    if (t.estado === 'PROXIMA' || t.estado === 'VENCIDA') {
+      // L1, 1.4: "pasó a" si antes no estaba en ese estado, también con Vencida
+      const verbo = previa?.estado === t.estado ? 'está' : 'pasó a';
+      const nombre = t.estado === 'PROXIMA' ? 'Próxima' : 'Vencida';
+      lineas.push({ texto: `${t.accion} ${verbo} ${nombre}${faltan ? `: ${faltan}` : ''}` });
     }
   }
   const planes = new Set(despues.map((t) => t.plan.id));

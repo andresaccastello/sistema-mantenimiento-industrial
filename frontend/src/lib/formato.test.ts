@@ -11,6 +11,13 @@ describe('FE-01: formatDuracion', () => {
     assert.equal(formatDuracion(0), '0 min');
   });
 
+  it('formatea más de 0 y menos de 1 minuto como menos de 1 min (L1, 1.3)', () => {
+    assert.equal(formatDuracion(0.4), 'menos de 1 min');
+    assert.equal(formatDuracion(0.01), 'menos de 1 min');
+    assert.equal(formatDuracion(0.99), 'menos de 1 min');
+    assert.equal(formatDuracion(1), '1 min');
+  });
+
   it('formatea menos de 60 minutos', () => {
     assert.equal(formatDuracion(45), '45 min');
   });

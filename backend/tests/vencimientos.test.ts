@@ -90,11 +90,14 @@ test('Etapa PV5 — Generación automática y avisos de vencimiento (PA-01 a PA-
     `SELECT
        (SELECT COALESCE(max(id), 0) FROM avisos_vencimiento)::bigint AS aviso,
        (SELECT COALESCE(max(id), 0) FROM notificaciones)::bigint AS notificacion,
-       (SELECT to_char(vencimientos_revisados_el, 'YYYY-MM-DD') FROM configuracion_sistema WHERE id = 1) AS revisados_el`
+       (SELECT to_char(vencimientos_revisados_el, 'YYYY-MM-DD') FROM configuracion_sistema WHERE id = 1) AS revisados_el,
+       NOW() AS ahora`
   )).rows[0];
   const ultimoAviso = Number(inicio.aviso);
   const ultimaNotificacion = Number(inicio.notificacion);
   const revisadosEl: string | null = inicio.revisados_el;
+  // L1, 1.6: procesarVencimientos también avisa lecturas atrasadas de toda la base
+  const inicioEn: Date = inicio.ahora;
 
   const sistemaId = Number((await client.query('SELECT id FROM usuarios WHERE es_sistema')).rows[0].id);
 
@@ -735,16 +738,24 @@ test('Etapa PV5 — Generación automática y avisos de vencimiento (PA-01 a PA-
       await client.query('DROP TRIGGER IF EXISTS trg_test_pa10 ON configuracion_sistema');
       await client.query('DROP FUNCTION IF EXISTS trg_fn_test_pa10()');
 
+      const maquinas = createdMaquinaIds;
+      // L1, 1.6: también los avisos de lecturas atrasadas de esta corrida
+      const tipos = ['PREVENTIVO_VENCIMIENTO', 'LECTURA_ATRASADA'];
+
       await client.query('DELETE FROM avisos_vencimiento WHERE id > $1', [ultimoAviso]);
       await client.query(
         `DELETE FROM notificacion_envios WHERE notificacion_id IN (
-           SELECT id FROM notificaciones WHERE tipo_evento = 'PREVENTIVO_VENCIMIENTO' AND id > $1
+           SELECT id FROM notificaciones WHERE tipo_evento = ANY($1) AND id > $2
          )`,
-        [ultimaNotificacion]
+        [tipos, ultimaNotificacion]
       );
-      await client.query(`DELETE FROM notificaciones WHERE tipo_evento = 'PREVENTIVO_VENCIMIENTO' AND id > $1`, [ultimaNotificacion]);
+      await client.query('DELETE FROM notificaciones WHERE tipo_evento = ANY($1) AND id > $2', [tipos, ultimaNotificacion]);
+      // Los medidores ajenos que la revisión diaria de esta corrida marcó vuelven a quedar sin marca
+      await client.query(
+        'UPDATE medidores SET atraso_avisado_en = NULL WHERE atraso_avisado_en >= $1 AND NOT (maquina_id = ANY($2))',
+        [inicioEn, maquinas]
+      );
 
-      const maquinas = createdMaquinaIds;
       const intIds = (await client.query('SELECT id FROM intervenciones WHERE maquina_id = ANY($1)', [maquinas])).rows.map((r) => Number(r.id));
       if (maquinas.length > 0) {
         await client.query(

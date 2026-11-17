@@ -89,7 +89,7 @@ describe('FE-149: qué lecturas se mandan (4.1)', () => {
 describe('FE-150: el texto de cada consecuencia (4.2)', () => {
   const generadas = [{ plan_id: 9, intervencion_id: 85 }];
 
-  it('pasó a próxima, está próxima y está vencida', () => {
+  it('pasó a próxima, está próxima, pasó a vencida y está vencida', () => {
     const antes = [tarea()];
     assert.deepEqual(consecuenciasLectura(antes, [tarea({ estado: 'PROXIMA', faltan_uso: 105 })], 'horas', []), [
       { texto: 'Cambiar aceite pasó a Próxima: faltan 105 horas' },
@@ -99,8 +99,17 @@ describe('FE-150: el texto de cada consecuencia (4.2)', () => {
       [{ texto: 'Cambiar aceite está Próxima: faltan 50 horas' }]
     );
     assert.deepEqual(consecuenciasLectura(antes, [tarea({ estado: 'VENCIDA', faltan_uso: -20 })], 'horas', []), [
-      { texto: 'Cambiar aceite está Vencida: se pasó por 20 horas' },
+      { texto: 'Cambiar aceite pasó a Vencida: se pasó por 20 horas' },
     ]);
+    // L1, 1.4: de Próxima a Vencida también "pasó a"; si ya estaba vencida, "está"
+    assert.deepEqual(
+      consecuenciasLectura([tarea({ estado: 'PROXIMA' })], [tarea({ estado: 'VENCIDA', faltan_uso: -5 })], 'horas', []),
+      [{ texto: 'Cambiar aceite pasó a Vencida: se pasó por 5 horas' }]
+    );
+    assert.deepEqual(
+      consecuenciasLectura([tarea({ estado: 'VENCIDA' })], [tarea({ estado: 'VENCIDA', faltan_uso: -30 })], 'horas', []),
+      [{ texto: 'Cambiar aceite está Vencida: se pasó por 30 horas' }]
+    );
   });
 
   it('se generó la intervención, con su número para el enlace', () => {
