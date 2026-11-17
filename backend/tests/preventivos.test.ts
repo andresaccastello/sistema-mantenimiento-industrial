@@ -2344,6 +2344,15 @@ test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-21)', async (t) => {
         await client.query('DELETE FROM intervenciones WHERE id = ANY($1)', [intIds]);
       }
       if (maquinas.length > 0) {
+        // LE1, 3.3: lo que deja el aviso en el momento al cargar una lectura
+        await client.query(
+          `DELETE FROM avisos_vencimiento WHERE plan_tarea_id IN (
+             SELECT t.id FROM plan_tareas t JOIN planes_mantenimiento p ON p.id = t.plan_id WHERE p.maquina_id = ANY($1)
+           )`,
+          [maquinas]
+        );
+        await client.query('DELETE FROM notificacion_envios WHERE notificacion_id IN (SELECT id FROM notificaciones WHERE maquina_id = ANY($1))', [maquinas]);
+        await client.query('DELETE FROM notificaciones WHERE maquina_id = ANY($1)', [maquinas]);
         await client.query(
           `DELETE FROM plan_tarea_repuestos WHERE plan_tarea_id IN (
              SELECT t.id FROM plan_tareas t JOIN planes_mantenimiento p ON p.id = t.plan_id WHERE p.maquina_id = ANY($1)

@@ -6,6 +6,7 @@ import { encolarEnvios, usuariosConPermiso } from '../intervenciones/notificacio
 import { UsuarioVisibilidad } from '../intervenciones/visibilidad.ts';
 import { bloquearPlan } from './comun.ts';
 import { generarDesdePlan } from './generar.ts';
+import { SQL_ATRASADO, SQL_DIAS_SIN_LECTURA, SQL_ULTIMA_LECTURA } from '../medidores/consultas.ts';
 
 /**
  * Etapa PV5, sección 3: la revisión diaria de las tareas preventivas (D-025). Genera la
@@ -13,6 +14,8 @@ import { generarDesdePlan } from './generar.ts';
  */
 
 export const TIPO_AVISO_VENCIMIENTO = 'PREVENTIVO_VENCIMIENTO';
+/** LE1, 3.4 */
+export const TIPO_AVISO_LECTURA_ATRASADA = 'LECTURA_ATRASADA';
 
 export interface ResultadoVencimientos {
   revisado: boolean;
@@ -20,6 +23,8 @@ export interface ResultadoVencimientos {
   generadas?: Array<{ plan_id: number; intervencion_id: number }>;
   avisos?: number;
   errores?: Array<{ plan_id: number; codigo: string }>;
+  /** LE1, 3.4: cuántos medidores se avisaron por lecturas atrasadas. */
+  lecturas_atrasadas?: number;
 }
 
 /** Una tarea vencida o próxima, como se lee de la vista antes de generar. */
@@ -31,13 +36,13 @@ interface TareaParaAvisar {
 }
 
 /** Lo que dejó un plan: la intervención generada y los avisos creados. */
-interface ResultadoPlan {
+export interface ResultadoPlan {
   intervencionId: number | null;
   avisos: number;
 }
 
 /** El usuario "Sistema" (2.1), autor de lo automático. */
-async function usuarioSistema(db: pg.Pool | pg.PoolClient): Promise<number> {
+export async function usuarioSistema(db: pg.Pool | pg.PoolClient): Promise<number> {
   const r = await db.query('SELECT id FROM usuarios WHERE es_sistema');
   if (r.rows.length === 0) {
     throw new Error('Falta el usuario del sistema: aplicar la migración 019');
@@ -108,8 +113,11 @@ async function destinatarios(
     .sort((a, b) => a - b);
 }
 
-/** Un plan, dentro de su propia transacción (3.2). */
-async function procesarPlan(client: pg.PoolClient, planId: number, sistema: UsuarioVisibilidad): Promise<ResultadoPlan> {
+/**
+ * Un plan, dentro de su propia transacción (3.2). También lo usa el aviso en el momento, al
+ * guardar una lectura (LE1, 3.3).
+ */
+export async function procesarPlan(client: pg.PoolClient, planId: number, sistema: UsuarioVisibilidad): Promise<ResultadoPlan> {
   // Los bloqueos, en el orden de generar: la máquina y el plan
   const resLookup = await client.query('SELECT maquina_id FROM planes_mantenimiento WHERE id = $1', [planId]);
   if (resLookup.rows.length === 0) return { intervencionId: null, avisos: 0 };
@@ -191,6 +199,121 @@ async function procesarPlan(client: pg.PoolClient, planId: number, sistema: Usua
   return { intervencionId, avisos: resN.rows.length };
 }
 
+/** Un medidor atrasado, ya bloqueado y controlado. */
+interface MedidorAtrasado {
+  id: number;
+  nombre: string;
+  maquina_id: number;
+  maquina_codigo: string | null;
+  maquina_nombre: string;
+  dias: number;
+  cada: number;
+}
+
+/** "COM-01 · Horómetro: 8 días sin lectura (se lee cada 7)". */
+export function lineaLecturaAtrasada(m: {
+  nombre: string;
+  maquina_codigo: string | null;
+  maquina_nombre: string;
+  dias: number;
+  cada: number;
+}): string {
+  const maquina = m.maquina_codigo ? m.maquina_codigo : m.maquina_nombre;
+  const dias = m.dias === 1 ? '1 día' : `${m.dias} días`;
+  return `${maquina} · ${m.nombre}: ${dias} sin lectura (se lee cada ${m.cada})`;
+}
+
+/** Los medidores atrasados y sin avisar (LE1, 3.4), de entre `ids` si se pasa. */
+async function medidoresAtrasadosSinAvisar(client: pg.PoolClient, ids: number[] | null): Promise<MedidorAtrasado[]> {
+  const r = await client.query(
+    `SELECT md.id, md.nombre, md.lectura_cada_dias, md.maquina_id,
+            m.codigo AS maquina_codigo, m.nombre AS maquina_nombre,
+            ${SQL_DIAS_SIN_LECTURA} AS dias
+     FROM medidores md
+     JOIN maquinas m ON m.id = md.maquina_id
+     ${SQL_ULTIMA_LECTURA}
+     WHERE md.atraso_avisado_en IS NULL
+       AND ${SQL_ATRASADO}
+       AND ($1::bigint[] IS NULL OR md.id = ANY($1::bigint[]))
+     ORDER BY m.codigo ASC NULLS LAST, m.nombre ASC, md.nombre ASC, md.id ASC`,
+    [ids]
+  );
+  return r.rows.map((x) => ({
+    id: Number(x.id),
+    nombre: x.nombre,
+    maquina_id: Number(x.maquina_id),
+    maquina_codigo: x.maquina_codigo,
+    maquina_nombre: x.maquina_nombre,
+    dias: Number(x.dias),
+    cada: Number(x.lectura_cada_dias),
+  }));
+}
+
+/**
+ * LE1, 3.4: avisa las lecturas atrasadas, una vez por atraso. Va en una transacción, después de
+ * los planes. Devuelve cuántos medidores se avisaron.
+ */
+async function avisarLecturasAtrasadas(client: pg.PoolClient, sistemaId: number): Promise<number> {
+  // 1. Los candidatos, sin bloquear
+  const candidatos = await medidoresAtrasadosSinAvisar(client, null);
+  if (candidatos.length === 0) return 0;
+
+  // Los bloqueos, en el orden de siempre: las máquinas FOR SHARE y después los medidores FOR UPDATE
+  const maquinaIds = [...new Set(candidatos.map((m) => m.maquina_id))].sort((a, b) => a - b);
+  await client.query('SELECT id FROM maquinas WHERE id = ANY($1) ORDER BY id FOR SHARE', [maquinaIds]);
+  const medidorIds = candidatos.map((m) => m.id).sort((a, b) => a - b);
+  await client.query('SELECT id FROM medidores WHERE id = ANY($1) ORDER BY id FOR UPDATE', [medidorIds]);
+
+  // 2. Se vuelve a controlar con todo bloqueado: si otra revisión ya los avisó, no queda ninguno
+  const atrasados = await medidoresAtrasadosSinAvisar(client, medidorIds);
+  if (atrasados.length === 0) return 0;
+
+  // 3. Los destinatarios de cada medidor: los de cada plan activo con tareas activas que lo usan
+  const porUsuario = new Map<number, MedidorAtrasado[]>();
+  for (const medidor of atrasados) {
+    const planes = await client.query(
+      `SELECT DISTINCT p.id, p.responsable_usuario_id, m.sector_id
+       FROM plan_tareas t
+       JOIN planes_mantenimiento p ON p.id = t.plan_id
+       JOIN maquinas m ON m.id = p.maquina_id
+       WHERE t.medidor_id = $1 AND t.activo AND p.activo
+       ORDER BY p.id`,
+      [medidor.id]
+    );
+    const para = new Set<number>();
+    for (const p of planes.rows) {
+      const responsable = p.responsable_usuario_id === null ? null : Number(p.responsable_usuario_id);
+      for (const u of await destinatarios(client, responsable, Number(p.sector_id), sistemaId)) para.add(u);
+    }
+    for (const u of para) {
+      if (!porUsuario.has(u)) porUsuario.set(u, []);
+      porUsuario.get(u)!.push(medidor);
+    }
+  }
+
+  // 4. Un aviso por destinatario, con todos sus medidores atrasados juntos
+  const notificacionIds: number[] = [];
+  const avisados = new Set<number>();
+  for (const [usuarioId, medidores] of [...porUsuario.entries()].sort((a, b) => a[0] - b[0])) {
+    const mensaje = medidores.map(lineaLecturaAtrasada).join('\n');
+    const maquinaId = medidores.length === 1 ? medidores[0].maquina_id : null;
+    const r = await client.query(
+      `INSERT INTO notificaciones (
+         usuario_id, tipo_evento, prioridad, titulo, mensaje, intervencion_id, maquina_id, generada_por_usuario_id, creada_en
+       ) VALUES ($1, $2, 'NORMAL', 'Lecturas atrasadas', $3, NULL, $4, $5, NOW())
+       RETURNING id`,
+      [usuarioId, TIPO_AVISO_LECTURA_ATRASADA, mensaje, maquinaId, sistemaId]
+    );
+    notificacionIds.push(Number(r.rows[0].id));
+    for (const m of medidores) avisados.add(m.id);
+  }
+  await encolarEnvios(client, notificacionIds);
+
+  // 5. Marcados: no se vuelven a avisar hasta una lectura nueva o un cambio de lectura_cada_dias
+  await client.query('UPDATE medidores SET atraso_avisado_en = NOW() WHERE id = ANY($1)', [atrasados.map((m) => m.id)]);
+  return avisados.size;
+}
+
 /**
  * 3. Revisa los vencimientos. Sin `forzar`, una vez por día (3.1); con `forzar`, siempre:
  * igual no repite avisos (2.3) ni duplica intervenciones (los bloqueos de generar).
@@ -245,11 +368,21 @@ export async function procesarVencimientos(opciones: { forzar?: boolean } = {}):
     }
   }
 
+  // LE1, 3.4: las lecturas atrasadas, en su transacción. Si falla, los planes ya quedaron
+  // procesados y el día se marca igual: los medidores siguen sin marcar y la próxima revisión
+  // los vuelve a intentar.
+  let lecturasAtrasadas = 0;
+  try {
+    lecturasAtrasadas = await conTransaccion((client) => avisarLecturasAtrasadas(client, sistema.id));
+  } catch (err) {
+    console.error('Error al avisar las lecturas atrasadas:', err);
+  }
+
   // Recorridos todos los planes, aunque alguno haya dado error, el día queda revisado.
   // Si el proceso se cortó antes, la fecha no se marca y el próximo programado vuelve a revisar.
   if (!opciones.forzar) {
     await pool.query('UPDATE configuracion_sistema SET vencimientos_revisados_el = hoy_instalacion() WHERE id = 1');
   }
 
-  return resultado;
+  return { ...resultado, lecturas_atrasadas: lecturasAtrasadas };
 }

@@ -107,6 +107,8 @@ export const REGLAS_EVENTOS_NOTIFICACION = [
   'DETENCION_PENDIENTE_CONFIRMACION',
   // PV5: lo genera procesarVencimientos, no una intervención
   'PREVENTIVO_VENCIMIENTO',
+  // LE1: también de procesarVencimientos, por las lecturas atrasadas
+  'LECTURA_ATRASADA',
 ] as const;
 
 export type TipoEventoNotificable = (typeof REGLAS_EVENTOS_NOTIFICACION)[number];

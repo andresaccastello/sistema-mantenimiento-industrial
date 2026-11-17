@@ -2,15 +2,54 @@ import pg from 'pg';
 import { columnasPersona, persona } from '../preventivos/comun.ts';
 import { medidorNoEncontrado } from './lecturas.ts';
 
+// -------------------------------------------------------------
+// LE1, 3.1: los días sin lectura y el atraso. Un solo lugar para el GET de los medidores, la
+// ronda y la revisión diaria. Usan los alias md (medidores), m (maquinas) y ul (la última
+// lectura vigente, con registrada_en).
+// -------------------------------------------------------------
+
+/** La última lectura vigente: la de mayor valor; a igual valor, la de mayor id. */
+export const SQL_ULTIMA_LECTURA = `
+  LEFT JOIN LATERAL (
+    SELECT l.valor, l.registrada_en
+    FROM lecturas_medidor l
+    WHERE l.medidor_id = md.id AND l.anulada_en IS NULL
+    ORDER BY l.valor DESC, l.id DESC
+    LIMIT 1
+  ) ul ON TRUE
+`;
+
+/** hoy_instalacion() menos el día local de la última lectura; sin lecturas, del alta del medidor. */
+export const SQL_DIAS_SIN_LECTURA = `(hoy_instalacion() - (COALESCE(ul.registrada_en, md.creado_en) AT TIME ZONE (
+  SELECT COALESCE((SELECT zona_horaria FROM configuracion_sistema WHERE id = 1), 'America/Argentina/Buenos_Aires')
+))::date)`;
+
+/**
+ * Atrasado: con lectura_cada_dias, con alguna tarea activa de un plan activo, y más días sin
+ * lectura que lectura_cada_dias. Con "cada 7" y la última el lunes, el lunes siguiente todavía no.
+ * El medidor y su máquina, activos: es la lista de la ronda (3.1).
+ */
+export const SQL_ATRASADO = `(
+  md.lectura_cada_dias IS NOT NULL AND md.activo AND m.activo
+  AND EXISTS (
+    SELECT 1 FROM plan_tareas t
+    JOIN planes_mantenimiento p ON p.id = t.plan_id
+    WHERE t.medidor_id = md.id AND t.activo AND p.activo
+  )
+  AND ${SQL_DIAS_SIN_LECTURA} > md.lectura_cada_dias
+)`;
+
 /** Un medidor con su máquina, su última lectura vigente y cuántas tareas activas lo usan. */
 const SQL_MEDIDOR = `
-  SELECT md.id, md.nombre, md.unidad, md.activo, md.creado_en, md.actualizado_en,
+  SELECT md.id, md.nombre, md.unidad, md.activo, md.creado_en, md.actualizado_en, md.lectura_cada_dias,
          m.id AS maquina_id, m.codigo AS maquina_codigo, m.nombre AS maquina_nombre, m.activo AS maquina_activo,
          s.id AS sector_id, s.nombre AS sector_nombre,
          ul.id AS lectura_id, ul.valor AS lectura_valor, ul.registrada_en AS lectura_en,
          ul.por_id AS lectura_por_id, ul.por_legajo AS lectura_por_legajo,
          ul.por_nombre AS lectura_por_nombre, ul.por_apellido AS lectura_por_apellido,
-         (SELECT count(*)::int FROM plan_tareas t WHERE t.medidor_id = md.id AND t.activo) AS tareas_activas
+         (SELECT count(*)::int FROM plan_tareas t WHERE t.medidor_id = md.id AND t.activo) AS tareas_activas,
+         ${SQL_DIAS_SIN_LECTURA} AS dias_sin_lectura,
+         ${SQL_ATRASADO} AS atrasado
   FROM medidores md
   JOIN maquinas m ON m.id = md.maquina_id
   JOIN sectores s ON s.id = m.sector_id
@@ -48,6 +87,10 @@ function medidor(r: Record<string, any>) {
             registrada_por: persona(r, 'lectura_por'),
           },
     tareas_activas: Number(r.tareas_activas),
+    // LE1, 3.5
+    lectura_cada_dias: r.lectura_cada_dias === null ? null : Number(r.lectura_cada_dias),
+    dias_sin_lectura: Number(r.dias_sin_lectura),
+    atrasado: Boolean(r.atrasado),
     creado_en: r.creado_en,
     actualizado_en: r.actualizado_en,
   };

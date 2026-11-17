@@ -12,7 +12,7 @@ El Sistema de Mantenimiento Industrial está orientado a centralizar la informac
 - Usuarios de consulta para Dirección / I+D.
 
 El sistema es de escritorio (D-027). En el celular solo se usa para:
-- el operario: reportar una falla, ver sus reportes y sus notificaciones;
+- el operario: reportar una falla, ver sus reportes y sus notificaciones, y cargar lecturas (D-030);
 - quien gestiona o consulta: ver el tablero y los reportes, sin cargar nada.
 
 ## Funcionalidades principales y estado
@@ -39,6 +39,7 @@ El sistema es de escritorio (D-027). En el celular solo se usa para:
 | 18 | Calendario de preventivos | Hecho (Etapa CAL1) |
 | 19 | Archivo para SAE | Pendiente, a la espera del formato |
 | 20 | Reporte de compras | Hecho (Etapa PC1) |
+| 21 | Ronda de lecturas, también en el celular | Hecho (Etapa LE1) |
 
 ## Límites
 

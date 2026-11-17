@@ -120,5 +120,10 @@ export async function registrarLectura(client: pg.PoolClient, p: RegistrarLectur
      RETURNING id`,
     [p.medidor.id, p.valor, p.usuarioId, p.origen, p.intervencionTareaId ?? null, p.observacion ?? null]
   );
+  // LE1, 3.2: una lectura nueva termina el atraso; si vuelve a atrasarse, se avisa de nuevo
+  await client.query(
+    'UPDATE medidores SET atraso_avisado_en = NULL WHERE id = $1 AND atraso_avisado_en IS NOT NULL',
+    [p.medidor.id]
+  );
   return Number(r.rows[0].id);
 }

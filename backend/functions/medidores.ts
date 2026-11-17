@@ -16,6 +16,7 @@ import {
   validarValorMedidor,
 } from './medidores/lecturas.ts';
 import { listarLecturas, listarMedidores, obtenerDetalleMedidor, obtenerLectura } from './medidores/consultas.ts';
+import { avisarAlLeer, guardarRonda, listarRonda, validarCuerpoRonda } from './medidores/ronda.ts';
 
 /**
  * Etapa PV3, sección 3: los medidores de las máquinas y sus lecturas (D-023).
@@ -30,6 +31,24 @@ const cargaLecturas = requirePermission('MAQUINAS_REGISTRAR_LECTURAS');
 
 function invalido(mensaje: string): ErrorNegocio {
   return new ErrorNegocio(422, 'DATOS_INVALIDOS', mensaje);
+}
+
+/** LE1, 3.5: cada cuántos días se lee: un entero de 1 a 365, o null (sin control de atraso). */
+function validarLecturaCadaDias(val: unknown): number | null {
+  if (val === null) return null;
+  if (typeof val !== 'number' || !Number.isInteger(val) || val < 1 || val > 365) {
+    throw invalido('El campo lectura_cada_dias debe ser un entero de 1 a 365, o null');
+  }
+  return val;
+}
+
+/** Un id opcional de la consulta: si viene y no es un id, 422. */
+function idDeConsulta(c: any, nombre: string): number | null {
+  const raw = c.req.query(nombre);
+  if (raw === undefined) return null;
+  const id = parseId(raw);
+  if (id === null) throw invalido(`El parámetro ${nombre} debe ser un número entero positivo`);
+  return id;
 }
 
 function sinAlcance(): ErrorNegocio {
@@ -96,6 +115,33 @@ medidoresApp.get('/', async (c) => {
   }
 });
 
+// LE1, 3.1 y 3.2: la ronda de lecturas. Antes de /:id.
+medidoresApp.get('/ronda', async (c) => {
+  try {
+    return c.json(
+      await listarRonda(pool, {
+        plantaId: idDeConsulta(c, 'planta_id'),
+        sectorId: idDeConsulta(c, 'sector_id'),
+        maquinaId: idDeConsulta(c, 'maquina_id'),
+        soloAtrasados: c.req.query('solo_atrasados') === 'true',
+      })
+    );
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
+medidoresApp.post('/ronda', cargaLecturas, async (c) => {
+  try {
+    const leido = await leerCuerpoObjeto(c);
+    if (!leido.ok) return leido.response;
+    const lecturas = validarCuerpoRonda(leido.body);
+    return c.json(await guardarRonda(lecturas, getUsuarioContext(c).id));
+  } catch (error) {
+    return responderError(c, error);
+  }
+});
+
 medidoresApp.get('/:id', async (c) => {
   try {
     const id = parseIdRuta(c.req.param('id'));
@@ -119,6 +165,8 @@ medidoresApp.post('/', gestiona, async (c) => {
       b.lectura_inicial === undefined || b.lectura_inicial === null
         ? null
         : validarValorMedidor(b.lectura_inicial, 'lectura_inicial');
+    // LE1, 3.5: sin el campo, 7
+    const cadaDias = b.lectura_cada_dias === undefined ? 7 : validarLecturaCadaDias(b.lectura_cada_dias);
 
     const sectores = sectoresDelAlcance(c);
     const usuario = getUsuarioContext(c);
@@ -135,8 +183,9 @@ medidoresApp.post('/', gestiona, async (c) => {
       await controlarNombre(client, maquinaId, nombre);
 
       const res = await client.query(
-        'INSERT INTO medidores (maquina_id, nombre, unidad, creado_por_usuario_id) VALUES ($1, $2, $3, $4) RETURNING id',
-        [maquinaId, nombre, unidad, usuario.id]
+        `INSERT INTO medidores (maquina_id, nombre, unidad, creado_por_usuario_id, lectura_cada_dias)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        [maquinaId, nombre, unidad, usuario.id, cadaDias]
       );
       const nuevoId = Number(res.rows[0].id);
       if (inicial !== null) {
@@ -168,6 +217,9 @@ medidoresApp.patch('/:id', gestiona, async (c) => {
     }
     const nombre = 'nombre' in b ? textoObligatorio(b.nombre, 'nombre', 3, 60) : undefined;
     const unidad = 'unidad' in b ? textoObligatorio(b.unidad, 'unidad', 1, 20) : undefined;
+    // LE1, 3.5: null es un valor (sin control de atraso), así que se distingue de "no vino"
+    const cambiaCada = 'lectura_cada_dias' in b;
+    const cadaDias = cambiaCada ? validarLecturaCadaDias(b.lectura_cada_dias) : null;
     const sectores = sectoresDelAlcance(c);
 
     await conTransaccion(async (client) => {
@@ -176,9 +228,15 @@ medidoresApp.patch('/:id', gestiona, async (c) => {
       if (nombre !== undefined) await controlarNombre(client, medidor.maquina_id, nombre, medidor.id);
       await client.query(
         `UPDATE medidores
-         SET nombre = COALESCE($1, nombre), unidad = COALESCE($2, unidad), actualizado_en = NOW()
+         SET nombre = COALESCE($1, nombre), unidad = COALESCE($2, unidad), actualizado_en = NOW(),
+             -- Al cambiar cada cuánto se lee, el atraso se vuelve a avisar
+             atraso_avisado_en = CASE
+               WHEN $4::boolean AND lectura_cada_dias IS DISTINCT FROM $5::smallint THEN NULL
+               ELSE atraso_avisado_en
+             END,
+             lectura_cada_dias = CASE WHEN $4::boolean THEN $5::smallint ELSE lectura_cada_dias END
          WHERE id = $3`,
-        [nombre ?? null, unidad ?? null, medidor.id]
+        [nombre ?? null, unidad ?? null, medidor.id, cambiaCada, cadaDias]
       );
     });
 
@@ -260,6 +318,9 @@ medidoresApp.post('/:id/lecturas', cargaLecturas, async (c) => {
         observacion,
       })
     );
+
+    // LE1, 3.3: el aviso en el momento, fuera de la transacción de la lectura. No cambia la respuesta
+    await avisarAlLeer([id as number]);
 
     return c.json(await obtenerLectura(pool, lecturaId), 201);
   } catch (error) {

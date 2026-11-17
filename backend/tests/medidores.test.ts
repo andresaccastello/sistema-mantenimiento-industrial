@@ -555,6 +555,15 @@ test('Etapa PV3 — Medidores y lecturas (ME-01 a ME-06)', async (t) => {
           'DELETE FROM lecturas_medidor WHERE medidor_id IN (SELECT id FROM medidores WHERE maquina_id = ANY($1))',
           [maquinas]
         );
+        // LE1, 3.3: lo que deja el aviso en el momento al cargar una lectura
+        await client.query(
+          `DELETE FROM avisos_vencimiento WHERE plan_tarea_id IN (
+             SELECT t.id FROM plan_tareas t JOIN planes_mantenimiento p ON p.id = t.plan_id WHERE p.maquina_id = ANY($1)
+           )`,
+          [maquinas]
+        );
+        await client.query('DELETE FROM notificacion_envios WHERE notificacion_id IN (SELECT id FROM notificaciones WHERE maquina_id = ANY($1))', [maquinas]);
+        await client.query('DELETE FROM notificaciones WHERE maquina_id = ANY($1)', [maquinas]);
         await client.query(
           'DELETE FROM plan_tareas WHERE plan_id IN (SELECT id FROM planes_mantenimiento WHERE maquina_id = ANY($1))',
           [maquinas]

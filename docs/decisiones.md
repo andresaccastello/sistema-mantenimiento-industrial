@@ -398,3 +398,16 @@ El circuito ya está cubierto: el operario hace la revisión como hoy, y si encu
    - **Queda afuera:** el archivo para el SAE, que espera el documento (esta etapa deja los datos listos); la regla de la mano de obra (la externa tiene factura, la interna es sueldo); y recibir un pedido en partes.
 
 **Motivo:** el pedido no cambiaba nada solo, recibir y usar eran dos pasos, un repuesto sin stock no guardaba ni costo ni comprobante al recibirlo, y lo comprado no aparecía en ningún reporte. Separar lo que se compró de lo que se usó evita contar dos veces el mismo repuesto y deja listo el dato que pide el SAE.
+
+## D-030 — Ronda de lecturas
+
+**Estado:** Aceptada
+
+1. **Las lecturas se cargan en ronda:** una sola pantalla con todos los medidores, para recorrer la planta y cargar todo de una vez.
+2. **El celular suma la carga de lecturas.** Amplía la D-027: el operario reporta fallas **y carga lecturas**. La lectura se toma al lado de la máquina, y es el caso más claro de algo que conviene cargar caminando. Lo demás sigue siendo de escritorio.
+3. **Avisos:**
+   - **en el momento:** si una lectura deja una tarea próxima o vencida, se avisa al guardarla, y si el plan genera solo, se genera. Es lo mismo que hace la revisión diaria, adelantado;
+   - **lecturas atrasadas:** cada medidor dice cada cuántos días se lee (7 por omisión). Si se pasa de ese plazo y el medidor tiene tareas activas, la revisión diaria avisa una vez.
+4. **No se estiman fechas con el ritmo de uso.** Si el uso es parejo, alcanza con una tarea por fecha. Si varía, que es cuando el horómetro tiene sentido, una fecha estimada se equivoca y da una falsa tranquilidad. Las horas son horas y las fechas son fechas. Refuerza la D-028, punto 4.
+
+**Motivo:** sin lecturas, el preventivo por uso no funciona, y el problema práctico es cargarlas, no calcularlas.

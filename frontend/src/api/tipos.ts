@@ -1414,6 +1414,11 @@ export interface MedidorLista {
   ultima_lectura: UltimaLecturaMedidor | null;
   /** Las tareas activas que lo usan, de cualquier plan. */
   tareas_activas: number;
+  /** LE1, 3.5: cada cuántos días se lee; null, sin control de atraso. */
+  lectura_cada_dias: number | null;
+  /** Desde la última lectura o, sin lecturas, desde el alta. */
+  dias_sin_lectura: number;
+  atrasado: boolean;
   creado_en: string;
   actualizado_en: string;
 }
