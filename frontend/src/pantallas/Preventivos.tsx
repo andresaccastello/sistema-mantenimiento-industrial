@@ -1,18 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { useQueryClient } from '@tanstack/react-query';
 import { Stack, Group, Title, Tabs, Button } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
-import { IconPlus, IconRefresh } from '@tabler/icons-react';
-import { clienteApi } from '../api/cliente';
-import type { ProcesarVencimientosRespuesta } from '../api/tipos';
-import { useAuth } from '../auth/AuthContext';
-import { mensajeError } from '../lib/errores';
+import { IconPlus } from '@tabler/icons-react';
 import {
   FiltrosPreventivos,
   escribirFiltrosPreventivos,
   leerFiltrosPreventivos,
-  textoResultadoVencimientos,
   VistaPreventivos,
 } from '../lib/preventivos';
 import { escribirParamsCalendario, hoyLocal, leerParamsCalendario } from '../lib/calendario';
@@ -23,11 +16,8 @@ import { TabCalendario } from '../componentes/calendario/TabCalendario';
 /** P1 — Preventivos: Vencimientos, Planes y Calendario, con la pestaña y los filtros en la dirección. */
 export function Preventivos() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { tienePermiso } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const filtros = useMemo(() => leerFiltrosPreventivos(searchParams), [searchParams]);
-  const [revisando, setRevisando] = useState(false);
 
   /** Cambia los filtros. En el calendario conserva su período (cal y fecha), como el resto. */
   const cambiar = (parcial: Partial<FiltrosPreventivos>) => {
@@ -37,23 +27,6 @@ export function Preventivos() {
     setSearchParams(enCalendario ? escribirParamsCalendario(params, leerParamsCalendario(searchParams, hoyLocal())) : params);
   };
 
-  /** PV5, 5: la revisión diaria, pedida a mano. */
-  const revisar = async () => {
-    setRevisando(true);
-    try {
-      const r = await clienteApi.post<ProcesarVencimientosRespuesta>('/api/planes/procesar-vencimientos', {});
-      for (const clave of [['vencimientos'], ['planes'], ['tablero']]) {
-        await queryClient.invalidateQueries({ queryKey: clave });
-      }
-      const conErrores = r.revisado && r.errores.length > 0;
-      notifications.show({ color: conErrores ? 'yellow' : 'green', message: textoResultadoVencimientos(r) });
-    } catch (err) {
-      notifications.show({ color: 'red', message: mensajeError(err) });
-    } finally {
-      setRevisando(false);
-    }
-  };
-
   return (
     <Stack gap="lg">
       <Group justify="space-between" align="center" wrap="wrap">
@@ -61,11 +34,6 @@ export function Preventivos() {
           Preventivos
         </Title>
         <Group gap="xs" wrap="wrap">
-          {tienePermiso('PLANES_GESTIONAR') && (
-            <Button variant="default" leftSection={<IconRefresh size={18} />} loading={revisando} onClick={revisar}>
-              Revisar vencimientos ahora
-            </Button>
-          )}
           <Button color="marca" leftSection={<IconPlus size={18} />} onClick={() => navigate('/preventivos/planes/nuevo')}>
             Nuevo plan
           </Button>

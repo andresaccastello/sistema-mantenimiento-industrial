@@ -11,7 +11,6 @@ import type {
   EstadoFechaTarea,
   EstadoVencimiento,
   FrecuenciaUnidad,
-  ProcesarVencimientosRespuesta,
   RepuestoPrevistoIntervencion,
   TareaPlan,
   UsoTareaIntervencion,
@@ -585,26 +584,6 @@ export function cuerpoPlan(b: BorradorPlan): CuerpoPlan {
   // Apagada es la de omisión de la API: solo va prendida
   if (b.generacionAutomatica) cuerpo.generacion_automatica = true;
   return cuerpo;
-}
-
-// ---------------------------------------------------------------------------
-// Revisar los vencimientos a mano (PV5, 5)
-// ---------------------------------------------------------------------------
-
-/**
- * "Se revisaron 12 planes: 1 intervención generada, 7 avisos." Con errores, suma
- * "2 planes con error.".
- */
-export function textoResultadoVencimientos(r: ProcesarVencimientosRespuesta): string {
-  if (!r.revisado) return 'Los vencimientos ya se revisaron hoy.';
-  const planes = r.planes === 1 ? 'Se revisó 1 plan' : `Se revisaron ${r.planes} planes`;
-  const n = r.generadas.length;
-  const generadas = n === 1 ? '1 intervención generada' : `${n} intervenciones generadas`;
-  const avisos = r.avisos === 1 ? '1 aviso' : `${r.avisos} avisos`;
-  let texto = `${planes}: ${generadas}, ${avisos}.`;
-  const e = r.errores.length;
-  if (e > 0) texto += e === 1 ? ' 1 plan con error.' : ` ${e} planes con error.`;
-  return texto;
 }
 
 // ---------------------------------------------------------------------------

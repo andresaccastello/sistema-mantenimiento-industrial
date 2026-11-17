@@ -8,7 +8,6 @@ import {
   borradorTareaVacio,
   borradorDeTarea,
   cuerpoPlan,
-  textoResultadoVencimientos,
   cuerpoTarea,
   tareasParaGenerar,
   avisoTareasSinMarcar,
@@ -963,30 +962,5 @@ describe('FE-122: cuerpoPlan con la generación automática (PV5, 5)', () => {
     });
     assert.equal('generacion_automatica' in cuerpoPlan({ ...plan, generacionAutomatica: false }), false);
     assert.equal('generacion_automatica' in cuerpoPlan(plan), false);
-  });
-});
-
-describe('FE-123: textoResultadoVencimientos (PV5, 5)', () => {
-  const base = { revisado: true as const, planes: 12, generadas: [{ plan_id: 5, intervencion_id: 14338 }], avisos: 7, errores: [] };
-  it('el resumen, con singulares y plurales', () => {
-    assert.equal(textoResultadoVencimientos(base), 'Se revisaron 12 planes: 1 intervención generada, 7 avisos.');
-    assert.equal(
-      textoResultadoVencimientos({ ...base, planes: 1, generadas: [], avisos: 1 }),
-      'Se revisó 1 plan: 0 intervenciones generadas, 1 aviso.'
-    );
-  });
-  it('con errores, los suma', () => {
-    const errores = [{ plan_id: 9, codigo: 'MAQUINA_INACTIVA' }, { plan_id: 10, codigo: 'RECURSO_OCUPADO' }];
-    assert.equal(
-      textoResultadoVencimientos({ ...base, errores }),
-      'Se revisaron 12 planes: 1 intervención generada, 7 avisos. 2 planes con error.'
-    );
-    assert.equal(
-      textoResultadoVencimientos({ ...base, errores: errores.slice(0, 1) }),
-      'Se revisaron 12 planes: 1 intervención generada, 7 avisos. 1 plan con error.'
-    );
-  });
-  it('ya revisado hoy', () => {
-    assert.equal(textoResultadoVencimientos({ revisado: false }), 'Los vencimientos ya se revisaron hoy.');
   });
 });
