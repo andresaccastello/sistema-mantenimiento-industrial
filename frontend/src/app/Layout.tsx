@@ -35,6 +35,7 @@ import {
   IconGauge,
 } from '@tabler/icons-react';
 import { useLocation, useNavigate, Outlet } from 'react-router';
+import { ZonaPantalla } from './carga';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
 import { clienteApi } from '../api/cliente';
@@ -313,7 +314,9 @@ export function Layout() {
             </Stack>
           </Card>
         ) : (
-          <Outlet />
+          <ZonaPantalla>
+            <Outlet />
+          </ZonaPantalla>
         )}
       </AppShell.Main>
     </AppShell>

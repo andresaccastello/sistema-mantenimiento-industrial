@@ -1,52 +1,43 @@
-import React, { Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router';
-import { Center, Loader } from '@mantine/core';
 import { Layout } from './Layout';
 import { RutaProtegida } from './RutaProtegida';
+import { pantallaPerezosa } from './carga';
 import { useAuth } from '../auth/AuthContext';
 import { destinoInicio } from '../lib/inicio';
 import { useEsCelular } from '../lib/useEsCelular';
-
-// Pantallas completas
-import { Ingreso } from '../pantallas/Ingreso';
-import { CambiarPassword } from '../pantallas/CambiarPassword';
-import { Notificaciones } from '../pantallas/Notificaciones';
-import { MiCuenta } from '../pantallas/MiCuenta';
-import { Muestra } from '../pantallas/Muestra';
-import { MisReportes } from '../pantallas/MisReportes';
-import { ReportarFalla } from '../pantallas/ReportarFalla';
-import { DetalleReporteOperario } from '../pantallas/DetalleReporteOperario';
-import { IntervencionesLista } from '../pantallas/IntervencionesLista';
-import { DetalleIntervencion } from '../pantallas/DetalleIntervencion';
-import { Tablero } from '../pantallas/Tablero';
-import { MaquinasLista } from '../pantallas/MaquinasLista';
-import { DetalleMaquina } from '../pantallas/DetalleMaquina';
-import { Usuarios } from '../pantallas/Usuarios';
-import { DetalleUsuario } from '../pantallas/DetalleUsuario';
-import { SectoresCatalogos } from '../pantallas/SectoresCatalogos';
-import { Perfiles } from '../pantallas/Perfiles';
-import { Configuracion } from '../pantallas/Configuracion';
-import { Reportes } from '../pantallas/Reportes';
-import { Repuestos } from '../pantallas/Repuestos';
-import { DetalleRepuesto } from '../pantallas/DetalleRepuesto';
-import { Preventivos } from '../pantallas/Preventivos';
-import { DetallePlan } from '../pantallas/DetallePlan';
-import { NuevoPlan } from '../pantallas/NuevoPlan';
-import { Lecturas } from '../pantallas/Lecturas';
 import { vistaDetalle } from '../lib/intervenciones';
 
-// Componentes generales
-import { EnConstruccion } from '../componentes/EnConstruccion';
+// L1, 4: se cargan de entrada el ingreso, el Layout, la redirección de inicio y las dos
+// pantallas del operario en el celular
+import { Ingreso } from '../pantallas/Ingreso';
+import { MisReportes } from '../pantallas/MisReportes';
+import { ReportarFalla } from '../pantallas/ReportarFalla';
 import { NoEncontrada } from '../componentes/NoEncontrada';
 
-// Carga perezosa de DevUI provisional (solo en desarrollo)
-const DevAppLazy = import.meta.env.DEV
-  ? React.lazy(() =>
-      import('../dev-ui/DevApp').then((module) => ({
-        default: module.DevApp,
-      }))
-    )
-  : null;
+// Las demás, cuando se abren
+const CambiarPassword = pantallaPerezosa(() => import('../pantallas/CambiarPassword'), 'CambiarPassword');
+const Notificaciones = pantallaPerezosa(() => import('../pantallas/Notificaciones'), 'Notificaciones');
+const MiCuenta = pantallaPerezosa(() => import('../pantallas/MiCuenta'), 'MiCuenta');
+const Muestra = pantallaPerezosa(() => import('../pantallas/Muestra'), 'Muestra');
+const DetalleReporteOperario = pantallaPerezosa(() => import('../pantallas/DetalleReporteOperario'), 'DetalleReporteOperario');
+const IntervencionesLista = pantallaPerezosa(() => import('../pantallas/IntervencionesLista'), 'IntervencionesLista');
+const DetalleIntervencion = pantallaPerezosa(() => import('../pantallas/DetalleIntervencion'), 'DetalleIntervencion');
+const Tablero = pantallaPerezosa(() => import('../pantallas/Tablero'), 'Tablero');
+const MaquinasLista = pantallaPerezosa(() => import('../pantallas/MaquinasLista'), 'MaquinasLista');
+const DetalleMaquina = pantallaPerezosa(() => import('../pantallas/DetalleMaquina'), 'DetalleMaquina');
+const Usuarios = pantallaPerezosa(() => import('../pantallas/Usuarios'), 'Usuarios');
+const DetalleUsuario = pantallaPerezosa(() => import('../pantallas/DetalleUsuario'), 'DetalleUsuario');
+const SectoresCatalogos = pantallaPerezosa(() => import('../pantallas/SectoresCatalogos'), 'SectoresCatalogos');
+const Perfiles = pantallaPerezosa(() => import('../pantallas/Perfiles'), 'Perfiles');
+const Configuracion = pantallaPerezosa(() => import('../pantallas/Configuracion'), 'Configuracion');
+const Reportes = pantallaPerezosa(() => import('../pantallas/Reportes'), 'Reportes');
+const Repuestos = pantallaPerezosa(() => import('../pantallas/Repuestos'), 'Repuestos');
+const DetalleRepuesto = pantallaPerezosa(() => import('../pantallas/DetalleRepuesto'), 'DetalleRepuesto');
+const Preventivos = pantallaPerezosa(() => import('../pantallas/Preventivos'), 'Preventivos');
+const DetallePlan = pantallaPerezosa(() => import('../pantallas/DetallePlan'), 'DetallePlan');
+const NuevoPlan = pantallaPerezosa(() => import('../pantallas/NuevoPlan'), 'NuevoPlan');
+const Lecturas = pantallaPerezosa(() => import('../pantallas/Lecturas'), 'Lecturas');
+
 
 function RedireccionInicio() {
   const { usuario } = useAuth();
@@ -73,25 +64,7 @@ export function RutasApp() {
       {/* 1. Ruta pública de ingreso */}
       <Route path="/ingreso" element={<Ingreso />} />
 
-      {/* 2. Dev UI provisional (solo en desarrollo) */}
-      {import.meta.env.DEV && DevAppLazy && (
-        <Route
-          path="/dev-ui/*"
-          element={
-            <Suspense
-              fallback={
-                <Center style={{ minHeight: '100vh' }}>
-                  <Loader color="marca" />
-                </Center>
-              }
-            >
-              <DevAppLazy />
-            </Suspense>
-          }
-        />
-      )}
-
-      {/* 3. Rutas protegidas bajo el Layout principal */}
+      {/* 2. Rutas protegidas bajo el Layout principal */}
       <Route
         element={
           <RutaProtegida>
@@ -245,7 +218,7 @@ export function RutasApp() {
         )}
       </Route>
 
-      {/* 4. Ruta 404 No encontrada */}
+      {/* 3. Ruta 404 No encontrada */}
       <Route path="*" element={<NoEncontrada />} />
     </Routes>
   );
