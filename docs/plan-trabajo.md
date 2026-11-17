@@ -7,7 +7,7 @@ El sistema cuenta con las etapas funcionales implementadas y probadas contra la 
 - [x] Repositorio privado y documentación inicial.
 - [x] Stack React 19 + TypeScript / Node.js 22 + Hono / PostgreSQL en Neon.
 - [x] Base de frontend y diseño del sistema (Etapa F0 / F0.1).
-- [x] Migraciones SQL versionadas (001 a 019) y probadas en rama aislada de Neon.
+- [x] Migraciones SQL versionadas (001 a 021) y probadas en rama aislada de Neon.
 - [x] Ejecución de `npm install`, TypeScript (`npm run typecheck`) y build (`npm run build:frontend`).
 - [x] Tolerancia a cortes de conexión y detalles de pulido (Etapas P, C2 y C3).
 
@@ -42,14 +42,19 @@ El sistema cuenta con las etapas funcionales implementadas y probadas contra la 
 
 - [x] Cerrado: el estilo actual queda como definitivo.
 
+## Desde la A1 (hecho)
+
+- [x] El celular, más simple: un solo corte del celular, una sola entrada para el operario y un resumen de los reportes (Etapa A2).
+- [x] Calendario de preventivos (Etapa CAL1, D-028).
+- [x] Pedidos que se usan al recibir y reporte de compras (Etapa PC1, D-029).
+- [x] Ronda de lecturas, también en el celular, y avisos de lecturas atrasadas (Etapa LE1, D-030).
+- [x] Limpieza técnica: detalles pendientes, typecheck de las pruebas, pantallas de menos de 500 líneas, carga por pantalla y sin la interfaz provisoria (Etapa L1).
+
 ## Plan de cierre (lo que falta)
 
-1. [ ] Recorrido de punta a punta.
-2. [ ] Limpieza técnica.
-3. [ ] Experiencia de uso.
-4. [x] Calendario (calendario de preventivos, Etapa CAL1).
-5. [ ] SAE (archivo para SAE, a la espera del formato).
-6. [ ] Datos de demostración.
-7. [ ] Publicación.
-8. [ ] Prueba con la empresa.
-9. [ ] Tesis.
+1. [ ] Recorrido de punta a punta (el revisor).
+2. [ ] Datos de demostración.
+3. [ ] Publicación: base principal de la 004 a la última, con copia de seguridad.
+4. [ ] Prueba con GI-RE.
+5. [ ] Archivo para SAE, cuando llegue el formato.
+6. [ ] Tesis.
