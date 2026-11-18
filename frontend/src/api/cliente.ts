@@ -136,6 +136,11 @@ export const clienteApi = {
     });
   },
 
+  /** D1, 6: un PUT con `multipart/form-data` (el navegador pone el Content-Type con su boundary). */
+  putFormulario<T>(path: string, formulario: FormData, options?: RequestOptions): Promise<T> {
+    return request<T>(path, { ...options, method: 'PUT', body: formulario });
+  },
+
   delete<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T> {
     return request<T>(path, {
       ...options,

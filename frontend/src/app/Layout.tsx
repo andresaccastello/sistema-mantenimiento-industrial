@@ -46,6 +46,7 @@ import { confirmarSalida } from './salida';
 import { esRutaInicio } from '../lib/inicio';
 import { nombrePerfil } from '../lib/perfiles';
 import { nombreCompleto } from '../lib/personas';
+import { urlLogo } from '../lib/identidad';
 import { Campana } from '../componentes/Campana';
 import type { ConfiguracionPublica } from '../api/tipos';
 
@@ -149,7 +150,7 @@ export function Layout() {
 
             {tieneLogo && (
               <Image
-                src={`${BASE_URL}/api/configuracion/logo`}
+                src={urlLogo(BASE_URL, config?.actualizado_en)}
                 alt="Logo"
                 h={32}
                 w="auto"

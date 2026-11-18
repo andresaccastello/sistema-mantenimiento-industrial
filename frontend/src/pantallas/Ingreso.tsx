@@ -18,6 +18,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
 import { clienteApi } from '../api/cliente';
 import { ApiError, mensajeError } from '../lib/errores';
+import { urlLogo } from '../lib/identidad';
 import type { ConfiguracionPublica, LoginResponse } from '../api/tipos';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:3000';
@@ -98,7 +99,7 @@ export function Ingreso() {
             {tieneLogo && (
               <Center mb="xs">
                 <Image
-                  src={`${BASE_URL}/api/configuracion/logo`}
+                  src={urlLogo(BASE_URL, config?.actualizado_en)}
                   alt="Logo"
                   h={40}
                   w="auto"

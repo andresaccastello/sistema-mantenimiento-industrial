@@ -9,6 +9,7 @@ import 'dayjs/locale/es';
 import { tema, variablesTema } from './tema/tema';
 import { AuthProvider } from './auth/AuthContext';
 import { SincronizarTema } from './app/SincronizarTema';
+import { TituloPestana } from './app/TituloPestana';
 import { ApiError, mensajeError } from './lib/errores';
 import App from './App';
 import './index.css';
@@ -49,6 +50,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <DatesProvider settings={{ locale: 'es', firstDayOfWeek: 1 }}>
         <Notifications position="top-right" zIndex={1000} />
         <QueryClientProvider client={queryClient}>
+          <TituloPestana />
           <BrowserRouter>
             <AuthProvider>
               <SincronizarTema />

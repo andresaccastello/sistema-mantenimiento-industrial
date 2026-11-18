@@ -8,6 +8,7 @@ import { EncabezadoPagina } from '../componentes/EncabezadoPagina';
 import { TarjetaCanales } from '../componentes/configuracion/TarjetaCanales';
 import { TablaReglas } from '../componentes/configuracion/TablaReglas';
 import { TablaUltimosEnvios } from '../componentes/configuracion/TablaUltimosEnvios';
+import { TarjetaIdentidad } from '../componentes/configuracion/TarjetaIdentidad';
 import { mensajeError } from '../lib/errores';
 
 export function Configuracion() {
@@ -51,6 +52,8 @@ export function Configuracion() {
     return (
       <Stack gap="lg">
         <EncabezadoPagina titulo="Configuración" />
+        {/* D1, 6: arriba, la identidad del sistema */}
+        <TarjetaIdentidad />
         <Skeleton height={200} />
         <Skeleton height={300} />
       </Stack>
@@ -61,6 +64,8 @@ export function Configuracion() {
     return (
       <Stack gap="lg">
         <EncabezadoPagina titulo="Configuración" />
+        {/* D1, 6: arriba, la identidad del sistema */}
+        <TarjetaIdentidad />
         <Alert color="red" icon={<IconAlertCircle size={16} />}>
           {avisosQuery.error
             ? mensajeError(avisosQuery.error)
@@ -76,6 +81,8 @@ export function Configuracion() {
   return (
     <Stack gap="xl">
       <EncabezadoPagina titulo="Configuración" />
+      {/* D1, 6: arriba, la identidad del sistema */}
+      <TarjetaIdentidad />
 
       {/* Bloque: Avisos por email */}
       <Stack gap="lg">
