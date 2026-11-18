@@ -14,13 +14,12 @@ import {
 import { notifications } from '@mantine/notifications';
 import { clienteApi } from '../../api/cliente';
 import {
-  CuerpoRepuesto,
   RepuestoDetalle,
   RepuestoListaItem,
   ProveedorOpcion,
 } from '../../api/tipos';
 import { ApiError, mensajeError } from '../../lib/errores';
-import { validarCosto } from '../../lib/repuestos';
+import { cuerpoRepuesto, validarCosto } from '../../lib/repuestos';
 import { CampoNumero } from '../CampoNumero';
 
 /** Stock inicial y mínimo: vacíos o desde 0. */
@@ -142,21 +141,11 @@ export function ModalRepuesto({ abierto, onCerrar, repuesto, onExito }: ModalRep
     setGuardando(true);
 
     try {
-      const payload: CuerpoRepuesto = {
-        nombre: nomTrim,
-        codigo: codigo.trim() ? codigo.trim() : null,
-        unidad: unidad.trim() || 'unidad',
-        lleva_stock: llevaStock,
-        stock_minimo: llevaStock && stockMinimo !== '' && stockMinimo !== null ? Number(stockMinimo) : null,
-        costo_unitario: costoUnitario !== '' && costoUnitario !== null ? Number(costoUnitario) : null,
-        proveedor_id: proveedorId ? Number(proveedorId) : null,
-        ubicacion: ubicacion.trim() ? ubicacion.trim() : null,
-        descripcion: descripcion.trim() ? descripcion.trim() : null,
-      };
-
-      if (!esEdicion) {
-        payload.stock_inicial = llevaStock && stockInicial !== '' && stockInicial !== null ? Number(stockInicial) : 0;
-      }
+      // Sin control de stock, stock_inicial no se manda: la API lo rechaza aunque sea 0
+      const payload = cuerpoRepuesto(
+        { nombre: nomTrim, codigo, unidad, llevaStock, stockInicial, stockMinimo, costoUnitario, proveedorId, ubicacion, descripcion },
+        !esEdicion
+      );
 
       if (esEdicion && repuesto) {
         await clienteApi.put(`/api/repuestos/${repuesto.id}`, payload);

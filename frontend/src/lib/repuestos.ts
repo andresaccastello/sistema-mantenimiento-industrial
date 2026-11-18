@@ -5,7 +5,7 @@
 
 import { formatCantidad, parsearId } from './formato';
 import { normalizarTexto } from './maquinas';
-import type { CuerpoMovimiento } from '../api/tipos';
+import type { CuerpoMovimiento, CuerpoRepuesto } from '../api/tipos';
 
 export type ColorEstadoStock = 'verde' | 'naranja' | 'rojo' | 'gris';
 
@@ -564,3 +564,40 @@ export function etiquetaOrigenCosto(origen: string): string {
     : origen;
 }
 
+
+/** Los campos del formulario de un repuesto, tal como los tiene el diálogo. */
+export interface FormularioRepuesto {
+  nombre: string;
+  codigo: string;
+  unidad: string;
+  llevaStock: boolean;
+  stockInicial: number | string | null;
+  stockMinimo: number | string | null;
+  costoUnitario: number | string | null;
+  proveedorId: string | null;
+  ubicacion: string;
+  descripcion: string;
+}
+
+/**
+ * El cuerpo del alta (`esAlta`) o de la edición de un repuesto. `stock_inicial` va solo en el
+ * alta y solo con control de stock: sin control, la API rechaza el campo aunque sea 0.
+ */
+export function cuerpoRepuesto(f: FormularioRepuesto, esAlta: boolean): CuerpoRepuesto {
+  const lleno = (v: number | string | null) => v !== '' && v !== null;
+  const cuerpo: CuerpoRepuesto = {
+    nombre: f.nombre.trim(),
+    codigo: f.codigo.trim() ? f.codigo.trim() : null,
+    unidad: f.unidad.trim() || 'unidad',
+    lleva_stock: f.llevaStock,
+    stock_minimo: f.llevaStock && lleno(f.stockMinimo) ? Number(f.stockMinimo) : null,
+    costo_unitario: lleno(f.costoUnitario) ? Number(f.costoUnitario) : null,
+    proveedor_id: f.proveedorId ? Number(f.proveedorId) : null,
+    ubicacion: f.ubicacion.trim() ? f.ubicacion.trim() : null,
+    descripcion: f.descripcion.trim() ? f.descripcion.trim() : null,
+  };
+  if (esAlta && f.llevaStock) {
+    cuerpo.stock_inicial = lleno(f.stockInicial) ? Number(f.stockInicial) : 0;
+  }
+  return cuerpo;
+}

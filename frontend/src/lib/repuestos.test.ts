@@ -14,6 +14,8 @@ import {
   textoMovimiento,
   cuerpoMovimiento,
   etiquetaOrigenCosto,
+  cuerpoRepuesto,
+  type FormularioRepuesto,
 } from './repuestos';
 
 describe('FE-47: formatMoneda y formatCantidad', () => {
@@ -301,5 +303,48 @@ describe('FE-57: etiquetaOrigenCosto', () => {
 
   it('un origen desconocido sale tal cual', () => {
     assert.equal(etiquetaOrigenCosto('OTRO_ORIGEN'), 'OTRO_ORIGEN');
+  });
+});
+
+describe('FE-157: el cuerpo del alta y la edición de un repuesto', () => {
+  const formulario: FormularioRepuesto = {
+    nombre: ' Rulemán 6204 ',
+    codigo: '',
+    unidad: 'unidad',
+    llevaStock: true,
+    stockInicial: 10,
+    stockMinimo: 2,
+    costoUnitario: 4800,
+    proveedorId: '336',
+    ubicacion: '',
+    descripcion: '',
+  };
+
+  it('con control de stock, el alta manda stock_inicial', () => {
+    assert.deepEqual(cuerpoRepuesto(formulario, true), {
+      nombre: 'Rulemán 6204',
+      codigo: null,
+      unidad: 'unidad',
+      lleva_stock: true,
+      stock_inicial: 10,
+      stock_minimo: 2,
+      costo_unitario: 4800,
+      proveedor_id: 336,
+      ubicacion: null,
+      descripcion: null,
+    });
+    // Vacío, va 0
+    assert.equal(cuerpoRepuesto({ ...formulario, stockInicial: '' }, true).stock_inicial, 0);
+  });
+
+  it('sin control de stock, el alta no manda stock_inicial (ni con 0) y el mínimo va null', () => {
+    const cuerpo = cuerpoRepuesto({ ...formulario, llevaStock: false, stockInicial: 0 }, true);
+    assert.equal('stock_inicial' in cuerpo, false);
+    assert.equal(cuerpo.lleva_stock, false);
+    assert.equal(cuerpo.stock_minimo, null);
+  });
+
+  it('en la edición, stock_inicial nunca va', () => {
+    assert.equal('stock_inicial' in cuerpoRepuesto(formulario, false), false);
   });
 });
