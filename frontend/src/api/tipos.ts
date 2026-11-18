@@ -37,6 +37,17 @@ export interface Usuario {
   sectores: SectorUsuario[];
   permisos: Record<string, AlcancePermiso | string>;
   debe_cambiar_password: boolean;
+  /** D1, 2.2 */
+  preferencias: PreferenciasUsuario;
+}
+
+/** D1, 2: SISTEMA sigue lo que tenga elegido el dispositivo. */
+export type TemaUsuario = 'CLARO' | 'OSCURO' | 'SISTEMA';
+
+/** `preferencias` de `GET /api/auth/me`, y la respuesta de `PATCH /api/auth/preferencias`. */
+export interface PreferenciasUsuario {
+  modo_simple_celular: boolean;
+  tema: TemaUsuario;
 }
 
 export interface LoginResponse {

@@ -100,6 +100,8 @@ authApp.get('/me', jwtVerify, dbVerify, async (c) => {
          u.email,
          u.telefono_whatsapp,
          u.debe_cambiar_password,
+         u.modo_simple_celular,
+         u.tema,
          json_build_object('id', p.id, 'nombre', p.nombre) AS perfil,
          (
            SELECT COALESCE(json_agg(json_build_object('id', s.id, 'nombre', s.nombre) ORDER BY s.nombre ASC), '[]'::json)
@@ -131,9 +133,63 @@ authApp.get('/me', jwtVerify, dbVerify, async (c) => {
       sectores: row.sectores,
       permisos: info.permisos,
       debe_cambiar_password: info.debe_cambiar_password,
+      // D1, 2.2
+      preferencias: { modo_simple_celular: row.modo_simple_celular, tema: row.tema },
     });
   } catch (error) {
     console.error('Error en GET /auth/me:', error);
+    return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
+  }
+});
+
+const TEMAS = ['CLARO', 'OSCURO', 'SISTEMA'] as const;
+
+/**
+ * PATCH /api/auth/preferencias (D1, 2.2)
+ * Cada usuario cambia solo las suyas: `modo_simple_celular` y/o `tema`. Sin auditoría: es una
+ * preferencia de pantalla, no un dato del negocio.
+ */
+authApp.patch('/preferencias', jwtVerify, dbVerify, async (c) => {
+  const userId = (c.get as any)('userId');
+  const invalido = (error: string) => c.json({ error, codigo: 'DATOS_INVALIDOS' }, 422);
+
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return invalido('El cuerpo de la solicitud debe ser un objeto JSON');
+  }
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    return invalido('El cuerpo de la solicitud debe ser un objeto JSON');
+  }
+  const b = body as Record<string, unknown>;
+  const desconocidos = Object.keys(b).filter((k) => k !== 'modo_simple_celular' && k !== 'tema');
+  if (desconocidos.length > 0) return invalido(`Campo desconocido: ${desconocidos.join(', ')}`);
+  if (!('modo_simple_celular' in b) && !('tema' in b)) {
+    return invalido('Indicá modo_simple_celular o tema');
+  }
+  if ('modo_simple_celular' in b && typeof b.modo_simple_celular !== 'boolean') {
+    return invalido('El campo modo_simple_celular debe ser true o false');
+  }
+  if ('tema' in b && !(TEMAS as readonly unknown[]).includes(b.tema)) {
+    return invalido('El campo tema debe ser CLARO, OSCURO o SISTEMA');
+  }
+
+  try {
+    const res = await pool.query(
+      `UPDATE usuarios
+       SET modo_simple_celular = COALESCE($2, modo_simple_celular),
+           tema = COALESCE($3, tema)
+       WHERE id = $1
+       RETURNING modo_simple_celular, tema`,
+      [userId, 'modo_simple_celular' in b ? b.modo_simple_celular : null, 'tema' in b ? b.tema : null]
+    );
+    if (res.rows.length === 0) {
+      return c.json({ error: 'Usuario no encontrado', codigo: 'USUARIO_NO_ENCONTRADO' }, 404);
+    }
+    return c.json({ modo_simple_celular: res.rows[0].modo_simple_celular, tema: res.rows[0].tema });
+  } catch (error) {
+    console.error('Error en PATCH /auth/preferencias:', error);
     return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
   }
 });

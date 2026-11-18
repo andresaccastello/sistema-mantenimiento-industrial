@@ -412,3 +412,14 @@ El circuito ya está cubierto: el operario hace la revisión como hoy, y si encu
 4. **No se estiman fechas con el ritmo de uso.** Si el uso es parejo, alcanza con una tarea por fecha. Si varía, que es cuando el horómetro tiene sentido, una fecha estimada se equivoca y da una falsa tranquilidad. Las horas son horas y las fechas son fechas. Refuerza la D-028, punto 4.
 
 **Motivo:** sin lecturas, el preventivo por uso no funciona, y el problema práctico es cargarlas, no calcularlas.
+
+## D-031 — El celular, a elección de cada usuario
+
+**Estado:** Aceptada. Reemplaza el punto 3 de la D-027 y el punto 2 de la D-030.
+
+1. **El dispositivo no quita permisos.** En el celular, cada usuario ve lo que su perfil le permite, igual que en la computadora.
+2. **El modo simple es opcional.** Cada usuario lo prende o lo apaga en "Mi cuenta". Prendido, en el celular ve lo esencial: reportar fallas, sus reportes, la ronda de lecturas y un resumen de reportes. Viene prendido, así que el uso de hoy no cambia hasta que alguien lo apague.
+3. **Una tablet** de 768 px o más se ve como una computadora. Con el modo simple apagado, da lo mismo de qué lado caiga.
+4. **El tema** (claro, oscuro o el del dispositivo) también es una preferencia de cada usuario.
+
+**Motivo:** la revisión con el profesor del 18/11. La tendencia es usar el celular para casi todo, limitar por dispositivo genera casos raros, y el sistema es para cualquier empresa: que cada una decida, no el sistema.
