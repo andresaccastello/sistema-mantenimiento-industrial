@@ -12,7 +12,7 @@ export function DatosIntervencion({ reporte }: { reporte: IntervencionDetalle })
   return (
     <Card withBorder radius="md" p="md">
       <Stack gap="xs">
-        <Text fw={700} size="sm" tt="uppercase" c="#64748b">Datos</Text>
+        <Text fw={700} size="sm" tt="uppercase" c="var(--sm-tenue)">Datos</Text>
         <Group justify="space-between" align="flex-start">
           <Text size="sm" c="dimmed">Máquina</Text>
           <Text

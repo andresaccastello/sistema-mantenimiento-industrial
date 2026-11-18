@@ -47,7 +47,7 @@ export function TablaRonda({ medidores, valores, onCambiarValor, errores, guarda
         <Table.Tbody>
           {porMaquina(medidores).map((g) => (
             <Fragment key={g.maquina.id}>
-              <Table.Tr bg="var(--mantine-color-gray-0)">
+              <Table.Tr bg="var(--sm-fondo-grupo)">
                 <Table.Td colSpan={columnas}>
                   <Text size="sm" fw={700}>
                     {g.maquina.codigo ? `${g.maquina.codigo} · ${g.maquina.nombre}` : g.maquina.nombre}

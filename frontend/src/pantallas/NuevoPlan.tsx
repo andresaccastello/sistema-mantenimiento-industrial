@@ -162,7 +162,7 @@ export function NuevoPlan() {
 
   return (
     <Stack gap="lg">
-      <Title order={2} c="#0f172a">
+      <Title order={2} c="var(--sm-titulo)">
         Nuevo plan
       </Title>
 

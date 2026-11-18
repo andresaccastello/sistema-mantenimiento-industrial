@@ -7,7 +7,7 @@ export function TiemposIntervencion({ reporte }: { reporte: IntervencionDetalle 
   return (
     <Card withBorder radius="md" p="md">
       <Stack gap="xs">
-        <Text fw={700} size="sm" tt="uppercase" c="#64748b">Tiempos</Text>
+        <Text fw={700} size="sm" tt="uppercase" c="var(--sm-tenue)">Tiempos</Text>
         <Group justify="space-between" align="center">
           <Text size="sm" c="dimmed">Espera hasta empezar</Text>
           <Group gap={6}>

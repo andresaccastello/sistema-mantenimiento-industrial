@@ -11,7 +11,7 @@ export function HistorialIntervencion({ reporte }: { reporte: IntervencionDetall
   return (
     <Card withBorder radius="md" p="md">
       <Stack gap="md">
-        <Text fw={700} size="sm" tt="uppercase" c="#64748b">Historial</Text>
+        <Text fw={700} size="sm" tt="uppercase" c="var(--sm-tenue)">Historial</Text>
         {eventos.length === 0 ? (
           <Text size="sm" c="dimmed">Sin eventos registrados.</Text>
         ) : (
@@ -25,7 +25,7 @@ export function HistorialIntervencion({ reporte }: { reporte: IntervencionDetall
                     <Text size="xs" c="dimmed">cargado el {formatFechaHora(ev.registrado)}</Text>
                   )}
                   {ev.detalle && (
-                    <Text size="xs" c="#64748b" lineClamp={3} mt={2}>{ev.detalle}</Text>
+                    <Text size="xs" c="var(--sm-tenue)" lineClamp={3} mt={2}>{ev.detalle}</Text>
                   )}
                 </Timeline.Item>
               );

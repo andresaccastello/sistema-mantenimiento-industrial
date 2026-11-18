@@ -41,7 +41,7 @@ import { useAuth } from '../auth/AuthContext';
 import { clienteApi } from '../api/cliente';
 import { itemsMenu } from '../lib/menu';
 import { permitidaEnCelular } from '../lib/celular';
-import { useEsCelular } from '../lib/useEsCelular';
+import { useModoSimple } from '../lib/useModoSimple';
 import { confirmarSalida } from './salida';
 import { esRutaInicio } from '../lib/inicio';
 import { nombrePerfil } from '../lib/perfiles';
@@ -72,7 +72,8 @@ export function Layout() {
   const navigate = useNavigate();
 
   const esObligatorio = Boolean(usuario?.debe_cambiar_password);
-  const esCelular = useEsCelular();
+  // D1, 4: el menú y el aviso de la computadora dependen del modo simple, no del ancho
+  const modoSimple = useModoSimple();
 
   const { data: config } = useQuery<ConfiguracionPublica>({
     queryKey: ['configuracion-publica'],
@@ -84,9 +85,9 @@ export function Layout() {
   const nombreEmpresa = config?.nombre_empresa;
   const tieneLogo = config?.tiene_logo;
 
-  const menu = itemsMenu(usuario?.permisos || {}, esCelular);
+  const menu = itemsMenu(usuario?.permisos || {}, modoSimple);
   const bloquearEnCelular =
-    esCelular &&
+    modoSimple &&
     !esObligatorio &&
     location.pathname !== '/' &&
     !permitidaEnCelular(location.pathname, usuario?.permisos);
@@ -119,15 +120,15 @@ export function Layout() {
       padding="lg"
       styles={{
         main: {
-          backgroundColor: '#f8fafc',
+          backgroundColor: 'var(--sm-fondo)',
           minHeight: 'calc(100vh - 56px)',
         },
       }}
     >
       <AppShell.Header
         style={{
-          borderBottom: '1px solid rgba(0, 0, 0, 0.08)',
-          backgroundColor: '#ffffff',
+          borderBottom: '1px solid var(--sm-borde-suave)',
+          backgroundColor: 'var(--sm-superficie)',
           display: 'flex',
           alignItems: 'center',
           padding: '0 1rem',
@@ -158,11 +159,11 @@ export function Layout() {
             )}
 
             <Stack gap={0} justify="center" style={{ minWidth: 0, overflow: 'hidden' }}>
-              <Text fw={600} size="sm" c="#0f172a" lineClamp={1}>
+              <Text fw={600} size="sm" c="var(--sm-titulo)" lineClamp={1}>
                 {nombreSistema}
               </Text>
               {nombreEmpresa && (
-                <Text size="xs" c="#64748b" lineClamp={1}>
+                <Text size="xs" c="var(--sm-tenue)" lineClamp={1}>
                   {nombreEmpresa}
                 </Text>
               )}
@@ -185,10 +186,10 @@ export function Layout() {
                 }}
               >
                 <Stack gap={0} align="flex-end">
-                  <Text size="sm" fw={500} c="#1e293b" lineClamp={1}>
+                  <Text size="sm" fw={500} c="var(--sm-texto-fuerte)" lineClamp={1}>
                     {nombreCompleto(usuario)}
                   </Text>
-                  <Text size="xs" c="#64748b" lineClamp={1}>
+                  <Text size="xs" c="var(--sm-tenue)" lineClamp={1}>
                     {perfilLegible}
                   </Text>
                 </Stack>
@@ -228,8 +229,8 @@ export function Layout() {
         <AppShell.Navbar
           p="xs"
           style={{
-            borderRight: '1px solid rgba(0, 0, 0, 0.08)',
-            backgroundColor: '#ffffff',
+            borderRight: '1px solid var(--sm-borde-suave)',
+            backgroundColor: 'var(--sm-superficie)',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
@@ -292,10 +293,10 @@ export function Layout() {
               <ThemeIcon size={56} radius="xl" color="marca" variant="light">
                 <IconDeviceDesktop size={28} />
               </ThemeIcon>
-              <Text size="lg" fw={600} c="#1e293b" ta="center">
+              <Text size="lg" fw={600} c="var(--sm-texto-fuerte)" ta="center">
                 Esta sección se usa desde la computadora
               </Text>
-              <Text size="sm" c="#64748b" ta="center" maw={450}>
+              <Text size="sm" c="var(--sm-tenue)" ta="center" maw={450}>
                 En el celular podés reportar fallas y consultar el tablero y los reportes.
               </Text>
               {menu.length > 0 && (

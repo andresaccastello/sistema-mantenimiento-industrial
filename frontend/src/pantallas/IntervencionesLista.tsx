@@ -269,7 +269,7 @@ export function IntervencionesLista() {
     <Stack gap="lg">
       {/* 5.1 Encabezado */}
       <Group justify="space-between" align="center" wrap="wrap">
-        <Title order={2} c="#0f172a">
+        <Title order={2} c="var(--sm-titulo)">
           Intervenciones
         </Title>
         {puedeCrear && (

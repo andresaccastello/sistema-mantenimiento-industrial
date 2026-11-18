@@ -82,7 +82,7 @@ export function Ingreso() {
   const tieneLogo = config?.tiene_logo;
 
   return (
-    <Center style={{ minHeight: '100vh', background: '#f8fafc', padding: '1.5rem' }}>
+    <Center style={{ minHeight: '100vh', background: 'var(--sm-fondo)', padding: '1.5rem' }}>
       <Card
         withBorder
         radius="sm"
@@ -90,7 +90,7 @@ export function Ingreso() {
         style={{
           width: '100%',
           maxWidth: 420,
-          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05)',
+          boxShadow: '0 4px 6px -1px var(--sm-sombra), 0 2px 4px -2px var(--sm-sombra)',
         }}
       >
         <Stack gap="lg">
@@ -107,11 +107,11 @@ export function Ingreso() {
               </Center>
             )}
             {nombreEmpresa && (
-              <Text size="sm" c="#64748b" fw={500}>
+              <Text size="sm" c="var(--sm-tenue)" fw={500}>
                 {nombreEmpresa}
               </Text>
             )}
-            <Title order={2} style={{ fontSize: '1.35rem', fontWeight: 600, color: '#0f172a' }}>
+            <Title order={2} style={{ fontSize: '1.35rem', fontWeight: 600, color: 'var(--sm-titulo)' }}>
               {nombreSistema}
             </Title>
           </Box>

@@ -18,10 +18,10 @@ export function EnConstruccion({ titulo, etapa, subtitulo }: EnConstruccionProps
           <ThemeIcon size={56} radius="xl" color="marca" variant="light">
             <IconTool size={28} />
           </ThemeIcon>
-          <Text size="lg" fw={500} c="#1e293b">
+          <Text size="lg" fw={500} c="var(--sm-texto-fuerte)">
             Esta pantalla se construye en la etapa {etapa}
           </Text>
-          <Text size="sm" c="#64748b" ta="center" maw={450}>
+          <Text size="sm" c="var(--sm-tenue)" ta="center" maw={450}>
             La navegación y permisos correspondientes ya se encuentran operativos en la etapa base.
           </Text>
         </Stack>

@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router';
 import { Stack, Title, Tabs, Skeleton, Alert, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { clienteApi } from '../api/cliente';
-import { useEsCelular } from '../lib/useEsCelular';
+import { useModoSimple } from '../lib/useModoSimple';
 import { ResumenCelular } from '../componentes/reportes/ResumenCelular';
 import {
   Planta,
@@ -41,12 +41,13 @@ import { veReporteCompras } from '../lib/compras';
 import { useAuth } from '../auth/AuthContext';
 
 export function Reportes() {
-  const esCelular = useEsCelular();
+  // D1, 4: el resumen, solo con el modo simple prendido
+  const modoSimple = useModoSimple();
 
-  if (esCelular) {
+  if (modoSimple) {
     return (
       <Stack gap="lg">
-        <Title order={2} c="#0f172a">
+        <Title order={2} c="var(--sm-titulo)">
           Reportes
         </Title>
         <ResumenCelular />
@@ -175,7 +176,7 @@ function ReportesEscritorio() {
 
   return (
     <Stack gap="lg">
-      <Title order={2} c="#0f172a">
+      <Title order={2} c="var(--sm-titulo)">
         Reportes
       </Title>
 

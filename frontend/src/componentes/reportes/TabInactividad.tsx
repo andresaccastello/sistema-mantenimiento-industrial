@@ -119,7 +119,7 @@ export function TabInactividad({ data, rango }: Props) {
                       to={`/maquinas/${f.maquina.id}`}
                       fw={600}
                       size="sm"
-                      c="marca.8"
+                      c="var(--sm-marca-texto)"
                     >
                       {f.maquina.nombre} ({f.maquina.codigo})
                     </Anchor>

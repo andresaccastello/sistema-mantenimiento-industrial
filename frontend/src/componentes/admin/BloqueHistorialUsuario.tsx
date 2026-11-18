@@ -44,7 +44,7 @@ export function BloqueHistorialUsuario({
             const autor = reg.realizado_por ? nombreCompleto(reg.realizado_por) : 'Usuario eliminado';
 
             return (
-              <div key={reg.id} style={{ borderBottom: '1px solid var(--mantine-color-gray-2)', paddingBottom: 8 }}>
+              <div key={reg.id} style={{ borderBottom: '1px solid var(--sm-linea)', paddingBottom: 8 }}>
                 <Text size="xs" c="dimmed">
                   {formatFechaHora(reg.creado_en)} · {autor}
                 </Text>

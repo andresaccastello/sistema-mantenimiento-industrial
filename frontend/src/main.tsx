@@ -6,8 +6,9 @@ import { MantineProvider } from '@mantine/core';
 import { DatesProvider } from '@mantine/dates';
 import { Notifications, notifications } from '@mantine/notifications';
 import 'dayjs/locale/es';
-import { tema } from './tema/tema';
+import { tema, variablesTema } from './tema/tema';
 import { AuthProvider } from './auth/AuthContext';
+import { SincronizarTema } from './app/SincronizarTema';
 import { ApiError, mensajeError } from './lib/errores';
 import App from './App';
 import './index.css';
@@ -42,12 +43,15 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <MantineProvider theme={tema} forceColorScheme="light">
+    {/* D1, 5: el esquema sale de la preferencia del usuario (SincronizarTema). Antes de entrar,
+        Mantine usa el último que se usó en este navegador; sin ninguno, claro. */}
+    <MantineProvider theme={tema} cssVariablesResolver={variablesTema} defaultColorScheme="light">
       <DatesProvider settings={{ locale: 'es', firstDayOfWeek: 1 }}>
         <Notifications position="top-right" zIndex={1000} />
         <QueryClientProvider client={queryClient}>
           <BrowserRouter>
             <AuthProvider>
+              <SincronizarTema />
               <App />
             </AuthProvider>
           </BrowserRouter>

@@ -124,7 +124,7 @@ export function ResumenCelular() {
               ? `${t.color}.7`
               : t.valor === '—'
                 ? 'dimmed'
-                : '#0f172a';
+                : 'var(--sm-titulo)';
 
           return (
             <Paper key={t.id} withBorder p="md" radius="md">
@@ -146,7 +146,7 @@ export function ResumenCelular() {
                   t.items && t.items.length > 0 ? (
                     <Stack gap={4} mt={4}>
                       {t.items.map((linea, idx) => (
-                        <Text key={idx} size="sm" fw={600} c="#0f172a">
+                        <Text key={idx} size="sm" fw={600} c="var(--sm-titulo)">
                           {linea}
                         </Text>
                       ))}

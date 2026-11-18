@@ -93,7 +93,7 @@ export function BloqueInactividadMaquina({ rango, onCambiarRango, cargando, erro
               <Group gap="lg" mt={6}>
                 <Text size="sm" c="dimmed">
                   Correctiva:{' '}
-                  <Text span fw={600} c="dark">
+                  <Text span fw={600} c="var(--sm-texto-oscuro)">
                     {formatDuracion(
                       datos.por_tipo.CORRECTIVO
                     )}
@@ -101,7 +101,7 @@ export function BloqueInactividadMaquina({ rango, onCambiarRango, cargando, erro
                 </Text>
                 <Text size="sm" c="dimmed">
                   Preventiva:{' '}
-                  <Text span fw={600} c="dark">
+                  <Text span fw={600} c="var(--sm-texto-oscuro)">
                     {formatDuracion(
                       datos.por_tipo.PREVENTIVO
                     )}

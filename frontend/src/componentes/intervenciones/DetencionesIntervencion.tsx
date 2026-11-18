@@ -18,14 +18,14 @@ export function DetencionesIntervencion({ reporte, puedeConfirmarRecuperacion, o
   return (
     <Card withBorder radius="md" p="md">
       <Stack gap="sm">
-        <Text fw={700} size="sm" tt="uppercase" c="#64748b">Detenciones de la máquina</Text>
+        <Text fw={700} size="sm" tt="uppercase" c="var(--sm-tenue)">Detenciones de la máquina</Text>
         {!reporte.periodos_detencion || reporte.periodos_detencion.length === 0 ? (
           <Text size="sm" c="dimmed">{esPreventivo ? 'Esta intervención no detuvo la máquina.' : 'Esta falla no detuvo la máquina.'}</Text>
         ) : (
           reporte.periodos_detencion.map((p) => {
             const estaAbierto = p.esta_abierto || p.hasta === null;
             return (
-              <Card key={p.id} withBorder radius="sm" p="xs" bg="#f8fafc">
+              <Card key={p.id} withBorder radius="sm" p="xs" bg="var(--sm-fondo)">
                 <Stack gap={4}>
                   <Group justify="space-between" align="center" wrap="wrap">
                     <Text size="sm" fw={600}>

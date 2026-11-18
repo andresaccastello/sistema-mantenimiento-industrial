@@ -95,7 +95,7 @@ export function TabIndicadores({ data, rango }: Props) {
         {tarjetas.map((t) => (
           <Paper key={t.id} withBorder p="md" radius="sm">
             <Stack gap="xs">
-              <Text fz="2rem" fw={700} lh={1.1} c={t.esNull ? 'dimmed' : '#0f172a'}>
+              <Text fz="2rem" fw={700} lh={1.1} c={t.esNull ? 'dimmed' : 'var(--sm-titulo)'}>
                 {t.valor}
               </Text>
               {t.esNull && (

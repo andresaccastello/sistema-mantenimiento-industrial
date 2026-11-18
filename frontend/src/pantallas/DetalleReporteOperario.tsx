@@ -113,7 +113,7 @@ export function DetalleReporteOperario() {
           type="button"
           onClick={() => navigate('/mis-reportes')}
           size="sm"
-          c="#64748b"
+          c="var(--sm-tenue)"
           style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
         >
           <IconArrowLeft size={16} />
@@ -121,7 +121,7 @@ export function DetalleReporteOperario() {
         </Anchor>
 
         <Group justify="space-between" align="center" wrap="wrap">
-          <Title order={2} size="h2" c="#0f172a">
+          <Title order={2} size="h2" c="var(--sm-titulo)">
             Reporte N.º {reporte.id}
           </Title>
           <EstadoBadge entidad="intervencion" estado={reporte.estado} size="lg" />
@@ -146,20 +146,20 @@ export function DetalleReporteOperario() {
       {/* Tarjeta Máquina */}
       <Card withBorder radius="md" p="md">
         <Stack gap="xs">
-          <Text size="xs" fw={700} tt="uppercase" c="#64748b">
+          <Text size="xs" fw={700} tt="uppercase" c="var(--sm-tenue)">
             Máquina
           </Text>
           <Group justify="space-between" align="flex-start" wrap="wrap">
             <Box>
-              <Text fw={600} size="md" c="#0f172a">
+              <Text fw={600} size="md" c="var(--sm-titulo)">
                 {etiquetaMaquina(reporte.maquina)}
               </Text>
-              <Text size="sm" c="#64748b">
+              <Text size="sm" c="var(--sm-tenue)">
                 Sector: {reporte.maquina.sector.nombre}
               </Text>
             </Box>
             <Group gap="xs" align="center">
-              <Text size="xs" c="#64748b">
+              <Text size="xs" c="var(--sm-tenue)">
                 Estado de la máquina:
               </Text>
               <EstadoBadge
@@ -175,44 +175,44 @@ export function DetalleReporteOperario() {
       {/* Tarjeta Seguimiento */}
       <Card withBorder radius="md" p="md">
         <Stack gap="md">
-          <Text size="xs" fw={700} tt="uppercase" c="#64748b">
+          <Text size="xs" fw={700} tt="uppercase" c="var(--sm-tenue)">
             Seguimiento
           </Text>
 
           <Stack gap="xs">
             <Group justify="space-between" wrap="nowrap">
-              <Text size="sm" c="#64748b">
+              <Text size="sm" c="var(--sm-tenue)">
                 Reportado
               </Text>
-              <Text size="sm" fw={500} c="#1e293b" style={{ textAlign: 'right' }}>
+              <Text size="sm" fw={500} c="var(--sm-texto-fuerte)" style={{ textAlign: 'right' }}>
                 {formatFechaHora(reporte.fecha_creacion)} ({formatHace(reporte.fecha_creacion)})
               </Text>
             </Group>
 
             <Group justify="space-between" wrap="nowrap">
-              <Text size="sm" c="#64748b">
+              <Text size="sm" c="var(--sm-tenue)">
                 Reportado por
               </Text>
-              <Text size="sm" fw={500} c="#1e293b" style={{ textAlign: 'right' }}>
+              <Text size="sm" fw={500} c="var(--sm-texto-fuerte)" style={{ textAlign: 'right' }}>
                 {nombreCompleto(reporte.creado_por)}
               </Text>
             </Group>
 
             <Group justify="space-between" wrap="nowrap">
-              <Text size="sm" c="#64748b">
+              <Text size="sm" c="var(--sm-tenue)">
                 Responsable
               </Text>
-              <Text size="sm" fw={500} c="#1e293b" style={{ textAlign: 'right' }}>
+              <Text size="sm" fw={500} c="var(--sm-texto-fuerte)" style={{ textAlign: 'right' }}>
                 {nombreCompleto(reporte.responsable) || 'Sin asignar todavía'}
               </Text>
             </Group>
 
             <Group justify="space-between" wrap="nowrap">
-              <Text size="sm" c="#64748b">
+              <Text size="sm" c="var(--sm-tenue)">
                 Espera
               </Text>
               <Group gap={6} justify="flex-end">
-                <Text size="sm" fw={500} c="#1e293b">
+                <Text size="sm" fw={500} c="var(--sm-texto-fuerte)">
                   {formatDuracion(reporte.tiempos.espera_minutos)}
                 </Text>
                 {reporte.tiempos.espera_en_curso && (
@@ -224,20 +224,20 @@ export function DetalleReporteOperario() {
             </Group>
 
             <Group justify="space-between" wrap="nowrap">
-              <Text size="sm" c="#64748b">
+              <Text size="sm" c="var(--sm-tenue)">
                 ¿Detuvo la máquina?
               </Text>
-              <Text size="sm" fw={500} c={sigueDetenida ? 'red' : '#1e293b'} style={{ textAlign: 'right' }}>
+              <Text size="sm" fw={500} c={sigueDetenida ? 'red' : 'var(--sm-texto-fuerte)'} style={{ textAlign: 'right' }}>
                 {textoDetencion}
               </Text>
             </Group>
 
             {reporte.fecha_finalizacion && (
               <Group justify="space-between" wrap="nowrap">
-                <Text size="sm" c="#64748b">
+                <Text size="sm" c="var(--sm-tenue)">
                   Finalizado
                 </Text>
-                <Text size="sm" fw={500} c="#1e293b" style={{ textAlign: 'right' }}>
+                <Text size="sm" fw={500} c="var(--sm-texto-fuerte)" style={{ textAlign: 'right' }}>
                   {formatFechaHora(reporte.fecha_finalizacion)}
                 </Text>
               </Group>
@@ -249,31 +249,31 @@ export function DetalleReporteOperario() {
       {/* Tarjeta Descripción */}
       <Card withBorder radius="md" p="md">
         <Stack gap="md">
-          <Text size="xs" fw={700} tt="uppercase" c="#64748b">
+          <Text size="xs" fw={700} tt="uppercase" c="var(--sm-tenue)">
             Descripción
           </Text>
 
-          <Text size="sm" c="#1e293b" style={{ whiteSpace: 'pre-wrap' }}>
+          <Text size="sm" c="var(--sm-texto-fuerte)" style={{ whiteSpace: 'pre-wrap' }}>
             {reporte.descripcion}
           </Text>
 
           {reporte.observaciones && (
-            <Box mt="xs" pt="xs" style={{ borderTop: '1px solid #f1f5f9' }}>
-              <Text size="xs" fw={600} c="#64748b" mb={4}>
+            <Box mt="xs" pt="xs" style={{ borderTop: '1px solid var(--sm-separador)' }}>
+              <Text size="xs" fw={600} c="var(--sm-tenue)" mb={4}>
                 Observaciones:
               </Text>
-              <Text size="sm" c="#475569" style={{ whiteSpace: 'pre-wrap' }}>
+              <Text size="sm" c="var(--sm-texto-medio)" style={{ whiteSpace: 'pre-wrap' }}>
                 {reporte.observaciones}
               </Text>
             </Box>
           )}
 
           {reporte.trabajo_realizado && (
-            <Box mt="xs" pt="xs" style={{ borderTop: '1px solid #f1f5f9' }}>
-              <Text size="xs" fw={600} c="#059669" mb={4}>
+            <Box mt="xs" pt="xs" style={{ borderTop: '1px solid var(--sm-separador)' }}>
+              <Text size="xs" fw={600} c="var(--mantine-color-marca-6)" mb={4}>
                 Trabajo realizado:
               </Text>
-              <Text size="sm" c="#1e293b" style={{ whiteSpace: 'pre-wrap' }}>
+              <Text size="sm" c="var(--sm-texto-fuerte)" style={{ whiteSpace: 'pre-wrap' }}>
                 {reporte.trabajo_realizado}
               </Text>
             </Box>
@@ -284,7 +284,7 @@ export function DetalleReporteOperario() {
       {/* Tarjeta Historial */}
       <Card withBorder radius="md" p="md">
         <Stack gap="md">
-          <Text size="xs" fw={700} tt="uppercase" c="#64748b">
+          <Text size="xs" fw={700} tt="uppercase" c="var(--sm-tenue)">
             Historial
           </Text>
 
@@ -303,13 +303,13 @@ export function DetalleReporteOperario() {
                     title={info.titulo}
                     color={infoEstado.color}
                   >
-                    <Text size="xs" c="#64748b" mt={2}>
+                    <Text size="xs" c="var(--sm-tenue)" mt={2}>
                       {formatFechaHora(info.fecha)} · por {nombreCompleto(h.cambiado_por)}
                     </Text>
                     {h.observacion && (
                       <Text
                         size="sm"
-                        c="#64748b"
+                        c="var(--sm-tenue)"
                         mt={4}
                         style={{ fontStyle: 'italic' }}
                       >
@@ -321,7 +321,7 @@ export function DetalleReporteOperario() {
               })}
             </Timeline>
           ) : (
-            <Text size="sm" c="#64748b">
+            <Text size="sm" c="var(--sm-tenue)">
               Sin movimientos registrados
             </Text>
           )}

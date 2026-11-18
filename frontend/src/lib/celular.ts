@@ -3,7 +3,7 @@
  */
 import { destinoInicio, type PermisosAlcanceEntrada } from './inicio';
 import { vistaDetalle } from './intervenciones';
-import { verificarPermiso, type ItemMenu, type PermisosEntrada } from './menu';
+import { itemsMenu, verificarPermiso, type ItemMenu, type PermisosEntrada } from './menu';
 
 /** El mismo corte que usa el Layout: menos de sm (48em = 768px). */
 export const CORTE_CELULAR = '(max-width: 47.99em)';
@@ -44,8 +44,12 @@ function limpiarRuta(ruta: string): string {
  * - /tablero y /reportes: sí
  * - /lecturas: con MAQUINAS_REGISTRAR_LECTURAS (LE1, 4.4, D-030)
  * - todo lo demás: no
+ *
+ * D1, 4 (D-031): con el modo simple apagado, el celular no limita nada: vale todo lo que permite
+ * el perfil, como en la computadora (cada ruta controla su permiso).
  */
-export function permitidaEnCelular(ruta: string, permisos?: PermisosAlcanceEntrada): boolean {
+export function permitidaEnCelular(ruta: string, permisos?: PermisosAlcanceEntrada, modoSimple = true): boolean {
+  if (!modoSimple) return true;
   const path = limpiarRuta(ruta);
   if (!path) return false;
 
@@ -66,8 +70,10 @@ export function permitidaEnCelular(ruta: string, permisos?: PermisosAlcanceEntra
 
 /**
  * Ítems del menú y botones de secciones permitidas en el celular según los permisos del usuario (Etapa A2, sección 2).
+ * D1, 4: con el modo simple apagado, el mismo menú de la computadora.
  */
-export function itemsMenuCelular(permisos: PermisosEntrada): ItemMenu[] {
+export function itemsMenuCelular(permisos: PermisosEntrada, modoSimple = true): ItemMenu[] {
+  if (!modoSimple) return itemsMenu(permisos, false);
   const items: ItemMenu[] = [
     {
       etiqueta: 'Mis reportes',
@@ -112,8 +118,11 @@ export function itemsMenuCelular(permisos: PermisosEntrada): ItemMenu[] {
  * - si no tiene ninguno -> /mis-reportes
  */
 export function destinoInicioCelular(
-  permisos: PermisosAlcanceEntrada
+  permisos: PermisosAlcanceEntrada,
+  modoSimple = true
 ): '/tablero' | '/reportes' | '/mis-reportes' {
+  // D1, 4: con el modo simple apagado, el mismo destino que en la computadora
+  if (!modoSimple) return destinoInicio(permisos);
   if (verificarPermiso(permisos as PermisosEntrada, 'INTERVENCIONES_CREAR')) {
     return '/mis-reportes';
   }

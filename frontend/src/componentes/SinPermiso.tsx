@@ -19,10 +19,10 @@ export function SinPermiso({ permisoRequerido: _permisoRequerido }: SinPermisoPr
           <ThemeIcon size={56} radius="xl" color="red" variant="light">
             <IconLock size={28} />
           </ThemeIcon>
-          <Text size="lg" fw={600} c="#1e293b">
+          <Text size="lg" fw={600} c="var(--sm-texto-fuerte)">
             Sin permiso suficiente
           </Text>
-          <Text size="sm" c="#64748b" ta="center" maw={450}>
+          <Text size="sm" c="var(--sm-tenue)" ta="center" maw={450}>
             No tenés permiso para ver esta pantalla.
           </Text>
           <Button variant="default" onClick={() => navigate('/')} mt="sm">

@@ -19,7 +19,7 @@ export function ListaPorUso({ tareas }: { tareas: TareaPorUso[] }) {
     <Paper withBorder radius="md" p="md">
       <Stack gap="sm">
         <div>
-          <Title order={4} c="#0f172a">
+          <Title order={4} c="var(--sm-titulo)">
             Vencen por uso
           </Title>
           <Text size="xs" c="dimmed">

@@ -113,6 +113,15 @@ describe('FE-129: permitidaEnCelular', () => {
     // Con solo PLANES_GESTIONAR se mira en la computadora
     assert.equal(permitidaEnCelular('/lecturas', { PLANES_GESTIONAR: 'TODAS' }), false);
   });
+
+  it('con el modo simple apagado, todas las rutas están permitidas (D1, 4)', () => {
+    for (const ruta of ['/intervenciones', '/intervenciones/42', '/preventivos', '/maquinas/15', '/usuarios', '/configuracion', '/lecturas']) {
+      assert.equal(permitidaEnCelular(ruta, permisosAdmin, false), true, ruta);
+      assert.equal(permitidaEnCelular(ruta, permisosOperario, false), true, ruta);
+    }
+    // Prendido, lo de siempre
+    assert.equal(permitidaEnCelular('/intervenciones', permisosResponsable, true), false);
+  });
 });
 
 describe('FE-130: menú del celular para operario, responsable y administrador', () => {
@@ -169,6 +178,15 @@ describe('FE-130: menú del celular para operario, responsable y administrador',
     assert.equal(destinoInicio({ ...permisosOperario, ...lecturas }, true), '/mis-reportes');
     assert.equal(destinoInicioCelular({ ...permisosOperario, ...lecturas }), '/mis-reportes');
   });
+
+  it('con el modo simple apagado, el menú del celular es el de la computadora (D1, 4)', () => {
+    for (const permisos of [permisosOperario, permisosResponsable, permisosAdmin, permisosConsulta]) {
+      assert.deepEqual(itemsMenuCelular(permisos, false), itemsMenu(permisos, false));
+    }
+    assert.equal(itemsMenuCelular(permisosAdmin, false).length, 10);
+    // Prendido, lo de siempre
+    assert.deepEqual(itemsMenuCelular(permisosOperario, true), itemsMenuCelular(permisosOperario));
+  });
 });
 
 describe('FE-131: destino al entrar en el celular y en la computadora, y corte en 767/768 px', () => {
@@ -203,6 +221,14 @@ describe('FE-131: destino al entrar en el celular y en la computadora, y corte e
     assert.equal(CORTE_CELULAR, '(max-width: 47.99em)');
     assert.equal(esAnchoCelular(767), true);
     assert.equal(esAnchoCelular(768), false);
+  });
+
+  it('con el modo simple apagado, el destino al entrar es el de la computadora (D1, 4)', () => {
+    for (const permisos of [permisosOperario, permisosResponsable, permisosAdmin, permisosConsulta]) {
+      assert.equal(destinoInicioCelular(permisos, false), destinoInicio(permisos), JSON.stringify(permisos));
+    }
+    assert.equal(destinoInicioCelular(permisosResponsable, false), '/tablero');
+    assert.equal(destinoInicioCelular({ REPORTES_CONSULTAR: 'TODAS' }, false), '/mis-reportes');
   });
 });
 

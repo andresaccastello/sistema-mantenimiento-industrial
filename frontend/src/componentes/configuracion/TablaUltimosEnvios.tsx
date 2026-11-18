@@ -128,6 +128,8 @@ export function TablaUltimosEnvios({
           </Center>
         ) : (
           <>
+            {/* D1, 4: a 390 px, la tabla se desplaza dentro de su recuadro, no la página */}
+            <Table.ScrollContainer minWidth={640}>
             <Table verticalSpacing="sm" striped highlightOnHover>
               <Table.Thead>
                 <Table.Tr>
@@ -194,6 +196,7 @@ export function TablaUltimosEnvios({
                 })}
               </Table.Tbody>
             </Table>
+            </Table.ScrollContainer>
 
             {envios.length < total && limite < 100 && (
               <Center mt="sm">

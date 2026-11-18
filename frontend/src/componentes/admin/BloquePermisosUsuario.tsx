@@ -96,7 +96,7 @@ export function BloquePermisosUsuario({
               return (
                 <Fragment key={fila.permiso.codigo}>
                   {esNuevoGrupo && (
-                    <Table.Tr key={`grupo-${fila.grupo}`} bg="var(--mantine-color-gray-1)">
+                    <Table.Tr key={`grupo-${fila.grupo}`} bg="var(--sm-fondo-grupo-2)">
                       <Table.Td colSpan={5}>
                         <Text fw={700} size="sm">
                           {fila.grupo}

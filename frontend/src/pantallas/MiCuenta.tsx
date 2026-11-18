@@ -15,6 +15,7 @@ import { useAuth } from '../auth/AuthContext';
 import { EncabezadoPagina } from '../componentes/EncabezadoPagina';
 import { nombrePerfil } from '../lib/perfiles';
 import { nombreCompleto } from '../lib/personas';
+import { PreferenciasCuenta } from '../componentes/cuenta/PreferenciasCuenta';
 
 export function MiCuenta() {
   const { usuario, salir } = useAuth();
@@ -37,8 +38,8 @@ export function MiCuenta() {
                 width: 48,
                 height: 48,
                 borderRadius: '50%',
-                backgroundColor: '#ecfdf5',
-                color: '#059669',
+                backgroundColor: 'var(--sm-marca-suave)',
+                color: 'var(--mantine-color-marca-6)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -47,10 +48,10 @@ export function MiCuenta() {
               <IconUser size={26} />
             </Box>
             <Stack gap={2}>
-              <Text fw={600} size="lg" c="#0f172a">
+              <Text fw={600} size="lg" c="var(--sm-titulo)">
                 {nombreUsuario}
               </Text>
-              <Text size="sm" c="#64748b">
+              <Text size="sm" c="var(--sm-tenue)">
                 Legajo: {usuario?.legajo || '—'}
               </Text>
             </Stack>
@@ -59,7 +60,7 @@ export function MiCuenta() {
           <Divider />
 
           <Stack gap="xs">
-            <Text size="sm" fw={500} c="#475569">
+            <Text size="sm" fw={500} c="var(--sm-texto-medio)">
               Perfil asignado
             </Text>
             <Box>
@@ -70,7 +71,7 @@ export function MiCuenta() {
           </Stack>
 
           <Stack gap="xs">
-            <Text size="sm" fw={500} c="#475569">
+            <Text size="sm" fw={500} c="var(--sm-texto-medio)">
               Sectores autorizados
             </Text>
             <Group gap="xs" wrap="wrap">
@@ -81,7 +82,7 @@ export function MiCuenta() {
                   </Badge>
                 ))
               ) : (
-                <Text size="sm" c="#94a3b8">
+                <Text size="sm" c="var(--sm-muy-tenue)">
                   Sin sectores asignados
                 </Text>
               )}
@@ -89,10 +90,10 @@ export function MiCuenta() {
           </Stack>
 
           <Stack gap="xs">
-            <Text size="sm" fw={500} c="#475569">
+            <Text size="sm" fw={500} c="var(--sm-texto-medio)">
               Email
             </Text>
-            <Text size="sm" c="#0f172a">
+            <Text size="sm" c="var(--sm-titulo)">
               {usuario?.email || '—'}
             </Text>
             <Text size="xs" c="dimmed">
@@ -122,6 +123,9 @@ export function MiCuenta() {
           </Group>
         </Stack>
       </Card>
+
+      {/* D1, 4 y 5 */}
+      <PreferenciasCuenta />
     </>
   );
 }

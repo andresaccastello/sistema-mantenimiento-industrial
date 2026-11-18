@@ -108,7 +108,7 @@ export function Perfiles() {
                     return (
                       <Fragment key={fila.permiso.codigo}>
                         {esNuevoGrupo && (
-                          <Table.Tr key={`grupo-${fila.grupo}`} bg="var(--mantine-color-gray-1)">
+                          <Table.Tr key={`grupo-${fila.grupo}`} bg="var(--sm-fondo-grupo-2)">
                             <Table.Td colSpan={1 + perfiles.length}>
                               <Text fw={700} size="sm">
                                 {fila.grupo}

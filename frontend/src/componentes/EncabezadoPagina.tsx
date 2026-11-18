@@ -12,11 +12,11 @@ export function EncabezadoPagina({ titulo, subtitulo, acciones }: EncabezadoPagi
     <Box mb="lg">
       <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
         <Stack gap={4}>
-          <Title order={2} c="#0f172a" style={{ fontWeight: 600, fontSize: '1.5rem' }}>
+          <Title order={2} c="var(--sm-titulo)" style={{ fontWeight: 600, fontSize: '1.5rem' }}>
             {titulo}
           </Title>
           {subtitulo && (
-            <Text size="sm" c="#64748b">
+            <Text size="sm" c="var(--sm-tenue)">
               {subtitulo}
             </Text>
           )}

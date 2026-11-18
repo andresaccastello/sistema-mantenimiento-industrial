@@ -159,7 +159,7 @@ export function ModalEditarReporte({
               disabled={guardando}
             />
             <Group justify="flex-end">
-              <Text size="xs" c={descripcion.length > 2000 ? 'red' : '#94a3b8'}>
+              <Text size="xs" c={descripcion.length > 2000 ? 'red' : 'var(--sm-muy-tenue)'}>
                 {descripcion.length}/2000
               </Text>
             </Group>
@@ -180,7 +180,7 @@ export function ModalEditarReporte({
               disabled={guardando}
             />
             <Group justify="flex-end">
-              <Text size="xs" c={observaciones.length > 2000 ? 'red' : '#94a3b8'}>
+              <Text size="xs" c={observaciones.length > 2000 ? 'red' : 'var(--sm-muy-tenue)'}>
                 {observaciones.length}/2000
               </Text>
             </Group>

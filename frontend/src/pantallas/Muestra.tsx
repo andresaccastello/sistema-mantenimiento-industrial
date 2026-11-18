@@ -71,12 +71,12 @@ export function Muestra() {
       <Stack gap="xl">
         {/* 1. Badges de estados */}
         <Card withBorder radius="sm" padding="lg">
-          <Title order={4} mb="md" c="#1e293b">
+          <Title order={4} mb="md" c="var(--sm-texto-fuerte)">
             1. Tabla de estados (9 estados)
           </Title>
           <Stack gap="md">
             <Box>
-              <Text size="xs" fw={600} c="#64748b" tt="uppercase" mb="xs">
+              <Text size="xs" fw={600} c="var(--sm-tenue)" tt="uppercase" mb="xs">
                 Estados de intervención
               </Text>
               <Group gap="sm" wrap="wrap">
@@ -86,7 +86,7 @@ export function Muestra() {
               </Group>
             </Box>
             <Box>
-              <Text size="xs" fw={600} c="#64748b" tt="uppercase" mb="xs">
+              <Text size="xs" fw={600} c="var(--sm-tenue)" tt="uppercase" mb="xs">
                 Estados de máquina
               </Text>
               <Group gap="sm" wrap="wrap">
@@ -100,7 +100,7 @@ export function Muestra() {
 
         {/* 2. Botones */}
         <Card withBorder radius="sm" padding="lg">
-          <Title order={4} mb="md" c="#1e293b">
+          <Title order={4} mb="md" c="var(--sm-texto-fuerte)">
             2. Botones
           </Title>
           <Group gap="md" wrap="wrap">
@@ -113,7 +113,7 @@ export function Muestra() {
 
         {/* 3. Formulario de ejemplo */}
         <Card withBorder radius="sm" padding="lg">
-          <Title order={4} mb="md" c="#1e293b">
+          <Title order={4} mb="md" c="var(--sm-texto-fuerte)">
             3. Formulario de ejemplo
           </Title>
           <Stack gap="sm" maw={500}>
@@ -134,7 +134,7 @@ export function Muestra() {
 
         {/* 4. Tabla de ejemplo con 5 filas */}
         <Card withBorder radius="sm" padding="lg">
-          <Title order={4} mb="md" c="#1e293b">
+          <Title order={4} mb="md" c="var(--sm-texto-fuerte)">
             4. Tabla de ejemplo (5 filas)
           </Title>
           <Table striped highlightOnHover withTableBorder withColumnBorders>
@@ -199,7 +199,7 @@ export function Muestra() {
 
         {/* 5. Pantalla vacía */}
         <Card withBorder radius="sm" padding="lg">
-          <Title order={4} mb="md" c="#1e293b">
+          <Title order={4} mb="md" c="var(--sm-texto-fuerte)">
             5. Pantalla vacía
           </Title>
           <PantallaVacia
@@ -211,7 +211,7 @@ export function Muestra() {
 
         {/* 6. Ejemplos de formato de tiempos */}
         <Card withBorder radius="sm" padding="lg">
-          <Title order={4} mb="md" c="#1e293b">
+          <Title order={4} mb="md" c="var(--sm-texto-fuerte)">
             6. Formato de tiempos legibles
           </Title>
           <Stack gap="xs">

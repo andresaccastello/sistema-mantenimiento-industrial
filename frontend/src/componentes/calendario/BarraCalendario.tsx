@@ -40,7 +40,7 @@ export function BarraCalendario({ actual, hoy, onIr }: Props) {
           <Button variant="default" onClick={() => onIr({ vista, fecha: hoy })}>
             Hoy
           </Button>
-          <Title order={4} c="#0f172a" ml="xs">
+          <Title order={4} c="var(--sm-titulo)" ml="xs">
             {textoTituloPeriodo(vista, fecha)}
           </Title>
         </Group>

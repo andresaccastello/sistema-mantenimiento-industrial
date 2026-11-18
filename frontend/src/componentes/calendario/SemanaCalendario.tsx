@@ -40,7 +40,7 @@ export function SemanaCalendario({ fecha, hoy, porDia, onAbrirDia }: Props) {
                 px="xs"
                 style={{
                   borderBottom: BORDE,
-                  background: esHoy ? 'var(--mantine-color-marca-light)' : 'var(--mantine-color-gray-0)',
+                  background: esHoy ? 'var(--mantine-color-marca-light)' : 'var(--sm-fondo-grupo)',
                 }}
               >
                 <Text size="xs" fw={600} c={esHoy ? 'marca' : 'dimmed'}>
@@ -54,10 +54,10 @@ export function SemanaCalendario({ fecha, hoy, porDia, onAbrirDia }: Props) {
                     onClick={() => onAbrirDia(dia)}
                     style={{ ...estiloEvento(e), borderRadius: 6, padding: 6, display: 'block', minWidth: 0 }}
                   >
-                    <Text size="xs" fw={600} c={e.tipo === 'PREVISTA' ? 'dimmed' : '#0f172a'} lineClamp={2}>
+                    <Text size="xs" fw={600} c={e.tipo === 'PREVISTA' ? 'dimmed' : 'var(--sm-titulo)'} lineClamp={2}>
                       {etiquetaMaquina(e.maquina)}
                     </Text>
-                    <Text size="xs" c={e.tipo === 'PREVISTA' ? 'dimmed' : '#0f172a'} lineClamp={2}>
+                    <Text size="xs" c={e.tipo === 'PREVISTA' ? 'dimmed' : 'var(--sm-titulo)'} lineClamp={2}>
                       {e.accion}
                     </Text>
                     <Box my={4}>

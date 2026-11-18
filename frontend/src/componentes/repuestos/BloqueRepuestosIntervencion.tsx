@@ -223,7 +223,7 @@ export function BloqueRepuestosIntervencion({
         )}
 
         {ve_costos && (
-          <Group justify="flex-end" pt="xs" style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
+          <Group justify="flex-end" pt="xs" style={{ borderTop: '1px solid var(--sm-linea)' }}>
             <Text size="sm" fw={700}>
               Total en repuestos: {formatMoneda(total_repuestos)}
             </Text>

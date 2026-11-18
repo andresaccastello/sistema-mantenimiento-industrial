@@ -19,6 +19,7 @@ import { useAuth } from '../auth/AuthContext';
 import { clienteApi } from '../api/cliente';
 import { destinoInicio } from '../lib/inicio';
 import { useEsCelular } from '../lib/useEsCelular';
+import { useModoSimple } from '../lib/useModoSimple';
 import { etiquetaMaquina } from '../lib/maquinas';
 import { formatHace } from '../lib/formato';
 import { nombreCompleto } from '../lib/personas';
@@ -59,10 +60,10 @@ function TarjetaReporte({
       <Stack gap="xs">
         <Group justify="space-between" align="flex-start" wrap="nowrap">
           <Box style={{ minWidth: 0, flex: 1 }}>
-            <Text fw={600} size="sm" c="#0f172a" lineClamp={1}>
+            <Text fw={600} size="sm" c="var(--sm-titulo)" lineClamp={1}>
               {etiquetaMaquina(item.maquina)}
             </Text>
-            <Text size="xs" c="#64748b" lineClamp={1}>
+            <Text size="xs" c="var(--sm-tenue)" lineClamp={1}>
               {item.maquina.sector.nombre}
             </Text>
           </Box>
@@ -70,7 +71,7 @@ function TarjetaReporte({
         </Group>
 
         <Group gap="xs" wrap="wrap">
-          <Text size="xs" c="#64748b">
+          <Text size="xs" c="var(--sm-tenue)">
             Reportado {formatHace(item.fecha_creacion)}
           </Text>
           {item.detiene_maquina_actualmente && (
@@ -80,15 +81,15 @@ function TarjetaReporte({
           )}
         </Group>
 
-        <Text size="sm" c="#334155" lineClamp={2}>
+        <Text size="sm" c="var(--sm-texto)" lineClamp={2}>
           {item.descripcion}
         </Text>
       </Stack>
 
-      <Box mt="sm" pt="xs" style={{ borderTop: '1px solid #f1f5f9' }}>
-        <Text size="xs" c="#64748b">
+      <Box mt="sm" pt="xs" style={{ borderTop: '1px solid var(--sm-separador)' }}>
+        <Text size="xs" c="var(--sm-tenue)">
           Responsable:{' '}
-          <Text span fw={500} c="#1e293b">
+          <Text span fw={500} c="var(--sm-texto-fuerte)">
             {nombreCompleto(item.responsable) || 'Sin asignar'}
           </Text>
         </Text>
@@ -103,8 +104,10 @@ export function MisReportes() {
   // "/" volvería acá, en un bucle sin fin (pantalla en blanco)
   const esCelular = useEsCelular();
 
-  // En computadora, redirigir si no es el destino de inicio del perfil
-  if (!esCelular && destinoInicio(usuario?.permisos) !== '/mis-reportes') {
+  // En computadora, o en el celular sin el modo simple (D1, 4), redirigir si no es el destino
+  // de inicio del perfil
+  const modoSimple = useModoSimple();
+  if (!modoSimple && destinoInicio(usuario?.permisos) !== '/mis-reportes') {
     return <Navigate to="/" replace />;
   }
 
@@ -214,18 +217,18 @@ function MisReportesContenido({ esCelular }: { esCelular: boolean }) {
           {/* Bloque Abiertos */}
           <Stack gap="sm">
             <Group justify="space-between" align="baseline">
-              <Title order={3} size="h4" c="#0f172a">
+              <Title order={3} size="h4" c="var(--sm-titulo)">
                 Abiertos ({totalAbiertos})
               </Title>
               {totalAbiertos > 50 && (
-                <Text size="xs" c="#64748b">
+                <Text size="xs" c="var(--sm-tenue)">
                   Se muestran los 50 más recientes de {totalAbiertos}.
                 </Text>
               )}
             </Group>
 
             {abiertos.length === 0 ? (
-              <Text size="sm" c="#64748b">
+              <Text size="sm" c="var(--sm-tenue)">
                 No tenés reportes abiertos en este momento.
               </Text>
             ) : (
@@ -243,12 +246,12 @@ function MisReportesContenido({ esCelular }: { esCelular: boolean }) {
 
           {/* Bloque Cerrados recientemente */}
           <Stack gap="sm">
-            <Title order={3} size="h4" c="#0f172a">
+            <Title order={3} size="h4" c="var(--sm-titulo)">
               Cerrados recientemente
             </Title>
 
             {cerrados.length === 0 ? (
-              <Text size="sm" c="#64748b">
+              <Text size="sm" c="var(--sm-tenue)">
                 No hay reportes cerrados recientemente.
               </Text>
             ) : (

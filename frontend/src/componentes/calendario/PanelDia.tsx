@@ -53,7 +53,7 @@ export function PanelDia({ fecha, eventos, onCerrar }: Props) {
                   </Text>
                 )}
                 {e.tambien_por_uso && !e.vencida_por_uso && (
-                  <Text size="xs" c="orange.8">
+                  <Text size="xs" c="var(--sm-aviso-texto)">
                     También vence por uso: puede tocar antes
                   </Text>
                 )}

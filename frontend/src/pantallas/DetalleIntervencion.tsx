@@ -181,7 +181,7 @@ export function DetalleIntervencion() {
         </Anchor>
 
         <Group gap="sm" align="center" wrap="wrap">
-          <Title order={2} c="#0f172a">Intervención N.º {reporte.id}</Title>
+          <Title order={2} c="var(--sm-titulo)">Intervención N.º {reporte.id}</Title>
           <EstadoBadge entidad="intervencion" estado={reporte.estado} size="lg" />
           {tieneDetencionAbierta && <Badge color="red" variant="filled" size="md">Máquina detenida</Badge>}
           {esPreventivo && <Badge color="teal" variant="light" size="md">Preventivo</Badge>}
@@ -243,10 +243,10 @@ export function DetalleIntervencion() {
             {/* 1. Falla reportada */}
             <Card withBorder radius="md" p="md">
               <Stack gap="xs">
-                <Text fw={700} size="sm" tt="uppercase" c="#64748b">{esPreventivo ? 'Trabajo programado' : 'Falla reportada'}</Text>
-                <Text fw={600} size="md" c="#0f172a">{reporte.descripcion}</Text>
+                <Text fw={700} size="sm" tt="uppercase" c="var(--sm-tenue)">{esPreventivo ? 'Trabajo programado' : 'Falla reportada'}</Text>
+                <Text fw={600} size="md" c="var(--sm-titulo)">{reporte.descripcion}</Text>
                 {reporte.observaciones && (
-                  <Text size="sm" c="#475569" style={{ whiteSpace: 'pre-wrap' }}>{reporte.observaciones}</Text>
+                  <Text size="sm" c="var(--sm-texto-medio)" style={{ whiteSpace: 'pre-wrap' }}>{reporte.observaciones}</Text>
                 )}
               </Stack>
             </Card>
@@ -255,8 +255,8 @@ export function DetalleIntervencion() {
             {reporte.trabajo_realizado && (
               <Card withBorder radius="md" p="md">
                 <Stack gap="xs">
-                  <Text fw={700} size="sm" tt="uppercase" c="#64748b">Trabajo realizado</Text>
-                  <Text size="sm" c="#0f172a" style={{ whiteSpace: 'pre-wrap' }}>{reporte.trabajo_realizado}</Text>
+                  <Text fw={700} size="sm" tt="uppercase" c="var(--sm-tenue)">Trabajo realizado</Text>
+                  <Text size="sm" c="var(--sm-titulo)" style={{ whiteSpace: 'pre-wrap' }}>{reporte.trabajo_realizado}</Text>
                   <Group justify="space-between" mt="xs" wrap="wrap">
                     <Text size="xs" c="dimmed">
                       Lo hizo: {reporte.ejecucion === 'EXTERNA' ? 'Servicio externo' : 'Personal propio'}

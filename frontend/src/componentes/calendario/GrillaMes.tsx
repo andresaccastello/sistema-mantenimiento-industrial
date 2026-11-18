@@ -20,7 +20,7 @@ export function GrillaMes({ fecha, hoy, porDia, onAbrirDia }: Props) {
   const semanas = semanasDelMes(fecha);
   return (
     <Box style={{ border: BORDE, borderRadius: 8, overflow: 'hidden' }}>
-      <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', background: 'var(--mantine-color-gray-0)' }}>
+      <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', background: 'var(--sm-fondo-grupo)' }}>
         {DIAS_SEMANA_CORTOS.map((d) => (
           <Text key={d} size="xs" fw={600} c="dimmed" ta="center" py={6} style={{ borderBottom: BORDE }}>
             {d}

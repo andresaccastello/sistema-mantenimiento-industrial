@@ -4,7 +4,7 @@ import { RutaProtegida } from './RutaProtegida';
 import { pantallaPerezosa } from './carga';
 import { useAuth } from '../auth/AuthContext';
 import { destinoInicio } from '../lib/inicio';
-import { useEsCelular } from '../lib/useEsCelular';
+import { useModoSimple } from '../lib/useModoSimple';
 import { vistaDetalle } from '../lib/intervenciones';
 
 // L1, 4: se cargan de entrada el ingreso, el Layout, la redirección de inicio y las dos
@@ -41,9 +41,10 @@ const Lecturas = pantallaPerezosa(() => import('../pantallas/Lecturas'), 'Lectur
 
 function RedireccionInicio() {
   const { usuario } = useAuth();
-  // Se lee en el primer render (useEsCelular): el destino no puede cambiar a mitad de camino
-  const esCelular = useEsCelular();
-  const destino = destinoInicio(usuario?.permisos, esCelular);
+  // Se lee en el primer render (useEsCelular, dentro de useModoSimple): el destino no puede
+  // cambiar a mitad de camino. D1, 4: depende del modo simple, no del ancho
+  const modoSimple = useModoSimple();
+  const destino = destinoInicio(usuario?.permisos, modoSimple);
   return <Navigate to={destino} replace />;
 }
 

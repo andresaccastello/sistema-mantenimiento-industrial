@@ -8,12 +8,13 @@ interface Props {
   reporteCreado: IntervencionCreada;
   /** La máquina como se eligió en el formulario, o el nombre que devolvió la API. */
   etiquetaMaquina: string;
-  esCelular: boolean;
+  /** Con el modo simple, el operario vuelve a sus reportes; si no, al inicio. */
+  modoSimple: boolean;
   onReportarOtra: () => void;
 }
 
 /** La confirmación después de reportar una falla. */
-export function ConfirmacionReporte({ reporteCreado, etiquetaMaquina, esCelular, onReportarOtra }: Props) {
+export function ConfirmacionReporte({ reporteCreado, etiquetaMaquina, modoSimple, onReportarOtra }: Props) {
   const navigate = useNavigate();
   const maqResp = reporteCreado.maquina;
 
@@ -28,20 +29,20 @@ export function ConfirmacionReporte({ reporteCreado, etiquetaMaquina, esCelular,
         style={{ textAlign: 'center' }}
       >
         <Stack align="center" gap="md">
-          <Box c="#16a34a">
+          <Box c="var(--sm-exito)">
             <IconCircleCheck size={64} stroke={1.5} />
           </Box>
 
-          <Title order={2} size="h3" c="#0f172a">
+          <Title order={2} size="h3" c="var(--sm-titulo)">
             Reporte N.º {reporteCreado.id} registrado
           </Title>
 
-          <Text size="lg" fw={500} c="#334155">
+          <Text size="lg" fw={500} c="var(--sm-texto)">
             {etiquetaMaquina}
           </Text>
 
           <Group gap="xs" justify="center">
-            <Text size="sm" c="#64748b">
+            <Text size="sm" c="var(--sm-tenue)">
               Estado de la máquina:
             </Text>
             <EstadoBadge entidad="maquina" estado={maqResp.estado_actual} size="md" />
@@ -69,9 +70,9 @@ export function ConfirmacionReporte({ reporteCreado, etiquetaMaquina, esCelular,
               size="lg"
               variant="subtle"
               color="gray"
-              onClick={() => navigate(esCelular ? '/mis-reportes' : '/')}
+              onClick={() => navigate(modoSimple ? '/mis-reportes' : '/')}
             >
-              {esCelular ? 'Ver mis reportes' : 'Ir al inicio'}
+              {modoSimple ? 'Ver mis reportes' : 'Ir al inicio'}
             </Button>
           </Stack>
         </Stack>

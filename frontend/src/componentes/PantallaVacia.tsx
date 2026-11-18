@@ -18,14 +18,14 @@ export function PantallaVacia({
   return (
     <Center py="xl">
       <Stack align="center" gap="sm" style={{ textAlign: 'center', maxWidth: 400 }}>
-        <Box c="#94a3b8">
+        <Box c="var(--sm-muy-tenue)">
           {icono || <IconInbox size={48} stroke={1.5} />}
         </Box>
-        <Text fw={600} size="lg" c="#334155">
+        <Text fw={600} size="lg" c="var(--sm-texto)">
           {titulo}
         </Text>
         {mensaje && (
-          <Text size="sm" c="#64748b">
+          <Text size="sm" c="var(--sm-tenue)">
             {mensaje}
           </Text>
         )}

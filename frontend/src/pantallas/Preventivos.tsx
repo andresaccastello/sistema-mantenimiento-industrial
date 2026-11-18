@@ -30,7 +30,7 @@ export function Preventivos() {
   return (
     <Stack gap="lg">
       <Group justify="space-between" align="center" wrap="wrap">
-        <Title order={2} c="#0f172a">
+        <Title order={2} c="var(--sm-titulo)">
           Preventivos
         </Title>
         <Group gap="xs" wrap="wrap">

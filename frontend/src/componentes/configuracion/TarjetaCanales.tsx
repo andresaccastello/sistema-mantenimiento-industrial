@@ -105,7 +105,7 @@ export function TarjetaCanales({ canales, pendientes, onActualizado }: TarjetaCa
           <Stack gap="xs">
             <Group justify="space-between" align="center">
               <Group gap="xs">
-                <IconMail size={20} color="#0284c7" />
+                <IconMail size={20} style={{ color: 'var(--sm-info)' }} />
                 <Text fw={600} size="md">
                   Email
                 </Text>

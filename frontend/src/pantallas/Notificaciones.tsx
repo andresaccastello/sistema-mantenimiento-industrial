@@ -197,10 +197,10 @@ export function Notificaciones() {
                 onClick={() => handleClickNotificacion(notif)}
                 // L1, 1.5: el color va con la prop bg, la misma que pone el tema; con
                 // style.backgroundColor, React avisa al cambiar de no leída a leída
-                bg={noLeida ? '#f0fdf4' : '#ffffff'}
+                bg={noLeida ? 'var(--sm-no-leida)' : 'var(--sm-superficie)'}
                 style={{
                   cursor: destinoAviso(notif) ? 'pointer' : 'default',
-                  borderColor: noLeida ? '#bbf7d0' : 'rgba(0, 0, 0, 0.08)',
+                  borderColor: noLeida ? 'var(--sm-no-leida-borde)' : 'var(--sm-borde-suave)',
                   transition: 'background-color 150ms ease',
                 }}
               >
@@ -215,16 +215,16 @@ export function Notificaciones() {
                       <Text
                         size="sm"
                         fw={noLeida ? 600 : 500}
-                        c={noLeida ? '#0f172a' : '#334155'}
+                        c={noLeida ? 'var(--sm-titulo)' : 'var(--sm-texto)'}
                       >
                         {notif.titulo}
                       </Text>
-                      <Text size="xs" c="#64748b">
+                      <Text size="xs" c="var(--sm-tenue)">
                         • {formatHace(notif.creada_en)}
                       </Text>
                     </Group>
                     {/* pre-line: el aviso de lecturas atrasadas trae una línea por medidor */}
-                    <Text size="sm" c="#475569" style={{ whiteSpace: 'pre-line' }}>
+                    <Text size="sm" c="var(--sm-texto-medio)" style={{ whiteSpace: 'pre-line' }}>
                       {notif.mensaje}
                     </Text>
                   </Stack>

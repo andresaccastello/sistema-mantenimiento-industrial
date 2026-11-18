@@ -91,7 +91,7 @@ export function BloqueTareasIntervencion({ intervencionId, estadoIntervencion }:
     <Card withBorder radius="md" p="md">
       <Stack gap="sm">
         <Group justify="space-between" wrap="wrap">
-          <Text fw={700} size="sm" tt="uppercase" c="#64748b">
+          <Text fw={700} size="sm" tt="uppercase" c="var(--sm-tenue)">
             Tareas del plan
           </Text>
           {data && (
@@ -122,7 +122,7 @@ export function BloqueTareasIntervencion({ intervencionId, estadoIntervencion }:
                     }
                   />
                   {avisoPendiente === t.id && (
-                    <Text size="xs" c="orange.8">
+                    <Text size="xs" c="var(--sm-aviso-texto)">
                       Iniciá el trabajo para confirmar los repuestos.
                     </Text>
                   )}

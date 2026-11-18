@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
 import { clienteApi, registrarReaccionAuth } from '../api/cliente';
 import { obtenerToken, guardarToken, eliminarToken } from './sesion';
-import type { Usuario, AlcancePermiso } from '../api/tipos';
+import type { Usuario, AlcancePermiso, PreferenciasUsuario } from '../api/tipos';
 
 export interface AuthContextValue {
   token: string | null;
@@ -15,6 +15,8 @@ export interface AuthContextValue {
   ingresar: (token: string, debeCambiarPassword?: boolean) => Promise<void>;
   salir: () => void;
   recargarUsuario: () => Promise<void>;
+  /** D1, 4: guarda las preferencias que devolvió la API, sin volver a pedir /me. */
+  actualizarPreferencias: (preferencias: PreferenciasUsuario) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -129,6 +131,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [recargarUsuario]);
 
+  const actualizarPreferencias = useCallback((preferencias: PreferenciasUsuario) => {
+    setUsuario((u) => (u ? { ...u, preferencias } : u));
+  }, []);
+
   const tienePermiso = useCallback(
     (codigo: string): boolean => {
       if (!usuario || !usuario.permisos) return false;
@@ -156,6 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ingresar,
         salir,
         recargarUsuario,
+        actualizarPreferencias,
       }}
     >
       {children}

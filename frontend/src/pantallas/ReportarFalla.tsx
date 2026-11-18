@@ -24,7 +24,7 @@ import { clienteApi } from '../api/cliente';
 import { EncabezadoPagina } from '../componentes/EncabezadoPagina';
 import { EstadoBadge } from '../componentes/EstadoBadge';
 import { ConfirmacionReporte } from '../componentes/reportar/ConfirmacionReporte';
-import { useEsCelular } from '../lib/useEsCelular';
+import { useModoSimple } from '../lib/useModoSimple';
 import {
   etiquetaMaquina,
   agruparMaquinas,
@@ -42,7 +42,8 @@ export function ReportarFalla() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
-  const esCelular = useEsCelular();
+  // D1, 4: adónde se vuelve depende del modo simple, como el destino al entrar
+  const modoSimple = useModoSimple();
 
   // Estados del formulario
   const [maquinaId, setMaquinaId] = useState<string | null>(null);
@@ -240,7 +241,7 @@ export function ReportarFalla() {
       <ConfirmacionReporte
         reporteCreado={reporteCreado}
         etiquetaMaquina={maquinaElegida ? etiquetaMaquina(maquinaElegida) : reporteCreado.maquina.nombre}
-        esCelular={esCelular}
+        modoSimple={modoSimple}
         onReportarOtra={handleReportarOtra}
       />
     );
@@ -283,7 +284,7 @@ export function ReportarFalla() {
                       {option.label}
                     </Text>
                     {maq?.sector?.nombre && (
-                      <Text size="xs" c="#64748b">
+                      <Text size="xs" c="var(--sm-tenue)">
                         {maq.sector.nombre}
                       </Text>
                     )}
@@ -296,7 +297,7 @@ export function ReportarFalla() {
             {maquinaElegida && (
               <Stack gap="xs" mt="xs">
                 <Group gap="xs">
-                  <Text size="sm" c="#64748b">
+                  <Text size="sm" c="var(--sm-tenue)">
                     Estado actual:
                   </Text>
                   <EstadoBadge entidad="maquina" estado={maquinaElegida.estado} size="sm" />
@@ -318,7 +319,7 @@ export function ReportarFalla() {
 
           {/* 3. ¿La máquina quedó detenida? */}
           <Stack gap="xs">
-            <Text id="label-maquina-detenida" fw={500} size="md" c="#0f172a">
+            <Text id="label-maquina-detenida" fw={500} size="md" c="var(--sm-titulo)">
               ¿La máquina quedó detenida?
             </Text>
             <SimpleGrid
@@ -381,7 +382,7 @@ export function ReportarFalla() {
               error={errores.descripcion}
             />
             <Group justify="flex-end">
-              <Text size="xs" c={descripcion.length > 2000 ? 'red' : '#94a3b8'}>
+              <Text size="xs" c={descripcion.length > 2000 ? 'red' : 'var(--sm-muy-tenue)'}>
                 {descripcion.length}/2000
               </Text>
             </Group>
@@ -405,17 +406,17 @@ export function ReportarFalla() {
               error={errores.observaciones}
             />
             <Group justify="flex-end">
-              <Text size="xs" c={observaciones.length > 2000 ? 'red' : '#94a3b8'}>
+              <Text size="xs" c={observaciones.length > 2000 ? 'red' : 'var(--sm-muy-tenue)'}>
                 {observaciones.length}/2000
               </Text>
             </Group>
           </Stack>
 
           {/* 6. Dato de control */}
-          <Box p="xs" style={{ backgroundColor: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+          <Box p="xs" style={{ backgroundColor: 'var(--sm-fondo)', borderRadius: 6, border: '1px solid var(--sm-borde)' }}>
             <Group gap="xs">
-              <IconInfoCircle size={16} color="#64748b" />
-              <Text size="xs" c="#64748b">
+              <IconInfoCircle size={16} style={{ color: 'var(--sm-tenue)' }} />
+              <Text size="xs" c="var(--sm-tenue)">
                 Reporta: {nombreCompleto(usuario)} · legajo {usuario?.legajo || '—'} · {formatFechaHora(ahora)}
               </Text>
             </Group>
