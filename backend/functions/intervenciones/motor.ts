@@ -758,6 +758,26 @@ export async function ejecutarTransicionServicio(
 }
 
 /**
+ * D1, 1: una intervención no se finaliza con pedidos pendientes o pedidos. Se llama con la
+ * intervención bloqueada: crear un pedido también la bloquea, así que no aparece uno nuevo en el medio.
+ */
+async function verificarSinPedidosAbiertos(client: pg.PoolClient, intervencionId: number): Promise<void> {
+  const res = await client.query(
+    `SELECT count(*)::int AS n FROM pedidos_repuesto WHERE intervencion_id = $1 AND estado IN ('PENDIENTE', 'PEDIDO')`,
+    [intervencionId]
+  );
+  const n = Number(res.rows[0].n);
+  if (n > 0) {
+    throw new ErrorNegocio(
+      409,
+      'PEDIDOS_ABIERTOS',
+      `La intervención tiene ${n} ${n === 1 ? 'pedido' : 'pedidos'} sin recibir: recibilos o cancelalos antes de finalizar`,
+      { pedidos_abiertos: n }
+    );
+  }
+}
+
+/**
  * 6.1 POST /api/intervenciones/:id/finalizar (T6)
  */
 export async function finalizarIntervencionServicio(
@@ -792,6 +812,8 @@ export async function finalizarIntervencionServicio(
   }
 
   const transicion = await verificarTransicion(client, 'FINALIZAR', intervencion, maquina, usuario);
+  // D1, 1: no se finaliza con pedidos sin recibir (la intervención ya está bloqueada)
+  await verificarSinPedidosAbiertos(client, intervencionId);
 
   // Validaciones de datos
   const trabajoRealizado = typeof body.trabajo_realizado === 'string' ? body.trabajo_realizado.trim() : '';
@@ -1007,6 +1029,8 @@ export async function resolverAhoraIntervencionServicio(
   }
 
   const transicion = await verificarTransicion(client, 'RESOLVER_AHORA', intervencion, maquina, usuario);
+  // D1, 1: también al resolver ahora (una intervención reabierta puede traer pedidos de antes)
+  await verificarSinPedidosAbiertos(client, intervencionId);
 
   // fecha_inicio es obligatoria
   if (body.fecha_inicio === undefined || body.fecha_inicio === null || String(body.fecha_inicio).trim() === '') {

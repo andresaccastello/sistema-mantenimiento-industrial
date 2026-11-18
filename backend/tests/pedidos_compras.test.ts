@@ -60,7 +60,7 @@ async function pedir(method: string, path: string, token: string | null, body?: 
   return { status: r.status, cuerpo };
 }
 
-test('Etapa PC1 — Pedidos que se usan al recibir y compras (PC-01 a PC-15)', async (t) => {
+test('Etapa PC1 — Pedidos que se usan al recibir y compras (PC-01 a PC-16)', async (t) => {
   let client = await pool.connect();
 
   const createdPlantaIds: number[] = [];
@@ -459,16 +459,8 @@ test('Etapa PC1 — Pedidos que se usan al recibir y compras (PC-01 a PC-15)', a
     await t.test('PC-08: usar con la intervención cerrada', async () => {
       const rep = await crearRepuesto(true, 100, 0);
 
-      // Finalizada
-      const intF = await crearIntervencion();
-      const pedF = await crearPedido(intF, { repuesto_id: rep, cantidad: 2 });
-      const fin = await pedir('POST', `/api/intervenciones/${intF}/finalizar`, R.token, {
-        estado_esperado: 'EN_PROCESO', trabajo_realizado: 'Arreglo provisorio', ejecucion: 'INTERNA',
-      });
-      assert.strictEqual(fin.status, 200, JSON.stringify(fin.cuerpo));
-      const rF = await recibir(intF, pedF, { ingresar_stock: true, usar: { cantidad: 1 }, motivo: 'Corrección con motivo' });
-      assert.deepStrictEqual([rF.status, rF.cuerpo.codigo], [409, 'ESTADO_NO_PERMITE_REPUESTOS'], JSON.stringify(rF.cuerpo));
-      assert.strictEqual(await stock(rep), 0);
+      // D1, 1: la mitad "finalizada" se sacó con el OK de Andrés. Con pedidos abiertos ya no se
+      // finaliza, así que ese estado no se alcanza; la cancelada cubre el mismo control.
 
       // Cancelada
       const intC = await crearIntervencion();
@@ -480,15 +472,12 @@ test('Etapa PC1 — Pedidos que se usan al recibir y compras (PC-01 a PC-15)', a
       const rC = await recibir(intC, pedC, { ingresar_stock: true, usar: { cantidad: 1 } });
       assert.deepStrictEqual([rC.status, rC.cuerpo.codigo], [409, 'ESTADO_NO_PERMITE_REPUESTOS'], JSON.stringify(rC.cuerpo));
 
-      // Sin usar, se reciben igual y entran al stock
-      const okF = await recibir(intF, pedF, { ingresar_stock: true });
-      assert.strictEqual(okF.status, 200, JSON.stringify(okF.cuerpo));
-      assert.strictEqual(okF.cuerpo.intervencion_estado, 'FINALIZADA');
+      // Sin usar, se recibe igual y entra al stock
       const okC = await recibir(intC, pedC, { ingresar_stock: true });
       assert.strictEqual(okC.status, 200, JSON.stringify(okC.cuerpo));
       assert.strictEqual(okC.cuerpo.intervencion_estado, 'CANCELADA');
-      assert.strictEqual(await stock(rep), 5);
-      assert.deepStrictEqual([...(await consumos(intF)), ...(await consumos(intC))], []);
+      assert.strictEqual(await stock(rep), 3);
+      assert.deepStrictEqual(await consumos(intC), []);
     });
 
     // =========================================================================
@@ -761,6 +750,62 @@ test('Etapa PC1 — Pedidos que se usan al recibir y compras (PC-01 a PC-15)', a
       assert.deepStrictEqual(movs.map((m) => [m.tipo, m.cantidad]), [['INGRESO', 6], ['EGRESO', 2]]);
       assert.strictEqual((await consumos(intId)).length, 1);
       assert.strictEqual(await stock(rep), 4);
+    });
+
+    // =========================================================================
+    // PC-16: No se finaliza con pedidos abiertos (D1, 1)
+    // =========================================================================
+    await t.test('PC-16: No se finaliza con pedidos abiertos', async () => {
+      const rep = await crearRepuesto(true, 100, 0);
+      const finalizar = (intId: number) =>
+        pedir('POST', `/api/intervenciones/${intId}/finalizar`, R.token, {
+          estado_esperado: 'EN_PROCESO', trabajo_realizado: 'Arreglo terminado', ejecucion: 'INTERNA',
+        });
+      const fotoFin = async (intId: number) =>
+        (await client.query(
+          `SELECT estado, fecha_finalizacion, trabajo_realizado, ejecucion,
+             (SELECT count(*)::int FROM historial_estados_intervencion WHERE intervencion_id = $1) AS historial,
+             (SELECT json_agg(estado ORDER BY id) FROM pedidos_repuesto WHERE intervencion_id = $1) AS pedidos
+           FROM intervenciones WHERE id = $1`,
+          [intId]
+        )).rows[0];
+
+      // Con un pedido abierto: 409 y no cambia nada
+      const intA = await crearIntervencion();
+      const pedA = await crearPedido(intA, { repuesto_id: rep, cantidad: 2 });
+      const antes = await fotoFin(intA);
+      const r1 = await finalizar(intA);
+      assert.deepStrictEqual([r1.status, r1.cuerpo.codigo], [409, 'PEDIDOS_ABIERTOS'], JSON.stringify(r1.cuerpo));
+      assert.strictEqual(
+        r1.cuerpo.error,
+        'La intervención tiene 1 pedido sin recibir: recibilos o cancelalos antes de finalizar'
+      );
+      assert.deepStrictEqual(await fotoFin(intA), antes);
+
+      // Después de recibirlo, se finaliza
+      const rec = await recibir(intA, pedA, { ingresar_stock: true });
+      assert.strictEqual(rec.status, 200, JSON.stringify(rec.cuerpo));
+      const r2 = await finalizar(intA);
+      assert.strictEqual(r2.status, 200, JSON.stringify(r2.cuerpo));
+      assert.strictEqual((await fotoFin(intA)).estado, 'FINALIZADA');
+
+      // Con otro pedido, después de cancelarlo, también
+      const intB = await crearIntervencion();
+      const pedB = await crearPedido(intB, { descripcion: 'Repuesto que no llega', cantidad: 1 });
+      const pedB2 = await crearPedido(intB, { repuesto_id: rep, cantidad: 1 });
+      const r3 = await finalizar(intB);
+      assert.deepStrictEqual([r3.status, r3.cuerpo.codigo], [409, 'PEDIDOS_ABIERTOS'], JSON.stringify(r3.cuerpo));
+      assert.strictEqual(
+        r3.cuerpo.error,
+        'La intervención tiene 2 pedidos sin recibir: recibilos o cancelalos antes de finalizar'
+      );
+      for (const p of [pedB, pedB2]) {
+        const canc = await pedir('POST', `/api/intervenciones/${intB}/pedidos/${p}/cancelar`, R.token, { motivo: 'Ya no hace falta' });
+        assert.strictEqual(canc.status, 200, JSON.stringify(canc.cuerpo));
+      }
+      const r4 = await finalizar(intB);
+      assert.strictEqual(r4.status, 200, JSON.stringify(r4.cuerpo));
+      assert.strictEqual((await fotoFin(intB)).estado, 'FINALIZADA');
     });
   } finally {
     client = await clienteSano(client);

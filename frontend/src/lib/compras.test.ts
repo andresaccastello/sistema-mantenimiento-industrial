@@ -11,6 +11,7 @@ import {
   textoUsado,
   pedidosSinRecibir,
   textoPedidosSinRecibir,
+  bloqueoPedidosAbiertos,
   veReporteCompras,
   textoOrigenCompra,
   textoSinCosto,
@@ -168,5 +169,33 @@ describe('FE-148: textos de pedidos y compras', () => {
     );
     assert.equal(proveedorPrincipal({ por_proveedor: [{ proveedor: null, compras: 1, importe: 0 }] }), null);
     assert.equal(proveedorPrincipal({ por_proveedor: [] }), null);
+  });
+});
+
+describe('FE-158: el bloqueo de finalizar con pedidos abiertos (D1, 1)', () => {
+  const rep = { nombre: 'Correa B-52', unidad: 'unidad' };
+  it('sin pedidos abiertos, no hay bloqueo', () => {
+    assert.equal(bloqueoPedidosAbiertos([]), null);
+    assert.equal(
+      bloqueoPedidosAbiertos([
+        { estado: 'RECIBIDO', cantidad: 1, descripcion: null, repuesto: rep },
+        { estado: 'CANCELADO', cantidad: 1, descripcion: null, repuesto: rep },
+      ]),
+      null
+    );
+  });
+  it('con pedidos abiertos, la lista de los pendientes y pedidos', () => {
+    assert.deepEqual(
+      bloqueoPedidosAbiertos([
+        { estado: 'PEDIDO', cantidad: 2, descripcion: null, repuesto: rep },
+        { estado: 'RECIBIDO', cantidad: 1, descripcion: null, repuesto: rep },
+        { estado: 'PENDIENTE', cantidad: 1, descripcion: 'Motor de reemplazo', repuesto: null },
+      ]),
+      { titulo: 'Hay 2 pedidos sin recibir', pedidos: ['Correa B-52 · 2 · Pedido', 'Motor de reemplazo · 1 · Pendiente'] }
+    );
+    assert.equal(
+      bloqueoPedidosAbiertos([{ estado: 'PENDIENTE', cantidad: 1, descripcion: null, repuesto: rep }])?.titulo,
+      'Hay 1 pedido sin recibir'
+    );
   });
 });

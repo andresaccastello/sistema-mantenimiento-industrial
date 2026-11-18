@@ -117,6 +117,30 @@ export function textoPedidosSinRecibir(n: number): string {
   return `Quedan ${n} pedidos sin recibir. Quedan abiertos: podés cancelarlos desde Pedidos.`;
 }
 
+export interface BloqueoPedidos {
+  titulo: string;
+  /** Un renglón por pedido abierto: "Correa B-52 · 2 · Pedido". */
+  pedidos: string[];
+}
+
+/**
+ * D1, 1: con pedidos pendientes o pedidos, la intervención no se finaliza. null si no queda
+ * ninguno abierto.
+ */
+export function bloqueoPedidosAbiertos(
+  pedidos: ReadonlyArray<{ estado: string; cantidad: number; descripcion: string | null; repuesto: { nombre: string } | null }>
+): BloqueoPedidos | null {
+  const abiertos = pedidos.filter((p) => p.estado === 'PENDIENTE' || p.estado === 'PEDIDO');
+  if (abiertos.length === 0) return null;
+  const n = abiertos.length;
+  return {
+    titulo: n === 1 ? 'Hay 1 pedido sin recibir' : `Hay ${n} pedidos sin recibir`,
+    pedidos: abiertos.map(
+      (p) => `${nombrePedido(p)} · ${formatCantidad(p.cantidad)} · ${p.estado === 'PEDIDO' ? 'Pedido' : 'Pendiente'}`
+    ),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // 7. Reporte de compras
 // ---------------------------------------------------------------------------

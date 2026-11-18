@@ -17,7 +17,7 @@ import { SelectorMomento } from '../SelectorMomento';
 import { SeccionRecuperacionMaquina } from '../SeccionRecuperacionMaquina';
 import { validarMomento, momentoAIso, Momento } from '../../lib/fechas';
 import type { IntervencionPedidosRespuesta, PeriodoDetencion } from '../../api/tipos';
-import { pedidosSinRecibir, textoPedidosSinRecibir } from '../../lib/compras';
+import { bloqueoPedidosAbiertos } from '../../lib/compras';
 import { useAccionIntervencion } from './useAccionIntervencion';
 import { AvisoTareasSinMarcar } from '../preventivos/AvisoTareasSinMarcar';
 
@@ -63,13 +63,13 @@ export function ModalFinalizar({
     avisoExito: 'Intervención finalizada.',
   });
 
-  // PC1, 6.5: los pedidos sin recibir se avisan, pero no frenan (D5)
+  // D1, 1: con pedidos sin recibir no se finaliza (reemplaza el aviso de la PC1, D5)
   const { data: datosPedidos } = useQuery<IntervencionPedidosRespuesta>({
     queryKey: ['intervencion', intervencionId, 'pedidos'],
     queryFn: () => clienteApi.get<IntervencionPedidosRespuesta>(`/api/intervenciones/${intervencionId}/pedidos`),
     enabled: abierto,
   });
-  const avisoPedidos = textoPedidosSinRecibir(pedidosSinRecibir(datosPedidos?.pedidos ?? []));
+  const bloqueo = bloqueoPedidosAbiertos(datosPedidos?.pedidos ?? []);
 
   useEffect(() => {
     if (abierto) {
@@ -86,6 +86,7 @@ export function ModalFinalizar({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (bloqueo) return;
     const ahora = new Date();
 
     const trabTrim = trabajoRealizadoTexto.trim();
@@ -160,9 +161,18 @@ export function ModalFinalizar({
       <form onSubmit={handleSubmit} noValidate>
         <Stack gap="md">
           <AvisoTareasSinMarcar intervencionId={intervencionId} activo={abierto && conTareas} />
-          {avisoPedidos && (
-            <Alert color="yellow" variant="light" icon={<IconPackage size={16} />}>
-              {avisoPedidos}
+          {bloqueo && (
+            <Alert color="red" variant="light" icon={<IconPackage size={16} />} title={bloqueo.titulo}>
+              <Stack gap={4}>
+                {bloqueo.pedidos.map((linea, i) => (
+                  <Text key={i} size="sm">
+                    {linea}
+                  </Text>
+                ))}
+                <Text size="sm" fw={600}>
+                  Recibilos o cancelalos antes de finalizar.
+                </Text>
+              </Stack>
             </Alert>
           )}
           {errorModal && (
@@ -232,7 +242,7 @@ export function ModalFinalizar({
             <Button variant="default" onClick={onCerrar} disabled={guardando}>
               Volver
             </Button>
-            <Button type="submit" color="marca" loading={guardando}>
+            <Button type="submit" color="marca" loading={guardando} disabled={Boolean(bloqueo)}>
               Finalizar
             </Button>
           </Group>
