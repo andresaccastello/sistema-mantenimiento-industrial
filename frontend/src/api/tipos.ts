@@ -1117,6 +1117,18 @@ export interface UsoTareaPlan {
   /** Negativo si está vencida; null sin lectura. */
   faltan: number | null;
   estado: 'VENCIDA' | 'PROXIMA' | 'AL_DIA' | 'SIN_LECTURA';
+  /** HE1, 3: la fecha estimada, solo informativa; null en los casos de 1.2. */
+  estimacion: EstimacionTarea | null;
+}
+
+/** HE1, 3: la fecha estimada de una tarea por uso, según el ritmo. */
+export interface EstimacionTarea {
+  fecha: string;
+  fecha_aviso: string | null;
+  /** Según el ritmo ya tendría que haber llegado, pero ninguna lectura lo confirma. */
+  pasada: boolean;
+  ritmo_por_dia: number;
+  fuente: FuenteRitmo;
 }
 
 /** `uso` de una tarea en la intervención: null si la fila no tiene medidor (PV3, 4.4). */
@@ -1400,6 +1412,29 @@ export interface UltimaLecturaMedidor {
   registrada_por: Persona;
 }
 
+/** HE1, 2: el período del uso declarado. */
+export type PeriodoUso = 'DIA' | 'SEMANA' | 'MES';
+
+/** HE1, 2: el uso declarado del medidor. */
+export interface UsoEstimado {
+  valor: number;
+  periodo: PeriodoUso;
+}
+
+/** HE1, 1.1: de dónde sale el ritmo. */
+export type FuenteRitmo = 'DECLARADO' | 'LECTURAS';
+
+/** HE1, 2: el ritmo de uso del medidor, por día. */
+export interface RitmoMedidor {
+  por_dia: number;
+  fuente: FuenteRitmo;
+  declarado_por_dia: number | null;
+  /** Las lecturas que entraron en la cuenta; null si no alcanzan. */
+  lecturas: { usadas: number; desde: string; hasta: string } | null;
+  /** Con los dos ritmos, un entero; si no, null. */
+  desvio_pct: number | null;
+}
+
 /** Un elemento de `GET /api/medidores`. */
 export interface MedidorLista {
   id: number;
@@ -1414,7 +1449,18 @@ export interface MedidorLista {
   lectura_cada_dias: number | null;
   /** Desde la última lectura o, sin lecturas, desde el alta. */
   dias_sin_lectura: number;
+  /** HE1, 4: atraso_por_dias || atraso_por_uso. */
   atrasado: boolean;
+  /** HE1, 2: lo que declaró el usuario, o null. */
+  uso_estimado: UsoEstimado | null;
+  /** HE1, 2: el ritmo de uso, o null sin ninguno. */
+  ritmo: RitmoMedidor | null;
+  /** HE1, 2: la última lectura más el ritmo; null sin lectura o sin ritmo. */
+  valor_estimado_hoy: number | null;
+  /** HE1, 4: más días sin lectura que lectura_cada_dias. */
+  atraso_por_dias: boolean;
+  /** HE1, 4: por el ritmo, una tarea ya estaría para avisar o vencida. */
+  atraso_por_uso: boolean;
   creado_en: string;
   actualizado_en: string;
 }
@@ -1447,7 +1493,18 @@ export interface MedidorRonda {
   sector: { id: number; nombre: string };
   ultima: { valor: number; registrada_en: string } | null;
   dias_sin_lectura: number;
+  /** HE1, 4: atraso_por_dias || atraso_por_uso. */
   atrasado: boolean;
+  /** HE1, 2: lo que declaró el usuario, o null. */
+  uso_estimado: UsoEstimado | null;
+  /** HE1, 2: el ritmo de uso, o null sin ninguno. */
+  ritmo: RitmoMedidor | null;
+  /** HE1, 2: la última lectura más el ritmo; null sin lectura o sin ritmo. */
+  valor_estimado_hoy: number | null;
+  /** HE1, 4: más días sin lectura que lectura_cada_dias. */
+  atraso_por_dias: boolean;
+  /** HE1, 4: por el ritmo, una tarea ya estaría para avisar o vencida. */
+  atraso_por_uso: boolean;
   tareas: TareaRonda[];
 }
 

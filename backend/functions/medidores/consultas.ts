@@ -39,9 +39,67 @@ export const SQL_ATRASADO = `(
   AND ${SQL_DIAS_SIN_LECTURA} > md.lectura_cada_dias
 )`;
 
+/**
+ * HE1, 4: atrasado por uso. El medidor y su máquina, activos, con alguna tarea activa de un plan
+ * activo que, según el ritmo, ya estaría para avisar (al día, con la fecha de aviso estimada
+ * hasta hoy) o ya habría vencido (próxima, con la fecha estimada hasta hoy). No depende de
+ * lectura_cada_dias. Las fechas salen de v_plan_tareas_estimacion.
+ */
+export const SQL_ATRASO_POR_USO = `(
+  md.activo AND m.activo
+  AND EXISTS (
+    SELECT 1 FROM v_plan_tareas_estimacion e
+    JOIN planes_mantenimiento p ON p.id = e.plan_id
+    WHERE e.medidor_id = md.id AND e.activo AND p.activo
+      AND (
+        (e.estado_uso = 'AL_DIA' AND e.fecha_aviso_estimada <= e.hoy)
+        OR (e.estado_uso = 'PROXIMA' AND e.fecha_estimada <= e.hoy)
+      )
+  )
+)`;
+
+/** HE1, 2: las columnas del uso declarado y del ritmo; vr es v_medidores_ritmo. */
+export const COLUMNAS_RITMO = `md.uso_estimado_valor, md.uso_estimado_periodo,
+         vr.ritmo, vr.fuente, vr.ritmo_declarado, vr.lecturas_usadas, vr.lecturas_desde, vr.lecturas_hasta,
+         vr.desvio_pct, vr.valor_estimado_hoy`;
+
+export const JOIN_RITMO = 'LEFT JOIN v_medidores_ritmo vr ON vr.medidor_id = md.id';
+
+/** Redondea a n decimales y devuelve un número. */
+export function redondeo(v: unknown, decimales: number): number {
+  const f = 10 ** decimales;
+  return Math.round(Number(v) * f) / f;
+}
+
+/** HE1, 2: el uso declarado, el ritmo y el valor estimado de hoy, como van en la respuesta. */
+export function ritmoDeMedidor(r: Record<string, any>) {
+  return {
+    uso_estimado:
+      r.uso_estimado_valor === null
+        ? null
+        : { valor: Number(r.uso_estimado_valor), periodo: r.uso_estimado_periodo as 'DIA' | 'SEMANA' | 'MES' },
+    ritmo:
+      r.ritmo === null || r.ritmo === undefined
+        ? null
+        : {
+            por_dia: redondeo(r.ritmo, 3),
+            fuente: r.fuente as 'DECLARADO' | 'LECTURAS',
+            declarado_por_dia: r.ritmo_declarado === null ? null : redondeo(r.ritmo_declarado, 3),
+            lecturas:
+              r.lecturas_usadas === null
+                ? null
+                : { usadas: Number(r.lecturas_usadas), desde: r.lecturas_desde, hasta: r.lecturas_hasta },
+            desvio_pct: r.desvio_pct === null ? null : Number(r.desvio_pct),
+          },
+    valor_estimado_hoy:
+      r.valor_estimado_hoy === null || r.valor_estimado_hoy === undefined ? null : redondeo(r.valor_estimado_hoy, 2),
+  };
+}
+
 /** Un medidor con su máquina, su última lectura vigente y cuántas tareas activas lo usan. */
 const SQL_MEDIDOR = `
   SELECT md.id, md.nombre, md.unidad, md.activo, md.creado_en, md.actualizado_en, md.lectura_cada_dias,
+         ${COLUMNAS_RITMO},
          m.id AS maquina_id, m.codigo AS maquina_codigo, m.nombre AS maquina_nombre, m.activo AS maquina_activo,
          s.id AS sector_id, s.nombre AS sector_nombre,
          ul.id AS lectura_id, ul.valor AS lectura_valor, ul.registrada_en AS lectura_en,
@@ -49,10 +107,12 @@ const SQL_MEDIDOR = `
          ul.por_nombre AS lectura_por_nombre, ul.por_apellido AS lectura_por_apellido,
          (SELECT count(*)::int FROM plan_tareas t WHERE t.medidor_id = md.id AND t.activo) AS tareas_activas,
          ${SQL_DIAS_SIN_LECTURA} AS dias_sin_lectura,
-         ${SQL_ATRASADO} AS atrasado
+         ${SQL_ATRASADO} AS atraso_por_dias,
+         ${SQL_ATRASO_POR_USO} AS atraso_por_uso
   FROM medidores md
   JOIN maquinas m ON m.id = md.maquina_id
   JOIN sectores s ON s.id = m.sector_id
+  ${JOIN_RITMO}
   LEFT JOIN LATERAL (
     SELECT l.id, l.valor, l.registrada_en,
            u.id AS por_id, u.legajo AS por_legajo, u.nombre AS por_nombre, u.apellido AS por_apellido
@@ -90,7 +150,12 @@ function medidor(r: Record<string, any>) {
     // LE1, 3.5
     lectura_cada_dias: r.lectura_cada_dias === null ? null : Number(r.lectura_cada_dias),
     dias_sin_lectura: Number(r.dias_sin_lectura),
-    atrasado: Boolean(r.atrasado),
+    // HE1, 4: atrasado por días o por uso
+    atrasado: Boolean(r.atraso_por_dias) || Boolean(r.atraso_por_uso),
+    // HE1, 2
+    ...ritmoDeMedidor(r),
+    atraso_por_dias: Boolean(r.atraso_por_dias),
+    atraso_por_uso: Boolean(r.atraso_por_uso),
     creado_en: r.creado_en,
     actualizado_en: r.actualizado_en,
   };

@@ -41,6 +41,11 @@ export const medidorListaEjemplo: MedidorLista = {
   lectura_cada_dias: 7,
   dias_sin_lectura: 0,
   atrasado: false,
+  uso_estimado: null,
+  ritmo: null,
+  valor_estimado_hoy: null,
+  atraso_por_dias: false,
+  atraso_por_uso: false,
   creado_en: '2026-11-17T00:47:45.677Z',
   actualizado_en: '2026-11-17T00:47:45.677Z',
 };
@@ -76,6 +81,11 @@ export const medidorDetalleEjemplo: MedidorDetalle = {
   lectura_cada_dias: 7,
   dias_sin_lectura: 0,
   atrasado: false,
+  uso_estimado: null,
+  ritmo: null,
+  valor_estimado_hoy: null,
+  atraso_por_dias: false,
+  atraso_por_uso: false,
   creado_en: '2026-11-17T00:47:45.677Z',
   actualizado_en: '2026-11-17T00:47:45.677Z',
   tareas: [

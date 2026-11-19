@@ -40,6 +40,11 @@ const medidor = (extra: Partial<MedidorRonda> = {}): MedidorRonda => ({
   ultima: { valor: 12340, registrada_en: '2026-11-08T14:10:00Z' },
   dias_sin_lectura: 8,
   atrasado: true,
+  uso_estimado: null,
+  ritmo: null,
+  valor_estimado_hoy: null,
+  atraso_por_dias: true,
+  atraso_por_uso: false,
   tareas: [tarea()],
   ...extra,
 });

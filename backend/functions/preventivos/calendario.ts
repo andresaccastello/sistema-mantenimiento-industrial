@@ -149,6 +149,7 @@ export async function calendarioPreventivos(db: pg.Pool, filtros: FiltrosMaquina
             c.nombre AS criticidad_nombre, c.prioridad_alta
      ${baseSinRango.replace('WHERE', `JOIN criticidades c ON c.id = m.criticidad_id
     LEFT JOIN medidores md ON md.id = v.medidor_id
+    LEFT JOIN v_plan_tareas_estimacion es ON es.tarea_id = v.id
     WHERE`)}
        AND v.primera_fecha IS NULL AND v.medidor_id IS NOT NULL AND v.estado <> 'INACTIVA'
      ORDER BY CASE v.estado WHEN 'VENCIDA' THEN 1 WHEN 'PROXIMA' THEN 2 WHEN 'SIN_LECTURA' THEN 3 WHEN 'EN_CURSO' THEN 4 ELSE 5 END,

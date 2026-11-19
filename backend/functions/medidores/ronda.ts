@@ -6,7 +6,15 @@ import { UsuarioVisibilidad } from '../intervenciones/visibilidad.ts';
 import { procesarPlan, usuarioSistema } from '../preventivos/vencimientos.ts';
 import { textoOpcional } from '../preventivos/validaciones.ts';
 import { validarIdCuerpo } from '../repuestos/validaciones.ts';
-import { SQL_ATRASADO, SQL_DIAS_SIN_LECTURA, SQL_ULTIMA_LECTURA } from './consultas.ts';
+import {
+  COLUMNAS_RITMO,
+  JOIN_RITMO,
+  SQL_ATRASADO,
+  SQL_ATRASO_POR_USO,
+  SQL_DIAS_SIN_LECTURA,
+  SQL_ULTIMA_LECTURA,
+  ritmoDeMedidor,
+} from './consultas.ts';
 import { bloquearMedidor, registrarLectura, validarValorMedidor } from './lecturas.ts';
 
 /**
@@ -99,14 +107,17 @@ export async function listarRonda(db: pg.Pool, f: FiltrosRonda) {
               s.id AS sector_id, s.nombre AS sector_nombre,
               ul.valor AS ultima_valor, ul.registrada_en AS ultima_en,
               ${SQL_DIAS_SIN_LECTURA} AS dias_sin_lectura,
-              ${SQL_ATRASADO} AS atrasado
+              ${COLUMNAS_RITMO},
+              ${SQL_ATRASADO} AS atraso_por_dias,
+              ${SQL_ATRASO_POR_USO} AS atraso_por_uso
        FROM medidores md
        JOIN maquinas m ON m.id = md.maquina_id
        JOIN sectores s ON s.id = m.sector_id
        ${SQL_ULTIMA_LECTURA}
+       ${JOIN_RITMO}
        WHERE ${cond.join(' AND ')}
      ) x
-     ${f.soloAtrasados ? 'WHERE x.atrasado' : ''}
+     ${f.soloAtrasados ? 'WHERE x.atraso_por_dias OR x.atraso_por_uso' : ''}
      ORDER BY x.sector_nombre ASC, x.sector_id ASC, x.maquina_codigo ASC NULLS LAST, x.maquina_id ASC, x.nombre ASC, x.id ASC`,
     params
   );
@@ -121,7 +132,12 @@ export async function listarRonda(db: pg.Pool, f: FiltrosRonda) {
     sector: { id: Number(r.sector_id), nombre: r.sector_nombre },
     ultima: r.ultima_en === null ? null : { valor: Number(r.ultima_valor), registrada_en: r.ultima_en },
     dias_sin_lectura: Number(r.dias_sin_lectura),
-    atrasado: Boolean(r.atrasado),
+    // HE1, 4: atrasado por días o por uso
+    atrasado: Boolean(r.atraso_por_dias) || Boolean(r.atraso_por_uso),
+    // HE1, 2
+    ...ritmoDeMedidor(r),
+    atraso_por_dias: Boolean(r.atraso_por_dias),
+    atraso_por_uso: Boolean(r.atraso_por_uso),
     tareas: tareas.get(Number(r.id)) ?? [],
   }));
 }

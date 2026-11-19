@@ -104,7 +104,9 @@ ALTER TABLE plan_tareas
     );
 
 -- 3.1 La vista usa t.*: se saca antes de tocar las columnas de plan_tareas, y se vuelve
--- a crear al final (sección 7)
+-- a crear al final (sección 7). Antes, la vista de la 023 que se arma sobre ella (HE1): al
+-- reaplicar, la 023 la vuelve a crear
+DROP VIEW IF EXISTS v_plan_tareas_estimacion;
 DROP VIEW IF EXISTS v_plan_tareas_estado;
 
 -- 3.2 plan_tarea_repuestos: los repuestos previstos de una tarea (D-022)

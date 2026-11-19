@@ -42,6 +42,32 @@ function validarLecturaCadaDias(val: unknown): number | null {
   return val;
 }
 
+/** HE1, 2: el uso declarado. */
+interface UsoEstimado {
+  valor: number;
+  periodo: 'DIA' | 'SEMANA' | 'MES';
+}
+
+/**
+ * HE1, 2: `{ valor, periodo }` o null (lo borra). El valor, un número mayor que 0 que entre en
+ * NUMERIC(14,2); el período, DIA, SEMANA o MES. Sin alguno de los dos, o con otro campo, 422.
+ */
+function validarUsoEstimado(val: unknown): UsoEstimado | null {
+  if (val === null) return null;
+  const formato = 'El campo uso_estimado debe ser { valor, periodo } o null';
+  if (typeof val !== 'object' || Array.isArray(val)) throw invalido(formato);
+  const o = val as Record<string, unknown>;
+  const claves = Object.keys(o);
+  if (!('valor' in o) || !('periodo' in o) || claves.some((k) => k !== 'valor' && k !== 'periodo')) {
+    throw invalido(formato);
+  }
+  const valor = validarValorMedidor(o.valor, 'uso_estimado.valor', true);
+  if (o.periodo !== 'DIA' && o.periodo !== 'SEMANA' && o.periodo !== 'MES') {
+    throw invalido('El campo uso_estimado.periodo debe ser DIA, SEMANA o MES');
+  }
+  return { valor, periodo: o.periodo };
+}
+
 /** Un id opcional de la consulta: si viene y no es un id, 422. */
 function idDeConsulta(c: any, nombre: string): number | null {
   const raw = c.req.query(nombre);
@@ -167,6 +193,8 @@ medidoresApp.post('/', gestiona, async (c) => {
         : validarValorMedidor(b.lectura_inicial, 'lectura_inicial');
     // LE1, 3.5: sin el campo, 7
     const cadaDias = b.lectura_cada_dias === undefined ? 7 : validarLecturaCadaDias(b.lectura_cada_dias);
+    // HE1, 2: opcional
+    const uso = b.uso_estimado === undefined ? null : validarUsoEstimado(b.uso_estimado);
 
     const sectores = sectoresDelAlcance(c);
     const usuario = getUsuarioContext(c);
@@ -183,9 +211,11 @@ medidoresApp.post('/', gestiona, async (c) => {
       await controlarNombre(client, maquinaId, nombre);
 
       const res = await client.query(
-        `INSERT INTO medidores (maquina_id, nombre, unidad, creado_por_usuario_id, lectura_cada_dias)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [maquinaId, nombre, unidad, usuario.id, cadaDias]
+        `INSERT INTO medidores (
+           maquina_id, nombre, unidad, creado_por_usuario_id, lectura_cada_dias, uso_estimado_valor, uso_estimado_periodo
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+        [maquinaId, nombre, unidad, usuario.id, cadaDias, uso?.valor ?? null, uso?.periodo ?? null]
       );
       const nuevoId = Number(res.rows[0].id);
       if (inicial !== null) {
@@ -220,6 +250,9 @@ medidoresApp.patch('/:id', gestiona, async (c) => {
     // LE1, 3.5: null es un valor (sin control de atraso), así que se distingue de "no vino"
     const cambiaCada = 'lectura_cada_dias' in b;
     const cadaDias = cambiaCada ? validarLecturaCadaDias(b.lectura_cada_dias) : null;
+    // HE1, 2: igual, null lo borra
+    const cambiaUso = 'uso_estimado' in b;
+    const uso = cambiaUso ? validarUsoEstimado(b.uso_estimado) : null;
     const sectores = sectoresDelAlcance(c);
 
     await conTransaccion(async (client) => {
@@ -234,9 +267,17 @@ medidoresApp.patch('/:id', gestiona, async (c) => {
                WHEN $4::boolean AND lectura_cada_dias IS DISTINCT FROM $5::smallint THEN NULL
                ELSE atraso_avisado_en
              END,
-             lectura_cada_dias = CASE WHEN $4::boolean THEN $5::smallint ELSE lectura_cada_dias END
+             lectura_cada_dias = CASE WHEN $4::boolean THEN $5::smallint ELSE lectura_cada_dias END,
+             -- HE1, 2: al cambiar el uso declarado, el aviso por estimación se vuelve a dar
+             estimacion_avisada_en = CASE
+               WHEN $6::boolean AND (uso_estimado_valor IS DISTINCT FROM $7::numeric
+                                     OR uso_estimado_periodo IS DISTINCT FROM $8::varchar) THEN NULL
+               ELSE estimacion_avisada_en
+             END,
+             uso_estimado_valor = CASE WHEN $6::boolean THEN $7::numeric ELSE uso_estimado_valor END,
+             uso_estimado_periodo = CASE WHEN $6::boolean THEN $8::varchar ELSE uso_estimado_periodo END
          WHERE id = $3`,
-        [nombre ?? null, unidad ?? null, medidor.id, cambiaCada, cadaDias]
+        [nombre ?? null, unidad ?? null, medidor.id, cambiaCada, cadaDias, cambiaUso, uso?.valor ?? null, uso?.periodo ?? null]
       );
     });
 

@@ -2,10 +2,31 @@ import pg from 'pg';
 import { SQL_HOY, columnasPersona, persona, planNoEncontrado } from './comun.ts';
 import { TareaValida, Unidad } from './validaciones.ts';
 
+/**
+ * HE1, 3: las columnas de la estimación, para estimacionDeFila(); es es v_plan_tareas_estimacion.
+ * Las fechas, solo si hay fecha estimada (los casos de 1.2).
+ */
+export const COLUMNAS_ESTIMACION = `to_char(es.fecha_estimada, 'YYYY-MM-DD') AS est_fecha,
+         to_char(es.fecha_aviso_estimada, 'YYYY-MM-DD') AS est_fecha_aviso,
+         es.estimada_pasada AS est_pasada, es.ritmo AS est_ritmo, es.fuente AS est_fuente`;
+
+/** HE1, 3: `estimacion` de una tarea, o null sin fecha estimada. */
+export function estimacionDeFila(r: Record<string, any>) {
+  if (r.est_fecha === null || r.est_fecha === undefined) return null;
+  return {
+    fecha: r.est_fecha as string,
+    fecha_aviso: (r.est_fecha_aviso ?? null) as string | null,
+    pasada: Boolean(r.est_pasada),
+    ritmo_por_dia: Math.round(Number(r.est_ritmo) * 1000) / 1000,
+    fuente: r.est_fuente as 'DECLARADO' | 'LECTURAS',
+  };
+}
+
 /** Las columnas del criterio de uso, para usoDeTarea(); md es el medidor de la tarea. */
 export const COLUMNAS_USO = `v.estado_fecha, v.medidor_id, v.uso_cada, v.uso_primera, v.uso_anticipacion,
          v.lectura_actual, v.lectura_actual_en, v.ultimo_uso, v.proximo_uso, v.faltan_uso, v.estado_uso,
-         md.nombre AS medidor_nombre, md.unidad AS medidor_unidad, md.activo AS medidor_activo`;
+         md.nombre AS medidor_nombre, md.unidad AS medidor_unidad, md.activo AS medidor_activo,
+         ${COLUMNAS_ESTIMACION}`;
 
 /** Una tarea del plan con su estado, como sale de v_plan_tareas_estado (4.3). */
 const SQL_TAREAS_PLAN = `
@@ -19,6 +40,7 @@ const SQL_TAREAS_PLAN = `
   FROM v_plan_tareas_estado v
   LEFT JOIN proveedores pr ON pr.id = v.proveedor_id
   LEFT JOIN medidores md ON md.id = v.medidor_id
+  LEFT JOIN v_plan_tareas_estimacion es ON es.tarea_id = v.id
 `;
 
 /** Los repuestos previstos de las tareas de un plan, por tarea y en su orden. */
@@ -73,6 +95,8 @@ export function usoDeTarea(r: Record<string, any>) {
     proximo: Number(r.proximo_uso),
     faltan: numeroONull(r.faltan_uso),
     estado: r.estado_uso,
+    // HE1, 3: solo informa
+    estimacion: estimacionDeFila(r),
   };
 }
 
@@ -266,6 +290,7 @@ export async function listarVencimientos(
     JOIN criticidades c ON c.id = m.criticidad_id
     LEFT JOIN usuarios ur ON ur.id = p.responsable_usuario_id
     LEFT JOIN medidores md ON md.id = v.medidor_id
+    LEFT JOIN v_plan_tareas_estimacion es ON es.tarea_id = v.id
     WHERE ${cond.join(' AND ')}`;
 
   // El resumen, con los mismos filtros salvo el estado

@@ -97,6 +97,7 @@ export const planDetalleEjemplo: PlanDetalle = {
         proximo: 500,
         faltan: -12.5,
         estado: 'VENCIDA',
+        estimacion: null,
       },
       estado: 'EN_CURSO',
       intervencion_en_curso: {
@@ -190,6 +191,7 @@ export const vencimientosEjemplo: VencimientosRespuesta = {
         proximo: 500,
         faltan: -12.5,
         estado: 'VENCIDA',
+        estimacion: null,
       },
       estado: 'EN_CURSO',
       intervencion_en_curso: {

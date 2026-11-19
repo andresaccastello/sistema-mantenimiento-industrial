@@ -305,7 +305,7 @@ Sobre las máquinas activas de la selección y el período elegido:
    Reabrir, cancelar o eliminar la intervención la mueve sola.
 5. **El valor al hacer la tarea queda en la tarea de la intervención.** Es la última lectura, o una nueva que se carga en ese momento. Hacer la tarea reinicia los dos relojes, el de fecha y el de uso.
 6. **El estado de la tarea es el más urgente de los dos.** "Sin lectura" es una tarea por uso cuyo medidor no tiene ninguna lectura vigente.
-7. **No se estima.** El sistema compara la última lectura real con el valor que toca. No calcula fechas a partir del ritmo de uso.
+7. Reemplazado por la D-032.
 8. **Si se cambia el medidor físico,** por ejemplo un horómetro nuevo que arranca de cero, se da de alta otro medidor y se le pasan las tareas.
 
 **Motivo:** cumplir el requisito 6 con la misma idea de D-021: nada se guarda que se pueda calcular, y deshacer una intervención deshace su efecto sin pasos extra.
@@ -371,7 +371,7 @@ El circuito ya está cubierto: el operario hace la revisión como hoy, y si encu
    - **pendiente:** la próxima de cada tarea, con su estado;
    - **prevista:** las siguientes, si se hiciera cada una en su fecha.
 3. **Una vencida se proyecta desde hoy,** porque lo antes que puede hacerse es hoy. Una tarea que venció por uso antes de su fecha va en hoy.
-4. **Las tareas que vencen solo por uso no tienen fecha.** No se inventa una con el ritmo de uso, porque cambia con la producción. Van en una lista aparte.
+4. Reemplazado por la D-032.
 5. **Las tareas por fecha y por uso** se ven por su fecha, con el aviso de que pueden tocar antes.
 
 **Motivo:** el responsable de mantenimiento planifica por semana y por mes. La lista de vencimientos dice qué urge, pero no cómo se reparte el trabajo. La proyección permite ver semanas cargadas antes de que lleguen.
@@ -409,7 +409,7 @@ El circuito ya está cubierto: el operario hace la revisión como hoy, y si encu
 3. **Avisos:**
    - **en el momento:** si una lectura deja una tarea próxima o vencida, se avisa al guardarla, y si el plan genera solo, se genera. Es lo mismo que hace la revisión diaria, adelantado;
    - **lecturas atrasadas:** cada medidor dice cada cuántos días se lee (7 por omisión). Si se pasa de ese plazo y el medidor tiene tareas activas, la revisión diaria avisa una vez.
-4. **No se estiman fechas con el ritmo de uso.** Si el uso es parejo, alcanza con una tarea por fecha. Si varía, que es cuando el horómetro tiene sentido, una fecha estimada se equivoca y da una falsa tranquilidad. Las horas son horas y las fechas son fechas. Refuerza la D-028, punto 4.
+4. Reemplazado por la D-032.
 
 **Motivo:** sin lecturas, el preventivo por uso no funciona, y el problema práctico es cargarlas, no calcularlas.
 
@@ -423,3 +423,20 @@ El circuito ya está cubierto: el operario hace la revisión como hoy, y si encu
 4. **El tema** (claro, oscuro o el del dispositivo) también es una preferencia de cada usuario.
 
 **Motivo:** la revisión con el profesor del 18/11. La tendencia es usar el celular para casi todo, limitar por dispositivo genera casos raros, y el sistema es para cualquier empresa: que cada una decida, no el sistema.
+
+## D-032 — Fecha estimada por ritmo de uso
+
+**Estado:** Aceptada. Reemplaza el punto 7 de la D-023 y el punto 4 de la D-030. Cambia el punto 4 de la D-028.
+
+1. **El usuario declara el uso de cada medidor:** un valor por día, por semana o por mes. Es opcional. Para la cuenta, el mes es de 30 días.
+2. **El ritmo de uso es el real, si hay lecturas suficientes:**
+   - al menos 3 lecturas vigentes, con 7 días o más entre la primera y la última;
+   - se usan las de los últimos 60 días, y si son menos de 3, las 3 últimas;
+   - si no se llega al mínimo, se usa el declarado.
+3. **Se comparan los dos ritmos.** Si el real se aparta más de un 25 % del declarado, se avisa en pantalla y se ofrece actualizar el declarado.
+4. **La fecha estimada es solo informativa.** La tarea vence por la lectura real: la estimación no cambia ningún estado ni genera ninguna intervención.
+5. **Hay un aviso para cargar una lectura** cuando, según el ritmo, una tarea ya habría llegado a su aviso o a su vencimiento y ninguna lectura lo confirma.
+6. **En el calendario,** la próxima de cada tarea por uso se muestra con su fecha estimada, como un evento distinto. Las siguientes no se proyectan.
+7. **Solo se guarda lo que declara el usuario.** El ritmo y las fechas se calculan siempre.
+
+**Motivo:** el preventivo por uso no le decía al responsable de mantenimiento cuándo planificar. La estimación da esa fecha, sin el riesgo de la falsa tranquilidad, porque nunca reemplaza a la lectura. Además, convierte la falta de lecturas en un aviso concreto.

@@ -574,6 +574,7 @@ const usoBase: UsoTareaPlan = {
   proximo: 500,
   faltan: -12.5,
   estado: 'VENCIDA',
+  estimacion: null,
 };
 
 const tareaSoloUso: TareaPlan = {
