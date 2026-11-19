@@ -7,6 +7,7 @@ import {
   moverPeriodo,
   textoTituloPeriodo,
 } from '../../lib/calendario';
+import { LEYENDA_ESTIMADA } from '../../lib/estimacion';
 
 interface Props {
   actual: ParamsCalendario;
@@ -55,15 +56,20 @@ export function BarraCalendario({ actual, hoy, onIr }: Props) {
       </Group>
 
       <Group gap="md" mt="xs" wrap="wrap">
-        {LEYENDA_CALENDARIO.map((l) => (
+        {[...LEYENDA_CALENDARIO, LEYENDA_ESTIMADA].map((l) => (
           <Group key={l.texto} gap={6} wrap="nowrap">
             <Box
               w={12}
               h={12}
               style={{
                 borderRadius: 3,
-                background: l.prevista ? 'transparent' : `var(--mantine-color-${l.color}-6)`,
-                border: l.prevista ? '1px dashed var(--mantine-color-gray-6)' : undefined,
+                background: 'prevista' in l && l.prevista ? 'transparent' : `var(--mantine-color-${l.color}-${'estimada' in l ? 'light' : '6'})`,
+                border:
+                  'prevista' in l && l.prevista
+                    ? '1px dashed var(--mantine-color-gray-6)'
+                    : 'estimada' in l
+                      ? `1px dashed var(--mantine-color-${l.color}-6)`
+                      : undefined,
               }}
             />
             <Text size="xs" c="dimmed">

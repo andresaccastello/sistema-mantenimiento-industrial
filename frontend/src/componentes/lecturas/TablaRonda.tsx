@@ -4,7 +4,7 @@ import type { MedidorRonda } from '../../api/tipos';
 import type { Consecuencia, ValoresRonda } from '../../lib/lecturas';
 import { textoDiasSinLectura } from '../../lib/lecturas';
 import { textoValorMedidor } from '../../lib/medidores';
-import { CampoLectura, InsigniaAtrasado, LineaTarea, ResultadoGuardado } from './PiezasRonda';
+import { CampoLectura, ChipPorUso, InsigniaAtrasado, LineaTarea, ResultadoGuardado } from './PiezasRonda';
 
 export interface VistaRondaProps {
   medidores: MedidorRonda[];
@@ -71,20 +71,22 @@ export function TablaRonda({ medidores, valores, onCambiarValor, errores, guarda
                   <Table.Td>
                     {m.ultima ? (
                       <Stack gap={2}>
-                        <Group gap="xs" wrap="nowrap">
+                        <Group gap="xs" wrap="wrap">
                           <Text size="sm">{textoValorMedidor(m.ultima.valor, m.unidad)}</Text>
-                          {m.atrasado && <InsigniaAtrasado />}
+                          {m.atraso_por_dias && <InsigniaAtrasado />}
+                          {m.atraso_por_uso && <ChipPorUso />}
                         </Group>
                         <Text size="xs" c="dimmed">
                           {textoDiasSinLectura(m.dias_sin_lectura)}
                         </Text>
                       </Stack>
                     ) : (
-                      <Group gap="xs" wrap="nowrap">
+                      <Group gap="xs" wrap="wrap">
                         <Text size="sm" c="dimmed">
                           Sin lecturas
                         </Text>
-                        {m.atrasado && <InsigniaAtrasado />}
+                        {m.atraso_por_dias && <InsigniaAtrasado />}
+                        {m.atraso_por_uso && <ChipPorUso />}
                       </Group>
                     )}
                   </Table.Td>

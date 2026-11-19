@@ -5,6 +5,7 @@ import type { TareaPlan } from '../../api/tipos';
 import { formatFechaDia, textoFrecuenciaTarea, textoValorMedidor } from '../../lib/preventivos';
 import { EstadoBadge } from '../EstadoBadge';
 import { CeldaProxima } from './CeldaProxima';
+import { TextoEstimada } from './TextoEstimada';
 import { TextoPrevistos } from './TextoPrevistos';
 
 interface Props {
@@ -58,7 +59,10 @@ export function TablaTareasPlan({ tareas, onEditar, onCambiarActivo }: Props) {
               </Table.Td>
               <Table.Td>
                 {t.activo ? (
-                  <CeldaProxima proxima_fecha={t.proxima_fecha} dias={t.dias} uso={t.uso} />
+                  <Stack gap={4}>
+                    <CeldaProxima proxima_fecha={t.proxima_fecha} dias={t.dias} uso={t.uso} />
+                    <TextoEstimada uso={t.uso} />
+                  </Stack>
                 ) : (
                   <Text size="sm">—</Text>
                 )}

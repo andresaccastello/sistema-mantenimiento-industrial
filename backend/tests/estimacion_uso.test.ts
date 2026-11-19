@@ -703,6 +703,12 @@ test('Etapa HE1 — Horómetro estimado (EU-01 a EU-15)', async (t) => {
       const otros = c.eventos.filter((e: any) => e.tipo !== 'ESTIMADA');
       assert.ok(otros.some((e: any) => e.tarea_id === tFecha), 'La tarea por fecha sale');
       assert.ok(otros.every((e: any) => e.estimacion === null));
+      // Cada evento lleva el uso de la tarea, como en el plan (para el panel del día); sin medidor, null
+      assert.deepStrictEqual(
+        [eFutura.uso.proximo, eFutura.uso.medidor.unidad, eFutura.uso.estimacion],
+        [200, 'h', eFutura.estimacion]
+      );
+      assert.ok(otros.filter((e: any) => e.tarea_id === tFecha).every((e: any) => e.uso === null));
 
       // La lista por_uso sigue igual, ahora con la estimación
       assert.deepStrictEqual(c.por_uso.map((x: any) => x.tarea_id).sort(), [tFutura, tPasada].sort());

@@ -1327,6 +1327,8 @@ export interface EventoCalendario {
   intervencion: IntervencionEnCurso | null;
   /** HE1, 5: en las ESTIMADA; en los demás tipos, null. */
   estimacion: EstimacionTarea | null;
+  /** HE1, 6: el uso de la tarea, como en el plan; null si no vence por uso. */
+  uso: UsoTareaPlan | null;
 }
 
 /** Una tarea que vence solo por uso, sin fecha: va aparte del calendario. */

@@ -12,6 +12,7 @@ import { ModalActivoMedidor } from './ModalActivoMedidor';
 import { ModalLectura } from './ModalLectura';
 import { ModalLecturasMedidor } from './ModalLecturasMedidor';
 import { ModalMedidor } from './ModalMedidor';
+import { RitmoMedidor } from './RitmoMedidor';
 
 interface Props {
   maquinaId: number;
@@ -54,7 +55,7 @@ export function BloqueMedidoresMaquina({ maquinaId, maquinaActiva }: Props) {
 
   // LE1, 4.5: con alguna tarea activa y más días sin lectura que los que dice el medidor
   const insigniaAtrasado = (m: MedidorLista) =>
-    m.atrasado && (
+    m.atraso_por_dias && (
       <Badge color="red" variant="filled" size="sm" style={{ flexShrink: 0 }}>
         Atrasado
       </Badge>
@@ -176,6 +177,7 @@ export function BloqueMedidoresMaquina({ maquinaId, maquinaActiva }: Props) {
                       {menu(m)}
                     </Group>
                     {ultimaLectura(m)}
+                    <RitmoMedidor medidor={m} gestiona={gestiona} />
                     <Text size="sm">{textoTareas(m)}</Text>
                     {botonCargar(m, true)}
                   </Stack>
@@ -183,13 +185,13 @@ export function BloqueMedidoresMaquina({ maquinaId, maquinaActiva }: Props) {
               ))}
             </Stack>
 
-            <Table.ScrollContainer minWidth={640} visibleFrom="sm">
+            <Table.ScrollContainer minWidth={720} visibleFrom="sm">
               <Table verticalSpacing="xs">
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th style={{ minWidth: 150 }}>Medidor</Table.Th>
                     <Table.Th style={{ minWidth: 80 }}>Unidad</Table.Th>
-                    <Table.Th style={{ minWidth: 190 }}>Última lectura</Table.Th>
+                    <Table.Th style={{ minWidth: 260 }}>Última lectura</Table.Th>
                     <Table.Th style={{ minWidth: 90 }}>Tareas</Table.Th>
                     <Table.Th style={{ minWidth: 170 }} />
                   </Table.Tr>
@@ -209,7 +211,12 @@ export function BloqueMedidoresMaquina({ maquinaId, maquinaActiva }: Props) {
                       <Table.Td>
                         <Text size="sm">{m.unidad}</Text>
                       </Table.Td>
-                      <Table.Td>{ultimaLectura(m)}</Table.Td>
+                      <Table.Td>
+                        <Stack gap={4}>
+                          {ultimaLectura(m)}
+                          <RitmoMedidor medidor={m} gestiona={gestiona} />
+                        </Stack>
+                      </Table.Td>
                       <Table.Td>
                         <Text size="sm">{textoTareas(m)}</Text>
                       </Table.Td>

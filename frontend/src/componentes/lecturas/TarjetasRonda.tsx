@@ -1,6 +1,6 @@
 import { Group, Paper, Stack, Text } from '@mantine/core';
 import { tareaMasCercana, textoTareaRonda, textoUltimaRonda } from '../../lib/lecturas';
-import { CampoLectura, InsigniaAtrasado, ResultadoGuardado } from './PiezasRonda';
+import { CampoLectura, ChipPorUso, InsigniaAtrasado, ResultadoGuardado } from './PiezasRonda';
 import type { VistaRondaProps } from './TablaRonda';
 
 /**
@@ -27,7 +27,8 @@ export function TarjetasRonda({ medidores, valores, onCambiarValor, errores, gua
                 <Text size="sm" c={m.ultima ? undefined : 'dimmed'}>
                   {textoUltimaRonda(m)}
                 </Text>
-                {m.atrasado && <InsigniaAtrasado />}
+                {m.atraso_por_dias && <InsigniaAtrasado />}
+                {m.atraso_por_uso && <ChipPorUso />}
               </Group>
               <Text size="sm" c={cercana ? undefined : 'dimmed'}>
                 {cercana ? textoTareaRonda(cercana, m.unidad) : 'Sin tareas que lo usen'}

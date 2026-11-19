@@ -801,6 +801,11 @@ test('Etapa LE1 — Ronda de lecturas y avisos de lecturas (LR-01 a LR-14)', asy
         ultima: { valor: 100, registrada_en: itemAlfa.ultima.registrada_en },
         dias_sin_lectura: 0,
         atrasado: false,
+        uso_estimado: null,
+        ritmo: null,
+        valor_estimado_hoy: null,
+        atraso_por_dias: false,
+        atraso_por_uso: false,
         tareas: [
           { tarea_id: Number(plan.tareas[0].id), accion: 'Cambiar aceite', plan: { id: plan.id, nombre: plan.nombre }, estado: 'AL_DIA', proximo_uso: 500, faltan_uso: 400 },
         ],

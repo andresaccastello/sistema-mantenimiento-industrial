@@ -4,6 +4,7 @@ import { Button, Paper, Stack, Table, Text, Title } from '@mantine/core';
 import type { TareaPorUso } from '../../api/tipos';
 import { etiquetaMaquina } from '../../lib/maquinas';
 import { textoProximoUso } from '../../lib/preventivos';
+import { textoEstimacionLista } from '../../lib/estimacion';
 import { EstadoBadge } from '../EstadoBadge';
 
 /** Cuántas se ven antes de "Ver todas" (3.5). */
@@ -45,6 +46,10 @@ export function ListaPorUso({ tareas }: { tareas: TareaPorUso[] }) {
                   <Table.Td>
                     <Text size="sm" c="dimmed">
                       {textoProximoUso(t.uso)}
+                    </Text>
+                    {/* HE1, 6: la fecha estimada, o "sin estimación" */}
+                    <Text size="xs" c={t.uso.estimacion?.pasada ? 'var(--sm-aviso-texto)' : 'dimmed'}>
+                      {textoEstimacionLista(t.uso.estimacion)}
                     </Text>
                   </Table.Td>
                   <Table.Td style={{ textAlign: 'right' }}>

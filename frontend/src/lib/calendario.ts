@@ -4,6 +4,7 @@
  * año, mes y día: no pasa por Date ni por ninguna zona horaria, así que un día no se corre.
  */
 import { obtenerInfoEstado } from './estados';
+import { COLOR_ESTIMADA, ETIQUETA_ESTIMADA } from './estimacion';
 
 export type VistaCalendario = 'mes' | 'semana';
 
@@ -168,10 +169,11 @@ export interface EventoParaVer {
   estado: string | null;
 }
 
-/** El color: el del estado en las pendientes, teal en las hechas y gris en las previstas. */
+/** El color: el del estado en las pendientes, teal en las hechas, gris en las previstas y el propio en las estimadas (HE1). */
 export function colorEvento(e: EventoParaVer): string {
   if (e.tipo === 'HECHA') return 'teal';
   if (e.tipo === 'PREVISTA') return 'gray';
+  if (e.tipo === 'ESTIMADA') return COLOR_ESTIMADA;
   return obtenerInfoEstado('tarea_preventiva', e.estado ?? '').color;
 }
 
@@ -179,6 +181,7 @@ export function colorEvento(e: EventoParaVer): string {
 export function textoEvento(e: EventoParaVer): string {
   if (e.tipo === 'HECHA') return 'Hecha';
   if (e.tipo === 'PREVISTA') return 'Prevista';
+  if (e.tipo === 'ESTIMADA') return ETIQUETA_ESTIMADA;
   return obtenerInfoEstado('tarea_preventiva', e.estado ?? '').texto;
 }
 

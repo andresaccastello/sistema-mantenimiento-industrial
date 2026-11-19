@@ -4,6 +4,7 @@ import { IconCheck } from '@tabler/icons-react';
 import type { MedidorRonda, TareaRonda } from '../../api/tipos';
 import { confirmarSalida } from '../../app/salida';
 import { textoTareaRonda, type Consecuencia } from '../../lib/lecturas';
+import { TEXTO_CHIP_POR_USO } from '../../lib/estimacion';
 import { CampoNumero } from '../CampoNumero';
 import { EstadoBadge } from '../EstadoBadge';
 
@@ -45,6 +46,18 @@ export function InsigniaAtrasado() {
   return (
     <Badge color="red" variant="filled" size="sm" style={{ flexShrink: 0 }}>
       Atrasado
+    </Badge>
+  );
+}
+
+/**
+ * HE1, 6: por el ritmo de uso, una tarea ya estaría para avisar o vencida, y ninguna lectura lo
+ * confirma. No muestra el valor estimado: invita a copiarlo sin mirar el medidor.
+ */
+export function ChipPorUso() {
+  return (
+    <Badge color="orange" variant="light" size="sm" style={{ flexShrink: 0 }} styles={{ root: { textTransform: 'none' } }}>
+      {TEXTO_CHIP_POR_USO}
     </Badge>
   );
 }

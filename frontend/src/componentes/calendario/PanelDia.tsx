@@ -2,6 +2,7 @@ import { Link } from 'react-router';
 import { Button, Drawer, Group, Paper, Stack, Text } from '@mantine/core';
 import type { EventoCalendario } from '../../api/tipos';
 import { textoDia } from '../../lib/calendario';
+import { TEXTO_ESTIMADA_PASADA, textoPanelEstimada } from '../../lib/estimacion';
 import { etiquetaMaquina } from '../../lib/maquinas';
 import { nombreCompleto } from '../../lib/personas';
 import { CriticidadBadge } from '../CriticidadBadge';
@@ -47,6 +48,16 @@ export function PanelDia({ fecha, eventos, onCerrar }: Props) {
                 <Text size="xs" c="dimmed">
                   Responsable: {e.responsable ? nombreCompleto(e.responsable) : 'Sin responsable'}
                 </Text>
+                {e.tipo === 'ESTIMADA' && e.estimacion && e.uso && (
+                  <Text size="xs" c="dimmed">
+                    {textoPanelEstimada(e.uso.proximo, e.uso.medidor.unidad, e.estimacion)}
+                  </Text>
+                )}
+                {e.tipo === 'ESTIMADA' && e.estimacion?.pasada && (
+                  <Text size="xs" fw={500} c="var(--sm-aviso-texto)">
+                    {TEXTO_ESTIMADA_PASADA}
+                  </Text>
+                )}
                 {e.vencida_por_uso && (
                   <Text size="xs" c="red" fw={500}>
                     Venció por uso
