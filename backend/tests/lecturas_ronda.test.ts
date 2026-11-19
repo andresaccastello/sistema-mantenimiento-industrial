@@ -637,7 +637,7 @@ test('Etapa LE1 — Ronda de lecturas y avisos de lecturas (LR-01 a LR-14)', asy
         {
           id: 0,
           prioridad: 'NORMAL',
-          titulo: 'Lecturas atrasadas',
+          titulo: 'Lecturas para cargar',
           mensaje: `${m.codigo} · ${atrasado.nombre}: 8 días sin lectura (se lee cada 7)`,
           intervencion_id: null,
           maquina_id: m.id,
@@ -701,7 +701,7 @@ test('Etapa LE1 — Ronda de lecturas y avisos de lecturas (LR-01 a LR-14)', asy
       assert.strictEqual(deR1.length, 1, 'Un solo aviso para R1');
       assert.deepStrictEqual(
         [deR1[0].titulo, deR1[0].mensaje, deR1[0].maquina_id],
-        ['Lecturas atrasadas', `${lineaX}\n${lineaY}`, null],
+        ['Lecturas para cargar', `${lineaX}\n${lineaY}`, null],
         'Con las dos líneas, y sin máquina porque son varios'
       );
       // R2 recibe el suyo una sola vez, aunque su plan tiene dos tareas con el medidor

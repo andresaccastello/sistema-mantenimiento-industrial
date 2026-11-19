@@ -471,7 +471,16 @@ test('Etapa HE1 — Horómetro estimado (EU-01 a EU-15)', async (t) => {
       const ints = await client.query('SELECT count(*)::int AS n FROM intervenciones WHERE maquina_id = $1', [m.id]);
       assert.strictEqual(ints.rows[0].n, 0, 'Ninguna intervención');
       assert.strictEqual((await avisosDe(R.id, TIPO_VENCIMIENTO)).length, 0, 'Ningún aviso de vencimiento');
-      // EU-09, aviso por estimación (HE1, 4)
+      // Sí avisa que hay que cargar una lectura (HE1, 4): 10 por día desde 100 hace 30 días
+      assert.ok((r.lecturas_por_uso ?? 0) >= 1, JSON.stringify(r));
+      assert.deepStrictEqual(await avisosDe(R.id, TIPO_ATRASO), [
+        {
+          id: (await avisosDe(R.id, TIPO_ATRASO))[0]?.id,
+          titulo: 'Lecturas para cargar',
+          mensaje: `${m.codigo} · ${med.nombre}: por el ritmo de uso (10 h/día) estaría en ≈ 400 h y hay una tarea que avisa a las 170 h. Cargá una lectura.`,
+          maquina_id: m.id,
+        },
+      ]);
       await apagar(p.id);
     });
 
@@ -526,7 +535,221 @@ test('Etapa HE1 — Horómetro estimado (EU-01 a EU-15)', async (t) => {
       assert.deepStrictEqual((await verMedidor(med.id)).uso_estimado, { valor: 8, periodo: 'DIA' });
     });
 
-    // HE1, secciones 4 y 5: EU-11 a EU-15
+    const marcas = async (medidorId: number) =>
+      (await client.query('SELECT atraso_avisado_en, estimacion_avisada_en FROM medidores WHERE id = $1', [medidorId])).rows[0];
+    /** Una línea por uso, como en 4. */
+    const lineaUso = (m: { codigo: string }, med: { nombre: string }, ritmo: string, valor: string, verbo: string, umbral: string) =>
+      `${m.codigo} · ${med.nombre}: por el ritmo de uso (${ritmo} h/día) estaría en ≈ ${valor} h y hay una tarea que ${verbo} a las ${umbral} h. Cargá una lectura.`;
+
+    // =========================================================================
+    // EU-11: Una vez por episodio
+    // =========================================================================
+    await t.test('EU-11: El aviso por uso sale una vez; vuelve con una lectura nueva o con otro declarado', async () => {
+      const R = await responsable();
+      const m = await crearMaquina();
+      // Sin control por días: igual avisa
+      const med = await medidor(m.id, { uso_estimado: { valor: 70, periodo: 'SEMANA' }, lectura_cada_dias: null });
+      await lectura(med.id, 100, 30);
+      const p = await crearPlan(m.id, [tareaUso('Cambiar aceite', med.id)], { responsable_usuario_id: R.id });
+      const d = await verMedidor(med.id);
+      assert.deepStrictEqual([d.atraso_por_dias, d.atraso_por_uso, d.atrasado], [false, true, true]);
+
+      await revisar();
+      const primero = await avisosDe(R.id, TIPO_ATRASO);
+      assert.deepStrictEqual(primero.map((a) => a.mensaje), [lineaUso(m, med, '10', '400', 'avisa', '170')]);
+      assert.ok((await marcas(med.id)).estimacion_avisada_en !== null, 'Queda marcado');
+      assert.strictEqual((await marcas(med.id)).atraso_avisado_en, null, 'Por días, no');
+
+      await revisar();
+      assert.strictEqual((await avisosDe(R.id, TIPO_ATRASO)).length, 1, 'No se repite');
+
+      // Una lectura nueva limpia la marca; sigue atrasado por uso, así que vuelve a avisar
+      await lectura(med.id, 110, 20);
+      assert.strictEqual((await marcas(med.id)).estimacion_avisada_en, null, 'La lectura limpia la marca');
+      await revisar();
+      const segundo = await avisosDe(R.id, TIPO_ATRASO);
+      assert.deepStrictEqual(segundo.map((a) => a.mensaje).slice(1), [lineaUso(m, med, '10', '310', 'avisa', '170')]);
+
+      // El mismo declarado no limpia la marca; otro, sí
+      await cambiarMedidor(med.id, { uso_estimado: { valor: 70, periodo: 'SEMANA' } });
+      assert.ok((await marcas(med.id)).estimacion_avisada_en !== null, 'El mismo declarado no limpia');
+      await cambiarMedidor(med.id, { uso_estimado: { valor: 140, periodo: 'SEMANA' } });
+      assert.strictEqual((await marcas(med.id)).estimacion_avisada_en, null, 'Otro declarado limpia');
+      await revisar();
+      const tercero = await avisosDe(R.id, TIPO_ATRASO);
+      assert.deepStrictEqual(tercero.map((a) => a.mensaje).slice(2), [lineaUso(m, med, '20', '510', 'avisa', '170')]);
+      await apagar(p.id);
+    });
+
+    // =========================================================================
+    // EU-12: Cada aviso por su lado
+    // =========================================================================
+    await t.test('EU-12: Los avisos por días y por uso van por separado, y juntos si coinciden', async () => {
+      // Los dos a la vez: dos líneas en el mismo aviso
+      const R1 = await responsable();
+      const m1 = await crearMaquina();
+      const ambos = await medidor(m1.id, { uso_estimado: { valor: 70, periodo: 'SEMANA' }, lectura_cada_dias: 7 });
+      await lectura(ambos.id, 100, 30);
+      const p1 = await crearPlan(m1.id, [tareaUso('Ambos', ambos.id)], { responsable_usuario_id: R1.id });
+
+      // Primero por días; después se declara el uso
+      const R2 = await responsable();
+      const m2 = await crearMaquina();
+      const diasPrimero = await medidor(m2.id, { lectura_cada_dias: 7 });
+      await lectura(diasPrimero.id, 100, 30);
+      const p2 = await crearPlan(m2.id, [tareaUso('Días primero', diasPrimero.id)], { responsable_usuario_id: R2.id });
+
+      // Primero por uso; después se pide leer cada 7 días
+      const R3 = await responsable();
+      const m3 = await crearMaquina();
+      const usoPrimero = await medidor(m3.id, { uso_estimado: { valor: 70, periodo: 'SEMANA' }, lectura_cada_dias: null });
+      await lectura(usoPrimero.id, 100, 30);
+      const p3 = await crearPlan(m3.id, [tareaUso('Uso primero', usoPrimero.id)], { responsable_usuario_id: R3.id });
+
+      const r = await revisar();
+      assert.ok((r.lecturas_atrasadas ?? 0) >= 2 && (r.lecturas_por_uso ?? 0) >= 2, JSON.stringify(r));
+      const lineaDias = (m: { codigo: string }, med: { nombre: string }) => `${m.codigo} · ${med.nombre}: 30 días sin lectura (se lee cada 7)`;
+
+      assert.deepStrictEqual((await avisosDe(R1.id, TIPO_ATRASO)).map((a) => [a.titulo, a.mensaje]), [
+        ['Lecturas para cargar', `${lineaDias(m1, ambos)}\n${lineaUso(m1, ambos, '10', '400', 'avisa', '170')}`],
+      ]);
+      assert.deepStrictEqual((await avisosDe(R2.id, TIPO_ATRASO)).map((a) => a.mensaje), [lineaDias(m2, diasPrimero)]);
+      assert.deepStrictEqual((await avisosDe(R3.id, TIPO_ATRASO)).map((a) => a.mensaje), [lineaUso(m3, usoPrimero, '10', '400', 'avisa', '170')]);
+
+      // El avisado por días no tapa el de uso, y al revés: cada uno sale solo con su línea
+      await cambiarMedidor(diasPrimero.id, { uso_estimado: { valor: 70, periodo: 'SEMANA' } });
+      await cambiarMedidor(usoPrimero.id, { lectura_cada_dias: 7 });
+      await revisar();
+      assert.deepStrictEqual((await avisosDe(R2.id, TIPO_ATRASO)).map((a) => a.mensaje), [
+        lineaDias(m2, diasPrimero),
+        lineaUso(m2, diasPrimero, '10', '400', 'avisa', '170'),
+      ]);
+      assert.deepStrictEqual((await avisosDe(R3.id, TIPO_ATRASO)).map((a) => a.mensaje), [
+        lineaUso(m3, usoPrimero, '10', '400', 'avisa', '170'),
+        lineaDias(m3, usoPrimero),
+      ]);
+      assert.strictEqual((await avisosDe(R1.id, TIPO_ATRASO)).length, 1, 'El de los dos no se repite');
+      await apagar(p1.id, p2.id, p3.id);
+    });
+
+    // =========================================================================
+    // EU-13: La ronda
+    // =========================================================================
+    await t.test('EU-13: La ronda con solo_atrasados incluye un medidor atrasado solo por uso', async () => {
+      const m = await crearMaquina();
+      const porUso = await medidor(m.id, { uso_estimado: { valor: 70, periodo: 'SEMANA' }, lectura_cada_dias: null });
+      const alDia = await medidor(m.id, { uso_estimado: { valor: 70, periodo: 'SEMANA' }, lectura_cada_dias: null });
+      await lectura(porUso.id, 100, 30);
+      await lectura(alDia.id, 100, 1);
+      const p = await crearPlan(m.id, [tareaUso('Por uso', porUso.id), tareaUso('Al día', alDia.id)]);
+
+      const r = await pedir('GET', `/api/medidores/ronda?maquina_id=${m.id}&solo_atrasados=true`, A.token);
+      assert.strictEqual(r.status, 200, JSON.stringify(r.cuerpo));
+      assert.deepStrictEqual(
+        r.cuerpo.map((x: any) => [x.id, x.atraso_por_dias, x.atraso_por_uso, x.atrasado]),
+        [[porUso.id, false, true, true]]
+      );
+      const todos = await pedir('GET', `/api/medidores/ronda?maquina_id=${m.id}`, A.token);
+      assert.deepStrictEqual(todos.cuerpo.map((x: any) => x.id).sort(), [porUso.id, alDia.id].sort());
+      await apagar(p.id);
+    });
+
+    // Calendario
+    const calendario = async (maquinaId: number) => {
+      const hoy = await fechaBase(0);
+      const r = await pedir('GET', `/api/planes/calendario?desde=${hoy}&hasta=${await fechaBase(40)}&maquina_id=${maquinaId}`, A.token);
+      assert.strictEqual(r.status, 200, JSON.stringify(r.cuerpo));
+      return r.cuerpo;
+    };
+    const estimadas = (c: any) => c.eventos.filter((e: any) => e.tipo === 'ESTIMADA');
+    const tareaFecha = (accion: string, primera: string, extra: Record<string, unknown> = {}) => ({
+      accion,
+      frecuencia_valor: 1,
+      frecuencia_unidad: 'MESES',
+      primera_fecha: primera,
+      ...extra,
+    });
+
+    // =========================================================================
+    // EU-14: Calendario, solo por uso
+    // =========================================================================
+    await t.test('EU-14: Solo por uso: ESTIMADA en fecha_estimada; una pasada, en hoy', async () => {
+      const m = await crearMaquina();
+      const futura = await medidor(m.id, { uso_estimado: { valor: 40, periodo: 'SEMANA' } });
+      const pasada = await medidor(m.id, { uso_estimado: { valor: 70, periodo: 'SEMANA' } });
+      await lectura(futura.id, 100, 2);
+      await lectura(pasada.id, 100, 30);
+      const p = await crearPlan(m.id, [tareaUso('Futura', futura.id), tareaUso('Pasada', pasada.id), tareaFecha('Por fecha', await fechaBase(5))]);
+      const [tFutura, tPasada, tFecha] = p.tareas.map((x: any) => x.id);
+
+      const c = await calendario(m.id);
+      assert.deepStrictEqual(
+        estimadas(c).map((e: any) => [e.tarea_id, e.fecha, e.estado, e.vencida_por_uso, e.tambien_por_uso, e.intervencion]),
+        [
+          [tPasada, await fechaBase(0), 'AL_DIA', false, false, null],
+          [tFutura, await fechaBase(16), 'AL_DIA', false, false, null],
+        ]
+      );
+      const [ePasada, eFutura] = estimadas(c);
+      assert.deepStrictEqual(eFutura.estimacion, {
+        fecha: await fechaBase(16),
+        fecha_aviso: await fechaBase(11),
+        pasada: false,
+        ritmo_por_dia: 5.714,
+        fuente: 'DECLARADO',
+      });
+      assert.deepStrictEqual([ePasada.estimacion.fecha, ePasada.estimacion.pasada], [await fechaBase(-20), true]);
+      // Los demás tipos llevan estimacion en null
+      const otros = c.eventos.filter((e: any) => e.tipo !== 'ESTIMADA');
+      assert.ok(otros.some((e: any) => e.tarea_id === tFecha), 'La tarea por fecha sale');
+      assert.ok(otros.every((e: any) => e.estimacion === null));
+
+      // La lista por_uso sigue igual, ahora con la estimación
+      assert.deepStrictEqual(c.por_uso.map((x: any) => x.tarea_id).sort(), [tFutura, tPasada].sort());
+      assert.deepStrictEqual(c.por_uso.find((x: any) => x.tarea_id === tFutura).uso.estimacion, eFutura.estimacion);
+      await apagar(p.id);
+    });
+
+    // =========================================================================
+    // EU-15: Calendario, por fecha y por uso
+    // =========================================================================
+    await t.test('EU-15: Fecha y uso: ESTIMADA solo si llega antes; nunca VENCIDA ni EN_CURSO', async () => {
+      const m = await crearMaquina();
+      // 40 por semana desde 100 hace 2 días: la estimada es hoy + 16
+      const med = await medidor(m.id, { uso_estimado: { valor: 40, periodo: 'SEMANA' } });
+      await lectura(med.id, 100, 2);
+      const uso = { uso: { medidor_id: med.id, cada: 100, primera: 200, anticipacion: 30 } };
+      const p = await crearPlan(m.id, [
+        tareaFecha('Llega antes por uso', await fechaBase(30), uso),
+        tareaFecha('Llega antes por fecha', await fechaBase(10), uso),
+      ]);
+      const [tAntes, tDespues] = p.tareas.map((x: any) => x.id);
+      const c = await calendario(m.id);
+      assert.deepStrictEqual(estimadas(c).map((e: any) => [e.tarea_id, e.fecha]), [[tAntes, await fechaBase(16)]]);
+      assert.ok(c.eventos.some((e: any) => e.tarea_id === tDespues && e.tipo === 'PENDIENTE'), 'La otra, por su fecha');
+
+      // VENCIDA por uso: sin estimación ni evento
+      const m2 = await crearMaquina();
+      const vencido = await medidor(m2.id, { uso_estimado: { valor: 40, periodo: 'SEMANA' } });
+      await lectura(vencido.id, 250, 2);
+      const pv = await crearPlan(m2.id, [tareaUso('Vencida', vencido.id)]);
+      const cv = await calendario(m2.id);
+      assert.strictEqual(cv.por_uso[0].estado, 'VENCIDA');
+      assert.deepStrictEqual([estimadas(cv), cv.por_uso[0].uso.estimacion], [[], null]);
+
+      // EN_CURSO: próxima por uso, con la intervención generada
+      const m3 = await crearMaquina();
+      const proximo = await medidor(m3.id, { uso_estimado: { valor: 40, periodo: 'SEMANA' } });
+      await lectura(proximo.id, 180, 2);
+      const pe = await crearPlan(m3.id, [tareaUso('En curso', proximo.id)]);
+      assert.strictEqual(estimadas(await calendario(m3.id)).length, 1, 'Próxima, antes de generar');
+      const g = await pedir('POST', `/api/planes/${pe.id}/generar`, A.token, {});
+      assert.strictEqual(g.status, 201, JSON.stringify(g.cuerpo));
+      const ce = await calendario(m3.id);
+      assert.strictEqual(ce.por_uso[0].estado, 'EN_CURSO');
+      assert.deepStrictEqual([estimadas(ce), ce.por_uso[0].uso.estimacion], [[], null]);
+      await apagar(p.id, pv.id, pe.id);
+    });
   } finally {
     client = await clienteSano(client);
     // Limpieza: lo que creó esta prueba, y los avisos de esta corrida

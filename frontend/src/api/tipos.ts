@@ -1303,14 +1303,14 @@ export interface VencimientosRespuesta {
   tareas: VencimientoTarea[];
 }
 
-/** CAL1: hecha, pendiente o prevista (D-028). */
-export type TipoEventoCalendario = 'HECHA' | 'PENDIENTE' | 'PREVISTA';
+/** CAL1: hecha, pendiente o prevista (D-028); HE1, 5: estimada por uso. */
+export type TipoEventoCalendario = 'HECHA' | 'PENDIENTE' | 'ESTIMADA' | 'PREVISTA';
 
 /** Un evento de `GET /api/planes/calendario`. */
 export interface EventoCalendario {
   fecha: string;
   tipo: TipoEventoCalendario;
-  /** Solo en las pendientes; en hechas y previstas, null. */
+  /** En las pendientes y las estimadas; en hechas y previstas, null. */
   estado: EstadoVencimiento | null;
   /** La pendiente venció por uso antes de su fecha: va en hoy. */
   vencida_por_uso: boolean;
@@ -1325,6 +1325,8 @@ export interface EventoCalendario {
   responsable: Persona | null;
   /** En una hecha, la que la finalizó; en una pendiente EN_CURSO, la que está en curso. */
   intervencion: IntervencionEnCurso | null;
+  /** HE1, 5: en las ESTIMADA; en los demás tipos, null. */
+  estimacion: EstimacionTarea | null;
 }
 
 /** Una tarea que vence solo por uso, sin fecha: va aparte del calendario. */

@@ -6,7 +6,13 @@ import { encolarEnvios, usuariosConPermiso } from '../intervenciones/notificacio
 import { UsuarioVisibilidad } from '../intervenciones/visibilidad.ts';
 import { bloquearPlan } from './comun.ts';
 import { generarDesdePlan } from './generar.ts';
-import { SQL_ATRASADO, SQL_DIAS_SIN_LECTURA, SQL_ULTIMA_LECTURA } from '../medidores/consultas.ts';
+import {
+  JOIN_RITMO,
+  SQL_ATRASADO,
+  SQL_ATRASO_POR_USO,
+  SQL_DIAS_SIN_LECTURA,
+  SQL_ULTIMA_LECTURA,
+} from '../medidores/consultas.ts';
 
 /**
  * Etapa PV5, sección 3: la revisión diaria de las tareas preventivas (D-025). Genera la
@@ -25,6 +31,8 @@ export interface ResultadoVencimientos {
   errores?: Array<{ plan_id: number; codigo: string }>;
   /** LE1, 3.4: cuántos medidores se avisaron por lecturas atrasadas. */
   lecturas_atrasadas?: number;
+  /** HE1, 4: cuántos medidores se avisaron por estimación. */
+  lecturas_por_uso?: number;
 }
 
 /** Una tarea vencida o próxima, como se lee de la vista antes de generar. */
@@ -199,15 +207,25 @@ export async function procesarPlan(client: pg.PoolClient, planId: number, sistem
   return { intervencionId, avisos: resN.rows.length };
 }
 
-/** Un medidor atrasado, ya bloqueado y controlado. */
-interface MedidorAtrasado {
+/** Un medidor para avisar, ya bloqueado y controlado: por días, por uso o por los dos. */
+interface MedidorParaLeer {
   id: number;
   nombre: string;
+  unidad: string;
   maquina_id: number;
   maquina_codigo: string | null;
   maquina_nombre: string;
+  /** LE1, 3.4: atrasado por días y sin avisar. */
+  por_dias: boolean;
   dias: number;
-  cada: number;
+  cada: number | null;
+  /** HE1, 4: atrasado por uso y sin avisar. */
+  por_uso: boolean;
+  ritmo: number | null;
+  valor_estimado_hoy: number | null;
+  /** La tarea del umbral más bajo: el aviso (si está al día) o el vencimiento (si está próxima). */
+  umbral: number | null;
+  umbral_es_aviso: boolean;
 }
 
 /** "COM-01 · Horómetro: 8 días sin lectura (se lee cada 7)". */
@@ -223,40 +241,125 @@ export function lineaLecturaAtrasada(m: {
   return `${maquina} · ${m.nombre}: ${dias} sin lectura (se lee cada ${m.cada})`;
 }
 
-/** Los medidores atrasados y sin avisar (LE1, 3.4), de entre `ids` si se pasa. */
-async function medidoresAtrasadosSinAvisar(client: pg.PoolClient, ids: number[] | null): Promise<MedidorAtrasado[]> {
+/** Un número en castellano, con hasta `decimales` decimales: 5,7; 1.250. */
+function numeroAR(n: number, decimales: number): string {
+  return n.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: decimales });
+}
+
+/**
+ * HE1, 4: "COM-01 · Horómetro: por el ritmo de uso (5,7 h/día) estaría en ≈ 182 h y hay una
+ * tarea que avisa a las 170 h. Cargá una lectura." Si la tarea ya estaría vencida, "que vence".
+ */
+export function lineaLecturaPorUso(m: {
+  nombre: string;
+  unidad: string;
+  maquina_codigo: string | null;
+  maquina_nombre: string;
+  ritmo: number;
+  valor_estimado_hoy: number;
+  umbral: number;
+  umbral_es_aviso: boolean;
+}): string {
+  const maquina = m.maquina_codigo ? m.maquina_codigo : m.maquina_nombre;
+  const verbo = m.umbral_es_aviso ? 'avisa' : 'vence';
+  return (
+    `${maquina} · ${m.nombre}: por el ritmo de uso (${numeroAR(m.ritmo, 1)} ${m.unidad}/día) ` +
+    `estaría en ≈ ${numeroAR(Math.round(m.valor_estimado_hoy), 0)} ${m.unidad} ` +
+    `y hay una tarea que ${verbo} a las ${numeroAR(m.umbral, 2)} ${m.unidad}. Cargá una lectura.`
+  );
+}
+
+/** Las líneas de un medidor: por días y por uso, si van las dos. */
+function lineasDeMedidor(m: MedidorParaLeer): string[] {
+  const lineas: string[] = [];
+  if (m.por_dias) {
+    lineas.push(lineaLecturaAtrasada({ ...m, cada: m.cada as number }));
+  }
+  if (m.por_uso) {
+    lineas.push(
+      lineaLecturaPorUso({
+        ...m,
+        ritmo: m.ritmo as number,
+        valor_estimado_hoy: m.valor_estimado_hoy as number,
+        umbral: m.umbral as number,
+      })
+    );
+  }
+  return lineas;
+}
+
+/**
+ * Los medidores para avisar (LE1, 3.4 y HE1, 4), de entre `ids` si se pasa: atrasados por días
+ * y sin avisar por días, o atrasados por uso y sin avisar por uso. Cada aviso, por su lado.
+ */
+async function medidoresParaAvisar(client: pg.PoolClient, ids: number[] | null): Promise<MedidorParaLeer[]> {
   const r = await client.query(
-    `SELECT md.id, md.nombre, md.lectura_cada_dias, md.maquina_id,
-            m.codigo AS maquina_codigo, m.nombre AS maquina_nombre,
-            ${SQL_DIAS_SIN_LECTURA} AS dias
-     FROM medidores md
-     JOIN maquinas m ON m.id = md.maquina_id
-     ${SQL_ULTIMA_LECTURA}
-     WHERE md.atraso_avisado_en IS NULL
-       AND ${SQL_ATRASADO}
-       AND ($1::bigint[] IS NULL OR md.id = ANY($1::bigint[]))
-     ORDER BY m.codigo ASC NULLS LAST, m.nombre ASC, md.nombre ASC, md.id ASC`,
+    `SELECT * FROM (
+       SELECT md.id, md.nombre, md.unidad, md.lectura_cada_dias, md.maquina_id,
+              m.codigo AS maquina_codigo, m.nombre AS maquina_nombre,
+              ${SQL_DIAS_SIN_LECTURA} AS dias,
+              (md.atraso_avisado_en IS NULL AND ${SQL_ATRASADO}) AS por_dias,
+              (md.estimacion_avisada_en IS NULL AND ${SQL_ATRASO_POR_USO}) AS por_uso,
+              vr.ritmo, vr.valor_estimado_hoy,
+              u.umbral, u.es_aviso AS umbral_es_aviso
+       FROM medidores md
+       JOIN maquinas m ON m.id = md.maquina_id
+       ${SQL_ULTIMA_LECTURA}
+       ${JOIN_RITMO}
+       -- La tarea del umbral más bajo, entre las que dan el atraso por uso
+       LEFT JOIN LATERAL (
+         SELECT x.umbral, x.es_aviso FROM (
+           SELECT CASE WHEN e.estado_uso = 'AL_DIA' THEN e.proximo_uso - e.uso_anticipacion ELSE e.proximo_uso END AS umbral,
+                  e.estado_uso = 'AL_DIA' AS es_aviso
+           FROM v_plan_tareas_estimacion e
+           JOIN planes_mantenimiento p ON p.id = e.plan_id
+           WHERE e.medidor_id = md.id AND e.activo AND p.activo
+             AND (
+               (e.estado_uso = 'AL_DIA' AND e.fecha_aviso_estimada <= e.hoy)
+               OR (e.estado_uso = 'PROXIMA' AND e.fecha_estimada <= e.hoy)
+             )
+         ) x
+         ORDER BY x.umbral ASC
+         LIMIT 1
+       ) u ON TRUE
+       WHERE ($1::bigint[] IS NULL OR md.id = ANY($1::bigint[]))
+     ) y
+     WHERE y.por_dias OR y.por_uso
+     ORDER BY y.maquina_codigo ASC NULLS LAST, y.maquina_nombre ASC, y.nombre ASC, y.id ASC`,
     [ids]
   );
   return r.rows.map((x) => ({
     id: Number(x.id),
     nombre: x.nombre,
+    unidad: x.unidad,
     maquina_id: Number(x.maquina_id),
     maquina_codigo: x.maquina_codigo,
     maquina_nombre: x.maquina_nombre,
+    por_dias: Boolean(x.por_dias),
     dias: Number(x.dias),
-    cada: Number(x.lectura_cada_dias),
+    cada: x.lectura_cada_dias === null ? null : Number(x.lectura_cada_dias),
+    por_uso: Boolean(x.por_uso) && x.umbral !== null,
+    ritmo: x.ritmo === null ? null : Number(x.ritmo),
+    valor_estimado_hoy: x.valor_estimado_hoy === null ? null : Number(x.valor_estimado_hoy),
+    umbral: x.umbral === null ? null : Number(x.umbral),
+    umbral_es_aviso: Boolean(x.umbral_es_aviso),
   }));
 }
 
+/** Cuántos medidores se avisaron, por días y por uso. */
+interface ResultadoLecturas {
+  porDias: number;
+  porUso: number;
+}
+
 /**
- * LE1, 3.4: avisa las lecturas atrasadas, una vez por atraso. Va en una transacción, después de
- * los planes. Devuelve cuántos medidores se avisaron.
+ * LE1, 3.4 y HE1, 4: avisa las lecturas para cargar, una vez por episodio y cada aviso por su
+ * lado. Va en una transacción, después de los planes.
  */
-async function avisarLecturasAtrasadas(client: pg.PoolClient, sistemaId: number): Promise<number> {
+async function avisarLecturasParaCargar(client: pg.PoolClient, sistemaId: number): Promise<ResultadoLecturas> {
   // 1. Los candidatos, sin bloquear
-  const candidatos = await medidoresAtrasadosSinAvisar(client, null);
-  if (candidatos.length === 0) return 0;
+  const candidatos = await medidoresParaAvisar(client, null);
+  if (candidatos.length === 0) return { porDias: 0, porUso: 0 };
 
   // Los bloqueos, en el orden de siempre: las máquinas FOR SHARE y después los medidores FOR UPDATE
   const maquinaIds = [...new Set(candidatos.map((m) => m.maquina_id))].sort((a, b) => a - b);
@@ -265,12 +368,12 @@ async function avisarLecturasAtrasadas(client: pg.PoolClient, sistemaId: number)
   await client.query('SELECT id FROM medidores WHERE id = ANY($1) ORDER BY id FOR UPDATE', [medidorIds]);
 
   // 2. Se vuelve a controlar con todo bloqueado: si otra revisión ya los avisó, no queda ninguno
-  const atrasados = await medidoresAtrasadosSinAvisar(client, medidorIds);
-  if (atrasados.length === 0) return 0;
+  const paraAvisar = await medidoresParaAvisar(client, medidorIds);
+  if (paraAvisar.length === 0) return { porDias: 0, porUso: 0 };
 
   // 3. Los destinatarios de cada medidor: los de cada plan activo con tareas activas que lo usan
-  const porUsuario = new Map<number, MedidorAtrasado[]>();
-  for (const medidor of atrasados) {
+  const porUsuario = new Map<number, MedidorParaLeer[]>();
+  for (const medidor of paraAvisar) {
     const planes = await client.query(
       `SELECT DISTINCT p.id, p.responsable_usuario_id, m.sector_id
        FROM plan_tareas t
@@ -291,27 +394,37 @@ async function avisarLecturasAtrasadas(client: pg.PoolClient, sistemaId: number)
     }
   }
 
-  // 4. Un aviso por destinatario, con todos sus medidores atrasados juntos
+  // 4. Un aviso por destinatario, con todos sus medidores juntos: una línea por días y otra por uso
   const notificacionIds: number[] = [];
-  const avisados = new Set<number>();
+  const avisadosDias = new Set<number>();
+  const avisadosUso = new Set<number>();
   for (const [usuarioId, medidores] of [...porUsuario.entries()].sort((a, b) => a[0] - b[0])) {
-    const mensaje = medidores.map(lineaLecturaAtrasada).join('\n');
+    const mensaje = medidores.flatMap(lineasDeMedidor).join('\n');
     const maquinaId = medidores.length === 1 ? medidores[0].maquina_id : null;
     const r = await client.query(
       `INSERT INTO notificaciones (
          usuario_id, tipo_evento, prioridad, titulo, mensaje, intervencion_id, maquina_id, generada_por_usuario_id, creada_en
-       ) VALUES ($1, $2, 'NORMAL', 'Lecturas atrasadas', $3, NULL, $4, $5, NOW())
+       ) VALUES ($1, $2, 'NORMAL', 'Lecturas para cargar', $3, NULL, $4, $5, NOW())
        RETURNING id`,
       [usuarioId, TIPO_AVISO_LECTURA_ATRASADA, mensaje, maquinaId, sistemaId]
     );
     notificacionIds.push(Number(r.rows[0].id));
-    for (const m of medidores) avisados.add(m.id);
+    for (const m of medidores) {
+      if (m.por_dias) avisadosDias.add(m.id);
+      if (m.por_uso) avisadosUso.add(m.id);
+    }
   }
   await encolarEnvios(client, notificacionIds);
 
-  // 5. Marcados: no se vuelven a avisar hasta una lectura nueva o un cambio de lectura_cada_dias
-  await client.query('UPDATE medidores SET atraso_avisado_en = NOW() WHERE id = ANY($1)', [atrasados.map((m) => m.id)]);
-  return avisados.size;
+  // 5. Marcados, cada uno por su lado: no se vuelven a avisar hasta una lectura nueva, o un
+  // cambio de lectura_cada_dias (por días) o del uso declarado (por uso)
+  await client.query('UPDATE medidores SET atraso_avisado_en = NOW() WHERE id = ANY($1)', [
+    paraAvisar.filter((m) => m.por_dias).map((m) => m.id),
+  ]);
+  await client.query('UPDATE medidores SET estimacion_avisada_en = NOW() WHERE id = ANY($1)', [
+    paraAvisar.filter((m) => m.por_uso).map((m) => m.id),
+  ]);
+  return { porDias: avisadosDias.size, porUso: avisadosUso.size };
 }
 
 /**
@@ -368,12 +481,12 @@ export async function procesarVencimientos(opciones: { forzar?: boolean } = {}):
     }
   }
 
-  // LE1, 3.4: las lecturas atrasadas, en su transacción. Si falla, los planes ya quedaron
-  // procesados y el día se marca igual: los medidores siguen sin marcar y la próxima revisión
-  // los vuelve a intentar.
-  let lecturasAtrasadas = 0;
+  // LE1, 3.4 y HE1, 4: las lecturas para cargar, por días y por uso, en su transacción. Si falla,
+  // los planes ya quedaron procesados y el día se marca igual: los medidores siguen sin marcar y
+  // la próxima revisión los vuelve a intentar.
+  let lecturas: ResultadoLecturas = { porDias: 0, porUso: 0 };
   try {
-    lecturasAtrasadas = await conTransaccion((client) => avisarLecturasAtrasadas(client, sistema.id));
+    lecturas = await conTransaccion((client) => avisarLecturasParaCargar(client, sistema.id));
   } catch (err) {
     console.error('Error al avisar las lecturas atrasadas:', err);
   }
@@ -384,5 +497,5 @@ export async function procesarVencimientos(opciones: { forzar?: boolean } = {}):
     await pool.query('UPDATE configuracion_sistema SET vencimientos_revisados_el = hoy_instalacion() WHERE id = 1');
   }
 
-  return { ...resultado, lecturas_atrasadas: lecturasAtrasadas };
+  return { ...resultado, lecturas_atrasadas: lecturas.porDias, lecturas_por_uso: lecturas.porUso };
 }

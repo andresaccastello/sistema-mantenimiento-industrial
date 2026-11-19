@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { SQL_HOY, columnasPersona, persona } from './comun.ts';
-import { COLUMNAS_USO, FiltrosMaquina, condicionesMaquina, usoDeTarea } from './consultas.ts';
+import { COLUMNAS_USO, FiltrosMaquina, condicionesMaquina, estimacionDeFila, usoDeTarea } from './consultas.ts';
 
 /**
  * Etapa CAL1: el calendario de preventivos (D-028). Es una consulta: no guarda nada.
@@ -8,6 +8,7 @@ import { COLUMNAS_USO, FiltrosMaquina, condicionesMaquina, usoDeTarea } from './
  *   local de finalización (la misma que usa la vista para ultima_ejecucion).
  * - PENDIENTE: la próxima de cada tarea, en proxima_fecha, con el estado de la vista.
  *   Si venció por uso antes de su fecha, va en hoy, con vencida_por_uso.
+ * - ESTIMADA (HE1, 5): la próxima de una tarea con medidor, en su fecha estimada por el ritmo de uso.
  * - PREVISTA: las siguientes, desde la pendiente (o desde hoy, si ya pasó), sumando la
  *   frecuencia de a una vez con la suma de fechas de Postgres.
  */
@@ -75,6 +76,22 @@ export async function calendarioPreventivos(db: pg.Pool, filtros: FiltrosMaquina
        JOIN bases b ON b.id = x.id
        WHERE (x.fecha + b.paso)::date <= $2::date
      ),
+     -- HE1, 5: la próxima de cada tarea con medidor y estimación. Solo por uso, siempre; por fecha
+     -- y por uso, solo si la estimada llega antes que la fecha. Una pasada va en hoy.
+     estimadas AS (
+       SELECT e.tarea_id AS id, e.estado,
+              CASE WHEN e.estimada_pasada THEN z.hoy ELSE e.fecha_estimada END AS fecha,
+              e.fecha_estimada, e.fecha_aviso_estimada, e.estimada_pasada, e.ritmo, e.fuente
+       FROM v_plan_tareas_estimacion e
+       JOIN planes_mantenimiento p ON p.id = e.plan_id
+       JOIN maquinas m ON m.id = p.maquina_id
+       JOIN sectores s ON s.id = m.sector_id
+       CROSS JOIN z
+       WHERE e.activo AND p.activo AND m.activo AND e.estado <> 'INACTIVA'
+         AND e.fecha_estimada IS NOT NULL
+         AND (e.primera_fecha IS NULL OR e.fecha_estimada < e.proxima_fecha)
+         ${filtrosSql}
+     ),
      hechas AS (
        SELECT it.plan_tarea_id AS tarea_id, (i.fecha_finalizacion AT TIME ZONE z.zona)::date AS fecha,
               i.id AS intervencion_id, i.estado AS intervencion_estado
@@ -91,22 +108,34 @@ export async function calendarioPreventivos(db: pg.Pool, filtros: FiltrosMaquina
      ),
      eventos AS (
        SELECT h.tarea_id, h.fecha, 1 AS tipo_orden, 'HECHA' AS tipo, NULL::text AS estado,
-              FALSE AS vencida_por_uso, FALSE AS tambien_por_uso, h.intervencion_id, h.intervencion_estado
+              FALSE AS vencida_por_uso, FALSE AS tambien_por_uso, h.intervencion_id, h.intervencion_estado,
+              NULL::date AS est_fecha, NULL::date AS est_fecha_aviso, NULL::boolean AS est_pasada,
+              NULL::numeric AS est_ritmo, NULL::text AS est_fuente
        FROM hechas h
        UNION ALL
        SELECT t.id, t.fecha, 2, 'PENDIENTE', t.estado, t.vencida_por_uso, t.medidor_id IS NOT NULL,
               CASE WHEN t.estado = 'EN_CURSO' THEN t.intervencion_en_curso_id END,
-              CASE WHEN t.estado = 'EN_CURSO' THEN t.intervencion_en_curso_estado END
+              CASE WHEN t.estado = 'EN_CURSO' THEN t.intervencion_en_curso_estado END,
+              NULL, NULL, NULL, NULL, NULL
        FROM tareas t
        WHERE t.fecha BETWEEN $1::date AND $2::date
        UNION ALL
-       SELECT x.id, x.fecha, 3, 'PREVISTA', NULL, FALSE, t.medidor_id IS NOT NULL, NULL, NULL
+       -- HE1, 5: después de la pendiente y antes de la prevista
+       SELECT x.id, x.fecha, 3, 'ESTIMADA', x.estado, FALSE, FALSE, NULL, NULL,
+              x.fecha_estimada, x.fecha_aviso_estimada, x.estimada_pasada, x.ritmo, x.fuente
+       FROM estimadas x
+       WHERE x.fecha BETWEEN $1::date AND $2::date
+       UNION ALL
+       SELECT x.id, x.fecha, 4, 'PREVISTA', NULL, FALSE, t.medidor_id IS NOT NULL, NULL, NULL,
+              NULL, NULL, NULL, NULL, NULL
        FROM previstas x
        JOIN tareas t ON t.id = x.id
        WHERE x.fecha >= $1::date
      )
      SELECT to_char(e.fecha, 'YYYY-MM-DD') AS fecha, e.tipo, e.estado, e.vencida_por_uso, e.tambien_por_uso,
             e.intervencion_id, e.intervencion_estado,
+            to_char(e.est_fecha, 'YYYY-MM-DD') AS est_fecha, to_char(e.est_fecha_aviso, 'YYYY-MM-DD') AS est_fecha_aviso,
+            e.est_pasada, e.est_ritmo, e.est_fuente,
             t.id AS tarea_id, t.accion,
             p.id AS plan_id, p.nombre AS plan_nombre,
             m.id AS maquina_id, m.codigo AS maquina_codigo, m.nombre AS maquina_nombre,
@@ -171,7 +200,7 @@ export async function calendarioPreventivos(db: pg.Pool, filtros: FiltrosMaquina
     vencidas: Number(resVencidas.rows[0].vencidas),
     eventos: res.rows.map((r) => ({
       fecha: r.fecha as string,
-      tipo: r.tipo as 'HECHA' | 'PENDIENTE' | 'PREVISTA',
+      tipo: r.tipo as 'HECHA' | 'PENDIENTE' | 'ESTIMADA' | 'PREVISTA',
       estado: r.estado as string | null,
       vencida_por_uso: Boolean(r.vencida_por_uso),
       tambien_por_uso: Boolean(r.tambien_por_uso),
@@ -183,6 +212,8 @@ export async function calendarioPreventivos(db: pg.Pool, filtros: FiltrosMaquina
       responsable: persona(r, 'resp'),
       intervencion:
         r.intervencion_id === null ? null : { id: Number(r.intervencion_id), estado: r.intervencion_estado as string },
+      // HE1, 5: solo en las ESTIMADA; en los demás tipos, null
+      estimacion: estimacionDeFila(r),
     })),
     por_uso: resUso.rows.map((r) => ({
       tarea_id: Number(r.id),

@@ -164,7 +164,7 @@ export function visiblesEnCelda<T>(eventos: readonly T[], maximo: number): { vis
 }
 
 export interface EventoParaVer {
-  tipo: 'HECHA' | 'PENDIENTE' | 'PREVISTA';
+  tipo: 'HECHA' | 'PENDIENTE' | 'ESTIMADA' | 'PREVISTA';
   estado: string | null;
 }
 
