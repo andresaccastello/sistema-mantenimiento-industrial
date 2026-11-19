@@ -128,7 +128,7 @@ export async function calendarioPreventivos(db: pg.Pool, filtros: FiltrosMaquina
      )
      SELECT to_char(e.fecha, 'YYYY-MM-DD') AS fecha, e.tipo, e.estado, e.vencida_por_uso, e.tambien_por_uso,
             e.intervencion_id, e.intervencion_estado,
-            ,
+            ${COLUMNAS_USO},
             t.id AS tarea_id, t.accion,
             p.id AS plan_id, p.nombre AS plan_nombre,
             m.id AS maquina_id, m.codigo AS maquina_codigo, m.nombre AS maquina_nombre,
