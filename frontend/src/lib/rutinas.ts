@@ -1,8 +1,18 @@
 /**
- * Tareas de rutina (Etapa RT1, D-033): lógica pura de "Tareas de hoy" (sección 4).
+ * Tareas de rutina (Etapa RT1, D-033): lógica pura de "Tareas de hoy" (sección 4), de la ficha
+ * de la máquina y del reporte (sección 5).
  * Las fechas sin hora (`YYYY-MM-DD`) se leen por año, mes y día, sin pasar por la zona horaria.
  */
-import type { FrecuenciaRutina, Persona, RegistroRutina, RutinaHoy } from '../api/tipos';
+import type {
+  EstadoPeriodoRutina,
+  FrecuenciaRutina,
+  PeriodoReporteRutina,
+  Persona,
+  RegistroRutina,
+  Rutina,
+  RutinaHoy,
+  RutinaReporte,
+} from '../api/tipos';
 
 const DIAS_SEMANA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 
@@ -101,4 +111,99 @@ export function agruparPorMaquina(rutinas: RutinaHoy[]): GrupoMaquina[] {
       comparar(a.maquina.codigo ?? a.maquina.nombre, b.maquina.codigo ?? b.maquina.nombre) ||
       a.maquina.id - b.maquina.id
   );
+}
+
+// =============================================================================
+// La ficha de la máquina y el reporte (RT1, sección 5)
+// =============================================================================
+
+export interface EstadoVisual {
+  rotulo: string;
+  /** El relleno del punto o de la celda: una variable --sm-*, o transparente. */
+  fondo: string;
+  /** El borde: solo el pendiente lo lleva. */
+  borde: string | null;
+}
+
+/** El color y el rótulo de cada estado: verde hecha, rojo no hecha, gris con borde pendiente. */
+export function estadoVisual(estado: EstadoPeriodoRutina): EstadoVisual {
+  if (estado === 'HECHA') return { rotulo: 'Hecha', fondo: 'var(--sm-exito)', borde: null };
+  if (estado === 'NO_HECHA') return { rotulo: 'No hecha', fondo: 'var(--sm-peligro)', borde: null };
+  return { rotulo: 'Pendiente', fondo: 'transparent', borde: 'var(--sm-muy-tenue)' };
+}
+
+/** "79 %", o "—" si no hay períodos cerrados. */
+export function formatoPorcentaje(porcentaje: number | null): string {
+  return porcentaje === null ? '—' : `${porcentaje} %`;
+}
+
+/** La fecha de un período: "24/11" en las diarias, "Semana del 23/11" en las semanales. */
+export function textoPeriodo(periodo: string, frecuencia: FrecuenciaRutina): string {
+  return frecuencia === 'SEMANAL' ? `Semana del ${diaMes(periodo)}` : diaMes(periodo);
+}
+
+/** "Diaria · incluye sábado", "Semanal". */
+export function textoFrecuencia(rutina: Pick<Rutina, 'frecuencia' | 'incluye_sabado'>): string {
+  const base = rotuloFrecuencia(rutina.frecuencia);
+  return rutina.frecuencia === 'DIARIA' && rutina.incluye_sabado ? `${base} · incluye sábado` : base;
+}
+
+/** "Última vez: 21/11, L. Pérez"; sin ninguna, "Última vez: —". */
+export function textoUltimaVez(ultima: { hecha_en: string; usuario: Pick<Persona, 'nombre' | 'apellido'> } | null): string {
+  if (!ultima) return 'Última vez: —';
+  return `Última vez: ${diaMes(fechaLocal(new Date(ultima.hecha_en)))}, ${nombreCorto(ultima.usuario)}`;
+}
+
+/** El tooltip de una celda del reporte: la fecha, el estado, quién y cuándo, y la nota. */
+export function tooltipPeriodo(p: PeriodoReporteRutina, frecuencia: FrecuenciaRutina, hoy: string): string {
+  const partesTexto = [`${textoPeriodo(p.periodo, frecuencia)}: ${estadoVisual(p.estado).rotulo}`];
+  if (p.usuario && p.hecha_en) partesTexto.push(textoHecha({ usuario: p.usuario, hecha_en: p.hecha_en }, hoy));
+  if (p.nota) partesTexto.push(`Nota: ${p.nota}`);
+  return partesTexto.join(' · ');
+}
+
+export interface ColumnaGrilla {
+  periodo: string;
+  /** "ma 24/11" en las diarias; "23/11" (el lunes) en las semanales. */
+  rotulo: string;
+}
+
+/**
+ * Las columnas de una grilla del reporte: los períodos de las rutinas de esa frecuencia, sin
+ * repetir y en orden. Un día que no le toca a ninguna diaria (un domingo) no tiene columna.
+ */
+export function columnasGrilla(rutinas: RutinaReporte[], frecuencia: FrecuenciaRutina): ColumnaGrilla[] {
+  const periodos = new Set<string>();
+  for (const r of rutinas) {
+    if (r.frecuencia !== frecuencia) continue;
+    for (const p of r.periodos) periodos.add(p.periodo);
+  }
+  return [...periodos].sort().map((periodo) => ({
+    periodo,
+    rotulo: frecuencia === 'DIARIA' ? `${diaSemana(periodo).slice(0, 2)} ${diaMes(periodo)}` : diaMes(periodo),
+  }));
+}
+
+/** Las filas de una grilla: cada rutina de la frecuencia, con su período (o null) en cada columna. */
+export function filasGrilla(
+  rutinas: RutinaReporte[],
+  frecuencia: FrecuenciaRutina,
+  columnas: ColumnaGrilla[]
+): Array<{ rutina: RutinaReporte; celdas: Array<PeriodoReporteRutina | null> }> {
+  return rutinas
+    .filter((r) => r.frecuencia === frecuencia)
+    .map((rutina) => {
+      const porPeriodo = new Map(rutina.periodos.map((p) => [p.periodo, p]));
+      return { rutina, celdas: columnas.map((c) => porPeriodo.get(c.periodo) ?? null) };
+    });
+}
+
+/** Los últimos `n` períodos de una rutina, para la lista del celular. */
+export function ultimosPeriodos<T>(periodos: T[], n = 5): T[] {
+  return periodos.slice(-n);
+}
+
+/** El nombre de la máquina en el reporte: "COM-01 · Compresor". */
+export function nombreMaquina(maquina: Pick<Rutina['maquina'], 'codigo' | 'nombre'>): string {
+  return [maquina.codigo, maquina.nombre].filter(Boolean).join(' · ');
 }

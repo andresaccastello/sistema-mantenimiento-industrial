@@ -12,8 +12,16 @@ import type {
 
 export type { AgrupacionPreventivos };
 
-export type PeriodoOpcion = '7d' | '30d' | '90d' | 'mes' | 'mes-anterior' | 'personalizado';
-export type VistaReporte = 'indicadores' | 'inactividad' | 'tiempos' | 'repuestos' | 'preventivos' | 'costos' | 'compras';
+export type PeriodoOpcion = '7d' | '4s' | '30d' | '90d' | 'mes' | 'mes-anterior' | 'personalizado';
+export type VistaReporte =
+  | 'indicadores'
+  | 'inactividad'
+  | 'tiempos'
+  | 'repuestos'
+  | 'preventivos'
+  | 'rutinas'
+  | 'costos'
+  | 'compras';
 export type AgrupacionTiempos = 'ejecucion' | 'tipo' | 'sector';
 export type AgrupacionReporte = AgrupacionTiempos | AgrupacionPreventivos;
 
@@ -37,8 +45,13 @@ export const FILTROS_REPORTES_POR_DEFECTO: FiltrosReportes = {
   agrupar: 'ejecucion',
 };
 
-const PERIODOS_VALIDOS: Set<string> = new Set(['7d', '30d', '90d', 'mes', 'mes-anterior', 'personalizado']);
-const VISTAS_VALIDAS: Set<string> = new Set(['indicadores', 'inactividad', 'tiempos', 'repuestos', 'preventivos', 'costos', 'compras']);
+const PERIODOS_VALIDOS: Set<string> = new Set(['7d', '4s', '30d', '90d', 'mes', 'mes-anterior', 'personalizado']);
+const VISTAS_VALIDAS: Set<string> = new Set(['indicadores', 'inactividad', 'tiempos', 'repuestos', 'preventivos', 'rutinas', 'costos', 'compras']);
+
+/** RT1, 5.2: la pestaña Rutinas usa por omisión las últimas 4 semanas; las demás, 30 días. */
+export function periodoPorDefecto(vista: VistaReporte): PeriodoOpcion {
+  return vista === 'rutinas' ? '4s' : '30d';
+}
 const AGRUPACIONES_VALIDAS: Set<string> = new Set(['ejecucion', 'tipo', 'sector', 'maquina', 'plan']);
 
 const REGEX_FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -63,9 +76,13 @@ export function leerFiltrosReportes(
     return val !== undefined && val !== null ? String(val) : null;
   };
 
-  // 1. Periodo
+  // 1. Periodo (el de omisión depende de la vista: RT1, 5.2)
+  const rawVistaPeriodo = getParam('vista');
+  const porDefecto = periodoPorDefecto(
+    rawVistaPeriodo && VISTAS_VALIDAS.has(rawVistaPeriodo) ? (rawVistaPeriodo as VistaReporte) : 'indicadores'
+  );
   const rawPeriodo = getParam('periodo');
-  let periodo: PeriodoOpcion = '30d';
+  let periodo: PeriodoOpcion = porDefecto;
   if (rawPeriodo && PERIODOS_VALIDOS.has(rawPeriodo)) {
     periodo = rawPeriodo as PeriodoOpcion;
   }
@@ -85,8 +102,8 @@ export function leerFiltrosReportes(
       desde = rawDesde!;
       hasta = rawHasta!;
     } else {
-      // Si falta uno o desde es posterior a hasta, vuelve a 30d
-      periodo = '30d';
+      // Si falta uno o desde es posterior a hasta, vuelve al de omisión
+      periodo = porDefecto;
       desde = null;
       hasta = null;
     }
@@ -131,7 +148,7 @@ export function leerFiltrosReportes(
 export function escribirFiltrosReportes(f: FiltrosReportes): URLSearchParams {
   const params = new URLSearchParams();
 
-  if (f.periodo !== '30d') {
+  if (f.periodo !== periodoPorDefecto(f.vista)) {
     params.set('periodo', f.periodo);
   }
 
@@ -202,9 +219,10 @@ export function rangoDePeriodo(
     };
   }
 
-  // Días hacia atrás (7d, 30d, 90d u omisión)
+  // Días hacia atrás (7d, 4s, 30d, 90d u omisión)
   let dias = 30;
   if (filtros.periodo === '7d') dias = 7;
+  else if (filtros.periodo === '4s') dias = 28;
   else if (filtros.periodo === '90d') dias = 90;
 
   const d = new Date(ahora.getTime() - dias * 24 * 60 * 60 * 1000);

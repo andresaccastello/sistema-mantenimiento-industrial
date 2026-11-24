@@ -1,8 +1,18 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import type { RutinaHoy } from '../api/tipos';
+import type { RutinaHoy, RutinaReporte } from '../api/tipos';
 import {
   agruparPorMaquina,
+  columnasGrilla,
+  estadoVisual,
+  filasGrilla,
+  formatoPorcentaje,
+  nombreMaquina,
+  textoFrecuencia,
+  textoPeriodo,
+  textoUltimaVez,
+  tooltipPeriodo,
+  ultimosPeriodos,
   diaMes,
   diaSemana,
   nombreCorto,
@@ -12,6 +22,7 @@ import {
   tituloTareasDeHoy,
 } from './rutinas';
 import { itemsMenu, permitidaEnCelular } from './menu';
+import { escribirFiltrosReportes, leerFiltrosReportes, periodoPorDefecto, rangoDePeriodo } from './reportes';
 
 const ana = { id: 7, legajo: '1001', nombre: 'Ana', apellido: 'Pérez' };
 const luis = { id: 8, legajo: '1002', nombre: 'Luis', apellido: null };
@@ -147,5 +158,138 @@ describe('FE-173: "Tareas de hoy" en el menú y en el celular (RT1, 4)', () => {
     assert.equal(permitidaEnCelular('/rutinas', operario), true);
     assert.equal(permitidaEnCelular('/rutinas/', operario), true);
     assert.equal(permitidaEnCelular('/rutinas', { INTERVENCIONES_CREAR: 'PROPIAS' }), false);
+  });
+});
+
+// =============================================================================
+// Sección 5: la ficha de la máquina y el reporte
+// =============================================================================
+
+function rutinaReporte(
+  id: number,
+  frecuencia: 'DIARIA' | 'SEMANAL',
+  periodos: Array<[string, 'HECHA' | 'NO_HECHA' | 'PENDIENTE']>,
+  porcentaje: number | null = null
+): RutinaReporte {
+  return {
+    id,
+    descripcion: `Tarea ${id}`,
+    frecuencia,
+    incluye_sabado: false,
+    activa: true,
+    vigente_desde: '2026-11-01',
+    baja_en: null,
+    maquina: { id: 1, codigo: 'COM-01', nombre: 'Compresor', sector: { id: 2, nombre: 'Pintura' }, planta: null },
+    resumen: { esperadas: periodos.length, hechas: 0, no_hechas: 0, pendientes: 0, porcentaje },
+    periodos: periodos.map(([periodo, estado]) => ({
+      periodo,
+      estado,
+      usuario: estado === 'HECHA' ? ana : null,
+      hecha_en: estado === 'HECHA' ? local(Number(periodo.slice(8)), 9, 15) : null,
+      nota: null,
+    })),
+  };
+}
+
+describe('FE-174: el color y el rótulo de cada estado (RT1, 5)', () => {
+  it('verde hecha, rojo no hecha, gris con borde pendiente; solo variables --sm-*', () => {
+    assert.deepEqual(estadoVisual('HECHA'), { rotulo: 'Hecha', fondo: 'var(--sm-exito)', borde: null });
+    assert.deepEqual(estadoVisual('NO_HECHA'), { rotulo: 'No hecha', fondo: 'var(--sm-peligro)', borde: null });
+    assert.deepEqual(estadoVisual('PENDIENTE'), { rotulo: 'Pendiente', fondo: 'transparent', borde: 'var(--sm-muy-tenue)' });
+  });
+});
+
+describe('FE-175: el formato del porcentaje (RT1, 5)', () => {
+  it('con "—" si es null', () => {
+    assert.equal(formatoPorcentaje(79), '79 %');
+    assert.equal(formatoPorcentaje(0), '0 %');
+    assert.equal(formatoPorcentaje(null), '—');
+  });
+});
+
+describe('FE-176: las columnas y las filas de la grilla (RT1, 5.2)', () => {
+  const rutinas = [
+    rutinaReporte(1, 'DIARIA', [['2026-11-20', 'HECHA'], ['2026-11-23', 'NO_HECHA'], ['2026-11-24', 'PENDIENTE']], 50),
+    rutinaReporte(2, 'DIARIA', [['2026-11-21', 'HECHA'], ['2026-11-23', 'HECHA']], 100),
+    rutinaReporte(3, 'SEMANAL', [['2026-11-16', 'NO_HECHA'], ['2026-11-23', 'PENDIENTE']], 0),
+  ];
+
+  it('una columna por día en las diarias, sin repetir y en orden', () => {
+    assert.deepEqual(columnasGrilla(rutinas, 'DIARIA'), [
+      { periodo: '2026-11-20', rotulo: 'vi 20/11' },
+      { periodo: '2026-11-21', rotulo: 'sá 21/11' },
+      { periodo: '2026-11-23', rotulo: 'lu 23/11' },
+      { periodo: '2026-11-24', rotulo: 'ma 24/11' },
+    ]);
+  });
+
+  it('una columna por semana en las semanales', () => {
+    assert.deepEqual(columnasGrilla(rutinas, 'SEMANAL'), [
+      { periodo: '2026-11-16', rotulo: '16/11' },
+      { periodo: '2026-11-23', rotulo: '23/11' },
+    ]);
+  });
+
+  it('cada fila con su período en cada columna, o null', () => {
+    const columnas = columnasGrilla(rutinas, 'DIARIA');
+    const filas = filasGrilla(rutinas, 'DIARIA', columnas);
+    assert.deepEqual(filas.map((f) => f.rutina.id), [1, 2]);
+    assert.deepEqual(filas[1].celdas.map((c) => c?.estado ?? null), [null, 'HECHA', 'HECHA', null]);
+    assert.deepEqual(columnasGrilla([], 'DIARIA'), []);
+  });
+
+  it('el tooltip: fecha, estado, quién y cuándo, y la nota', () => {
+    const p = { periodo: '2026-11-23', estado: 'HECHA' as const, usuario: ana, hecha_en: local(23, 9, 15), nota: 'Agua turbia' };
+    assert.equal(
+      tooltipPeriodo(p, 'DIARIA', '2026-11-24'),
+      '23/11: Hecha · Hecha por A. Pérez el lunes 23/11 a las 09:15 · Nota: Agua turbia'
+    );
+    assert.equal(
+      tooltipPeriodo({ periodo: '2026-11-16', estado: 'NO_HECHA', usuario: null, hecha_en: null, nota: null }, 'SEMANAL', '2026-11-24'),
+      'Semana del 16/11: No hecha'
+    );
+  });
+
+  it('en el celular, los últimos 5 períodos', () => {
+    assert.deepEqual(ultimosPeriodos([1, 2, 3, 4, 5, 6, 7]), [3, 4, 5, 6, 7]);
+    assert.deepEqual(ultimosPeriodos([1, 2]), [1, 2]);
+  });
+});
+
+describe('FE-177: la ficha de la máquina (RT1, 5.1)', () => {
+  it('la frecuencia, con "incluye sábado"', () => {
+    assert.equal(textoFrecuencia({ frecuencia: 'DIARIA', incluye_sabado: true }), 'Diaria · incluye sábado');
+    assert.equal(textoFrecuencia({ frecuencia: 'DIARIA', incluye_sabado: false }), 'Diaria');
+    assert.equal(textoFrecuencia({ frecuencia: 'SEMANAL', incluye_sabado: false }), 'Semanal');
+  });
+  it('"Última vez: 21/11, L. Pérez"', () => {
+    assert.equal(textoUltimaVez({ hecha_en: local(21, 10, 0), usuario: { nombre: 'Lucía', apellido: 'Pérez' } }), 'Última vez: 21/11, L. Pérez');
+    assert.equal(textoUltimaVez(null), 'Última vez: —');
+  });
+  it('la fecha del punto', () => {
+    assert.equal(textoPeriodo('2026-11-24', 'DIARIA'), '24/11');
+    assert.equal(textoPeriodo('2026-11-23', 'SEMANAL'), 'Semana del 23/11');
+    assert.equal(nombreMaquina({ codigo: null, nombre: 'Prensa' }), 'Prensa');
+  });
+});
+
+describe('FE-178: el período por omisión de la pestaña Rutinas (RT1, 5.2)', () => {
+  it('Rutinas, las últimas 4 semanas; las demás pestañas siguen en 30 días', () => {
+    assert.equal(periodoPorDefecto('rutinas'), '4s');
+    assert.equal(periodoPorDefecto('preventivos'), '30d');
+    assert.equal(leerFiltrosReportes('?vista=rutinas').periodo, '4s');
+    assert.equal(leerFiltrosReportes('?vista=preventivos').periodo, '30d');
+    assert.equal(leerFiltrosReportes('?vista=rutinas&periodo=30d').periodo, '30d', 'Elegido a mano, se respeta');
+  });
+  it('la URL no lleva el de omisión de cada pestaña', () => {
+    const base = leerFiltrosReportes('');
+    assert.equal(escribirFiltrosReportes({ ...base, vista: 'rutinas', periodo: '4s' }).get('periodo'), null);
+    assert.equal(escribirFiltrosReportes({ ...base, vista: 'rutinas', periodo: '30d' }).get('periodo'), '30d');
+    assert.equal(escribirFiltrosReportes({ ...base, vista: 'tiempos', periodo: '4s' }).get('periodo'), '4s');
+  });
+  it('4 semanas son 28 días', () => {
+    const ahora = new Date('2026-11-24T15:00:00.000Z');
+    const r = rangoDePeriodo({ ...leerFiltrosReportes(''), periodo: '4s' }, ahora);
+    assert.equal((new Date(r.hasta).getTime() - new Date(r.desde).getTime()) / 86_400_000, 28);
   });
 });

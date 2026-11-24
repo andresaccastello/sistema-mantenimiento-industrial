@@ -1650,3 +1650,46 @@ export interface RegistroRutinaCreado extends RegistroRutina {
   rutina_id: number;
   periodo: string;
 }
+
+/** Un período reciente de `GET /api/maquinas/:id/rutinas`. */
+export interface PeriodoRecienteRutina {
+  periodo: string;
+  estado: EstadoPeriodoRutina;
+}
+
+/** Una rutina de `GET /api/maquinas/:id/rutinas`. */
+export interface RutinaMaquina extends Rutina {
+  ultima: { periodo: string; hecha_en: string; usuario: Persona } | null;
+  recientes: PeriodoRecienteRutina[];
+}
+
+export interface ResumenRutinas {
+  esperadas: number;
+  hechas: number;
+  no_hechas: number;
+  pendientes: number;
+  porcentaje: number | null;
+}
+
+/** Un período del reporte de rutinas. */
+export interface PeriodoReporteRutina {
+  periodo: string;
+  estado: EstadoPeriodoRutina;
+  usuario: Persona | null;
+  hecha_en: string | null;
+  nota: string | null;
+}
+
+export interface RutinaReporte extends Rutina {
+  resumen: ResumenRutinas;
+  periodos: PeriodoReporteRutina[];
+}
+
+/** `GET /api/reportes/rutinas`. */
+export interface ReporteRutinas {
+  desde: string;
+  hasta: string;
+  hoy: string;
+  resumen: ResumenRutinas;
+  rutinas: RutinaReporte[];
+}

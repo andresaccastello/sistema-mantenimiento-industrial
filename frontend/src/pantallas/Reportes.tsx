@@ -24,6 +24,7 @@ import {
   AgrupacionPreventivos,
   agruparDeTiempos,
   agruparDePreventivos,
+  periodoPorDefecto,
   vistaReporteVisible,
 } from '../lib/reportes';
 import { FiltrosReportesBarra } from '../componentes/reportes/FiltrosReportes';
@@ -37,6 +38,7 @@ import {
 import { TabPreventivos } from '../componentes/reportes/TabPreventivos';
 import { TabReporteCostos } from '../componentes/reportes/TabReporteCostos';
 import { TabReporteCompras } from '../componentes/reportes/TabReporteCompras';
+import { TabRutinas } from '../componentes/reportes/TabRutinas';
 import { veReporteCompras } from '../lib/compras';
 import { useAuth } from '../auth/AuthContext';
 
@@ -163,7 +165,10 @@ function ReportesEscritorio() {
 
   const handleTabChange = (val: string | null) => {
     if (!val) return;
-    handleFiltrosChange({ vista: val as VistaReporte });
+    const nueva = val as VistaReporte;
+    // RT1, 5.2: el período por omisión sigue a la pestaña (4 semanas en Rutinas, 30 días en las demás)
+    const periodo = filtros.periodo === periodoPorDefecto(filtros.vista) ? periodoPorDefecto(nueva) : filtros.periodo;
+    handleFiltrosChange({ vista: nueva, periodo });
   };
 
   const handleAgruparChange = (nuevaAgrupacion: AgrupacionTiempos) => {
@@ -190,7 +195,7 @@ function ReportesEscritorio() {
         conPlantaYSector={vista !== 'compras'}
       />
 
-      {/* Pestañas: Indicadores · Inactividad · Tiempos · Repuestos · Preventivos · Costos · Compras */}
+      {/* Pestañas: Indicadores · Inactividad · Tiempos · Repuestos · Preventivos · Rutinas · Costos · Compras */}
       <Tabs value={vista} onChange={handleTabChange}>
         <Tabs.List>
           <Tabs.Tab value="indicadores">Indicadores</Tabs.Tab>
@@ -198,6 +203,7 @@ function ReportesEscritorio() {
           <Tabs.Tab value="tiempos">Tiempos</Tabs.Tab>
           <Tabs.Tab value="repuestos">Repuestos</Tabs.Tab>
           <Tabs.Tab value="preventivos">Preventivos</Tabs.Tab>
+          <Tabs.Tab value="rutinas">Rutinas</Tabs.Tab>
           {veCostos && <Tabs.Tab value="costos">Costos</Tabs.Tab>}
           {veCompras && <Tabs.Tab value="compras">Compras</Tabs.Tab>}
         </Tabs.List>
@@ -268,6 +274,7 @@ function ReportesEscritorio() {
           />
         </Tabs.Panel>
 
+        <Tabs.Panel value="rutinas">{vista === 'rutinas' && <TabRutinas params={queryParams} />}</Tabs.Panel>
         {veCostos && (
           <Tabs.Panel value="costos">
             {queryCostos.isLoading && <Skeleton height={260} mt="md" radius="sm" />}

@@ -24,6 +24,7 @@ import { ModalConfirmarRecuperacion } from '../componentes/acciones/ModalConfirm
 import { ModalMaquina } from '../componentes/ModalMaquina';
 import { BloqueMedidoresMaquina } from '../componentes/medidores/BloqueMedidoresMaquina';
 import { BloquePlanesMaquina } from '../componentes/preventivos/BloquePlanesMaquina';
+import { BloqueRutinasMaquina } from '../componentes/rutinas/BloqueRutinasMaquina';
 import { BloqueInactividadMaquina, type RangoInactividad } from '../componentes/maquinas/BloqueInactividadMaquina';
 import { CabeceraMaquina } from '../componentes/maquinas/CabeceraMaquina';
 import { DatosMaquina } from '../componentes/maquinas/DatosMaquina';
@@ -199,6 +200,9 @@ export function DetalleMaquina() {
 
       {/* PV2: Planes preventivos, solo con PLANES_GESTIONAR */}
       <BloquePlanesMaquina maquinaId={maquina.id} />
+
+      {/* RT1, 5.1: Tareas de rutina, con PLANES_GESTIONAR o REPORTES_CONSULTAR */}
+      <BloqueRutinasMaquina maquinaId={maquina.id} maquinaActiva={maquina.activo} />
 
       {/* 6.10 Inactividad */}
       {puedeConsultarReportes && (

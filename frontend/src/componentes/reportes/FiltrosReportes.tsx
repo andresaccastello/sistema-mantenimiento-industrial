@@ -15,6 +15,7 @@ interface Props {
 
 const OPCIONES_PERIODO = [
   { value: '7d', label: 'Últimos 7 días' },
+  { value: '4s', label: 'Últimas 4 semanas' },
   { value: '30d', label: 'Últimos 30 días' },
   { value: '90d', label: 'Últimos 90 días' },
   { value: 'mes', label: 'Este mes' },
