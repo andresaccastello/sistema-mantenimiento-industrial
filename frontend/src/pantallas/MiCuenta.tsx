@@ -16,6 +16,7 @@ import { EncabezadoPagina } from '../componentes/EncabezadoPagina';
 import { nombrePerfil } from '../lib/perfiles';
 import { nombreCompleto } from '../lib/personas';
 import { PreferenciasCuenta } from '../componentes/cuenta/PreferenciasCuenta';
+import { EmailCuenta } from '../componentes/cuenta/EmailCuenta';
 
 export function MiCuenta() {
   const { usuario, salir } = useAuth();
@@ -89,17 +90,7 @@ export function MiCuenta() {
             </Group>
           </Stack>
 
-          <Stack gap="xs">
-            <Text size="sm" fw={500} c="var(--sm-texto-medio)">
-              Email
-            </Text>
-            <Text size="sm" c="var(--sm-titulo)">
-              {usuario?.email || '—'}
-            </Text>
-            <Text size="xs" c="dimmed">
-              Para cambiarlo, pedíselo a un administrador.
-            </Text>
-          </Stack>
+          <EmailCuenta />
 
           <Divider />
 

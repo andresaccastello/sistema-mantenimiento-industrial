@@ -195,6 +195,94 @@ authApp.patch('/preferencias', jwtVerify, dbVerify, async (c) => {
 });
 
 /**
+ * PATCH /api/auth/email
+ * Cada usuario carga su propio email: `{ "email": string | null }`. Misma validación y
+ * normalización que el alta y la edición de usuarios (recorta, pasa a minúsculas, vacío = null) y
+ * la misma auditoría (USUARIO_MODIFICADO). No toca ningún otro dato del usuario.
+ */
+authApp.patch('/email', jwtVerify, dbVerify, async (c) => {
+  const userId = Number((c.get as any)('userId'));
+  const invalido = (error: string) => c.json({ error, codigo: 'DATOS_INVALIDOS' }, 422);
+  const emailInvalido = () => c.json({ error: 'El email no tiene un formato válido.', codigo: 'EMAIL_INVALIDO' }, 422);
+
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return invalido('El cuerpo de la solicitud debe ser un objeto JSON');
+  }
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    return invalido('El cuerpo de la solicitud debe ser un objeto JSON');
+  }
+  const b = body as Record<string, unknown>;
+  const desconocidos = Object.keys(b).filter((k) => k !== 'email');
+  if (desconocidos.length > 0) return invalido(`Campo desconocido: ${desconocidos.join(', ')}`);
+  if (!('email' in b)) return invalido('Indicá el email');
+
+  let emailNorm: string | null = null;
+  if (b.email !== null) {
+    if (typeof b.email !== 'string') return emailInvalido();
+    const trimmed = b.email.trim();
+    if (trimmed.length > 0) {
+      if (trimmed.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmed)) return emailInvalido();
+      emailNorm = trimmed.toLowerCase();
+    }
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const res = await client.query(
+      'SELECT nombre, apellido, email, telefono_whatsapp FROM usuarios WHERE id = $1 FOR UPDATE',
+      [userId]
+    );
+    if (res.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return c.json({ error: 'Usuario no encontrado', codigo: 'USUARIO_NO_ENCONTRADO' }, 404);
+    }
+    const actual = res.rows[0];
+    if (emailNorm === actual.email) {
+      await client.query('ROLLBACK');
+      return c.json({ error: 'No se detectaron cambios en los datos del usuario', codigo: 'SIN_CAMBIOS' }, 422);
+    }
+
+    await client.query('UPDATE usuarios SET email = $1, actualizado_en = NOW() WHERE id = $2', [emailNorm, userId]);
+    await client.query(
+      `INSERT INTO auditoria_permisos (realizado_por_usuario_id, sobre_usuario_id, accion, detalle)
+       VALUES ($1, $1, 'USUARIO_MODIFICADO', $2)`,
+      [
+        userId,
+        JSON.stringify({
+          anterior: {
+            nombre: actual.nombre,
+            apellido: actual.apellido,
+            email: actual.email,
+            telefono_whatsapp: actual.telefono_whatsapp,
+          },
+          nuevo: {
+            nombre: actual.nombre,
+            apellido: actual.apellido,
+            email: emailNorm,
+            telefono_whatsapp: actual.telefono_whatsapp,
+          },
+        }),
+      ]
+    );
+    await client.query('COMMIT');
+    return c.json({ email: emailNorm });
+  } catch (error: any) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (error?.code === '40P01') {
+      return c.json({ error: 'Recurso ocupado por otra operación concurrente', codigo: 'RECURSO_OCUPADO' }, 409);
+    }
+    console.error('Error en PATCH /auth/email:', error);
+    return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
+  } finally {
+    client.release();
+  }
+});
+
+/**
  * POST /api/auth/cambiar-password
  * Permite al usuario autenticado cambiar su contraseña.
  * Body: { password_actual, password_nueva }

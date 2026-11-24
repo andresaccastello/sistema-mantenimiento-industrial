@@ -50,6 +50,11 @@ export interface PreferenciasUsuario {
   tema: TemaUsuario;
 }
 
+/** Respuesta de `PATCH /api/auth/email`. */
+export interface EmailPropio {
+  email: string | null;
+}
+
 export interface LoginResponse {
   token: string;
   debe_cambiar_password: boolean;

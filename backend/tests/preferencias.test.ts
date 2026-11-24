@@ -76,7 +76,7 @@ function conArchivo(bytes: Uint8Array, nombre: string, tipo: string) {
   return fd;
 }
 
-test('Etapa D1 — Preferencias del usuario e identidad del sistema (PR-01 a PR-06)', async (t) => {
+test('Etapa D1 — Preferencias del usuario e identidad del sistema (PR-01 a PR-11)', async (t) => {
   let client = await pool.connect();
   const createdUsuarioIds: number[] = [];
 
@@ -238,6 +238,110 @@ test('Etapa D1 — Preferencias del usuario e identidad del sistema (PR-01 a PR-
       const logo = await pedir('GET', '/api/configuracion/logo', null);
       assert.strictEqual(logo.status, 404);
     });
+
+    // =========================================================================
+    // PR-07 a PR-11: PATCH /api/auth/email (cada usuario carga su email)
+    // =========================================================================
+    const usuarioEnBase = async (id: number) =>
+      (await client.query(
+        `SELECT legajo, nombre, apellido, email, telefono_whatsapp, perfil_id, activo, modo_simple_celular, tema,
+                debe_cambiar_password, sesion_version,
+                (SELECT COALESCE(array_agg(sector_id ORDER BY sector_id), '{}') FROM usuario_sector WHERE usuario_id = u.id) AS sectores,
+                (SELECT COUNT(*)::int FROM usuario_permiso WHERE usuario_id = u.id) AS excepciones
+         FROM usuarios u WHERE id = $1`,
+        [id]
+      )).rows[0];
+    const auditoriaEmail = async (id: number) =>
+      (await client.query(
+        `SELECT realizado_por_usuario_id, sobre_usuario_id, accion, detalle
+         FROM auditoria_permisos WHERE sobre_usuario_id = $1 ORDER BY id`,
+        [id]
+      )).rows.map((f) => ({ ...f, detalle: JSON.parse(f.detalle) }));
+
+    await t.test('PR-07: email válido, normalizado, auditado y devuelto por /me', async () => {
+      const r = await pedir('PATCH', '/api/auth/email', O.token, { email: '  Operario.PR@Empresa.COM ' });
+      assert.strictEqual(r.status, 200, JSON.stringify(r.cuerpo));
+      assert.deepStrictEqual(r.cuerpo, { email: 'operario.pr@empresa.com' });
+
+      const me = await pedir('GET', '/api/auth/me', O.token);
+      assert.strictEqual(me.cuerpo.email, 'operario.pr@empresa.com');
+
+      const aud = await auditoriaEmail(O.id);
+      assert.strictEqual(aud.length, 1);
+      assert.strictEqual(Number(aud[0].realizado_por_usuario_id), O.id);
+      assert.strictEqual(Number(aud[0].sobre_usuario_id), O.id);
+      assert.strictEqual(aud[0].accion, 'USUARIO_MODIFICADO');
+      assert.strictEqual(aud[0].detalle.anterior.email, null);
+      assert.strictEqual(aud[0].detalle.nuevo.email, 'operario.pr@empresa.com');
+      assert.strictEqual(aud[0].detalle.nuevo.nombre, 'Operario');
+
+      // El mismo email que ya tiene otro usuario se acepta, como en la edición de usuarios
+      const repetido = await pedir('PATCH', '/api/auth/email', R.token, { email: 'operario.pr@empresa.com' });
+      assert.deepStrictEqual([repetido.status, repetido.cuerpo], [200, { email: 'operario.pr@empresa.com' }]);
+    });
+
+    await t.test('PR-08: email inválido', async () => {
+      const antes = await usuarioEnBase(O.id);
+      const audAntes = (await auditoriaEmail(O.id)).length;
+      const casos: Array<[string, unknown]> = [
+        ['sin arroba', 'sin-arroba'],
+        ['con espacios', 'ana maria@empresa.com'],
+        ['255 caracteres', 'a'.repeat(243) + '@empresa.com'],
+        ['número', 123],
+        ['booleano', true],
+      ];
+      for (const [caso, email] of casos) {
+        const r = await pedir('PATCH', '/api/auth/email', O.token, { email });
+        assert.deepStrictEqual([r.status, r.cuerpo.codigo], [422, 'EMAIL_INVALIDO'], `${caso}: ${JSON.stringify(r.cuerpo)}`);
+      }
+      const cuerpos: Array<[string, unknown]> = [
+        ['vacío', {}],
+        ['campo desconocido', { email: 'otro@empresa.com', perfil_id: 1 }],
+        ['no es un objeto', ['otro@empresa.com']],
+      ];
+      for (const [caso, cuerpo] of cuerpos) {
+        const r = await pedir('PATCH', '/api/auth/email', O.token, cuerpo);
+        assert.deepStrictEqual([r.status, r.cuerpo.codigo], [422, 'DATOS_INVALIDOS'], `${caso}: ${JSON.stringify(r.cuerpo)}`);
+      }
+      assert.deepStrictEqual(await usuarioEnBase(O.id), antes, 'No cambió nada');
+      assert.strictEqual((await auditoriaEmail(O.id)).length, audAntes, 'Sin auditoría');
+    });
+
+    await t.test('PR-09: null y vacío dejan el email en null', async () => {
+      const r = await pedir('PATCH', '/api/auth/email', O.token, { email: null });
+      assert.deepStrictEqual([r.status, r.cuerpo], [200, { email: null }], JSON.stringify(r.cuerpo));
+      assert.strictEqual((await pedir('GET', '/api/auth/me', O.token)).cuerpo.email, null);
+      const aud = await auditoriaEmail(O.id);
+      assert.strictEqual(aud[aud.length - 1].detalle.anterior.email, 'operario.pr@empresa.com');
+      assert.strictEqual(aud[aud.length - 1].detalle.nuevo.email, null);
+
+      // Sin cambios: 422 SIN_CAMBIOS, como la edición de usuarios
+      const igual = await pedir('PATCH', '/api/auth/email', O.token, { email: '   ' });
+      assert.deepStrictEqual([igual.status, igual.cuerpo.codigo], [422, 'SIN_CAMBIOS']);
+
+      await pedir('PATCH', '/api/auth/email', R.token, { email: '' });
+      assert.strictEqual((await usuarioEnBase(R.id)).email, null, 'Vacío queda en null');
+    });
+
+    await t.test('PR-10: no cambia otros campos ni a otros usuarios', async () => {
+      const antesO = await usuarioEnBase(O.id);
+      const antesA = await usuarioEnBase(A.id);
+      const r = await pedir('PATCH', '/api/auth/email', O.token, { email: 'nuevo.pr@empresa.com' });
+      assert.strictEqual(r.status, 200, JSON.stringify(r.cuerpo));
+      assert.deepStrictEqual(await usuarioEnBase(O.id), { ...antesO, email: 'nuevo.pr@empresa.com' });
+      assert.deepStrictEqual(await usuarioEnBase(A.id), antesA, 'El admin no cambia');
+
+      const me = (await pedir('GET', '/api/auth/me', O.token)).cuerpo;
+      assert.strictEqual(me.perfil.nombre, 'OPERARIO');
+      assert.deepStrictEqual(me.sectores, []);
+    });
+
+    await t.test('PR-11: sin sesión, 401', async () => {
+      const antes = await usuarioEnBase(O.id);
+      const sin = await pedir('PATCH', '/api/auth/email', null, { email: 'intruso@empresa.com' });
+      assert.strictEqual(sin.status, 401);
+      assert.deepStrictEqual(await usuarioEnBase(O.id), antes);
+    });
   } finally {
     client = await clienteSano(client);
     try {
@@ -249,6 +353,10 @@ test('Etapa D1 — Preferencias del usuario e identidad del sistema (PR-01 a PR-
         [inicio.nombre_sistema, inicio.nombre_empresa, inicio.logo, inicio.logo_tipo, inicio.actualizado_en]
       );
       if (createdUsuarioIds.length > 0) {
+        await client.query(
+          'DELETE FROM auditoria_permisos WHERE sobre_usuario_id = ANY($1) OR realizado_por_usuario_id = ANY($1)',
+          [createdUsuarioIds]
+        );
         await client.query('DELETE FROM usuario_sector WHERE usuario_id = ANY($1)', [createdUsuarioIds]);
         await client.query('DELETE FROM usuario_permiso WHERE usuario_id = ANY($1)', [createdUsuarioIds]);
         await client.query('DELETE FROM usuarios WHERE id = ANY($1)', [createdUsuarioIds]);
