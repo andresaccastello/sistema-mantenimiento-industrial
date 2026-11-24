@@ -1599,3 +1599,54 @@ export interface ReportePreventivosRespuesta<G = GrupoCumplimientoPreventivos> {
   resumen: ResumenCumplimientoPreventivos;
   grupos: G[];
 }
+
+// =============================================================================
+// Tareas de rutina (Etapa RT1, D-033)
+// =============================================================================
+
+export type FrecuenciaRutina = 'DIARIA' | 'SEMANAL';
+export type EstadoPeriodoRutina = 'HECHA' | 'NO_HECHA' | 'PENDIENTE';
+
+/** La forma de una rutina en las respuestas (RT1, 2). */
+export interface Rutina {
+  id: number;
+  descripcion: string;
+  frecuencia: FrecuenciaRutina;
+  incluye_sabado: boolean;
+  activa: boolean;
+  vigente_desde: string;
+  baja_en: string | null;
+  maquina: {
+    id: number;
+    codigo: string | null;
+    nombre: string;
+    sector: { id: number; nombre: string };
+    planta: { id: number; nombre: string } | null;
+  };
+}
+
+/** La marca de una rutina en `GET /api/rutinas/hoy`. */
+export interface RegistroRutina {
+  id: number;
+  usuario: Persona;
+  hecha_en: string;
+  nota: string | null;
+}
+
+export interface RutinaHoy extends Rutina {
+  periodo: string;
+  registro: RegistroRutina | null;
+}
+
+/** `GET /api/rutinas/hoy`. */
+export interface RespuestaRutinasHoy {
+  hoy: string;
+  sin_sectores: boolean;
+  rutinas: RutinaHoy[];
+}
+
+/** `POST /api/rutinas/:id/hecha`. */
+export interface RegistroRutinaCreado extends RegistroRutina {
+  rutina_id: number;
+  periodo: string;
+}

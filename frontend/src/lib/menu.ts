@@ -93,6 +93,15 @@ export function itemsMenu(permisos: PermisosEntrada, enCelular = false): ItemMen
     });
   }
 
+  // RT1, 4: las tareas de rutina, después de Lecturas
+  if (verificarPermiso(permisos, 'RUTINAS_REALIZAR')) {
+    items.push({
+      etiqueta: 'Tareas de hoy',
+      ruta: '/rutinas',
+      icono: 'IconChecklist',
+    });
+  }
+
   // Máquinas siempre visible
   items.push({
     etiqueta: 'Máquinas',

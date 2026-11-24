@@ -33,6 +33,7 @@ import {
   IconCalendarCheck,
   IconDeviceDesktop,
   IconGauge,
+  IconChecklist,
 } from '@tabler/icons-react';
 import { useLocation, useNavigate, Outlet } from 'react-router';
 import { ZonaPantalla } from './carga';
@@ -64,6 +65,7 @@ const ICONOS_MENU: Record<string, React.ComponentType<{ size?: number }>> = {
   IconPackage,
   IconCalendarCheck,
   IconGauge,
+  IconChecklist,
 };
 
 export function Layout() {

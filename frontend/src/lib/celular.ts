@@ -43,6 +43,7 @@ function limpiarRuta(ruta: string): string {
  * - /intervenciones/:id: solo cuando se muestra el reporte del operario (vistaDetalle !== 'completa')
  * - /tablero y /reportes: sí
  * - /lecturas: con MAQUINAS_REGISTRAR_LECTURAS (LE1, 4.4, D-030)
+ * - /rutinas: con RUTINAS_REALIZAR (RT1, 4, D-033)
  * - todo lo demás: no
  *
  * D1, 4 (D-031): con el modo simple apagado, el celular no limita nada: vale todo lo que permite
@@ -63,6 +64,10 @@ export function permitidaEnCelular(ruta: string, permisos?: PermisosAlcanceEntra
 
   if (path === '/lecturas') {
     return verificarPermiso(permisos as PermisosEntrada, 'MAQUINAS_REGISTRAR_LECTURAS');
+  }
+
+  if (path === '/rutinas') {
+    return verificarPermiso(permisos as PermisosEntrada, 'RUTINAS_REALIZAR');
   }
 
   return false;
@@ -88,6 +93,15 @@ export function itemsMenuCelular(permisos: PermisosEntrada, modoSimple = true): 
       etiqueta: 'Lecturas',
       ruta: '/lecturas',
       icono: 'IconGauge',
+    });
+  }
+
+  // RT1, 4: las tareas de rutina, después de Lecturas
+  if (verificarPermiso(permisos, 'RUTINAS_REALIZAR')) {
+    items.push({
+      etiqueta: 'Tareas de hoy',
+      ruta: '/rutinas',
+      icono: 'IconChecklist',
     });
   }
 

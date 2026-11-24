@@ -37,6 +37,7 @@ const Preventivos = pantallaPerezosa(() => import('../pantallas/Preventivos'), '
 const DetallePlan = pantallaPerezosa(() => import('../pantallas/DetallePlan'), 'DetallePlan');
 const NuevoPlan = pantallaPerezosa(() => import('../pantallas/NuevoPlan'), 'NuevoPlan');
 const Lecturas = pantallaPerezosa(() => import('../pantallas/Lecturas'), 'Lecturas');
+const TareasDeHoy = pantallaPerezosa(() => import('../pantallas/TareasDeHoy'), 'TareasDeHoy');
 
 
 function RedireccionInicio() {
@@ -140,6 +141,8 @@ export function RutasApp() {
         />
         {/* LE1, 4.4: con MAQUINAS_REGISTRAR_LECTURAS o PLANES_GESTIONAR; lo controla la pantalla */}
         <Route path="/lecturas" element={<Lecturas />} />
+        {/* RT1, 4: con RUTINAS_REALIZAR; lo controla la pantalla */}
+        <Route path="/rutinas" element={<TareasDeHoy />} />
         <Route
           path="/maquinas"
           element={<MaquinasLista />}
