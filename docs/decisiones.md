@@ -312,7 +312,7 @@ Sobre las máquinas activas de la selección y el período elegido:
 
 ## D-024 — Sin revisiones de rutina del operario
 
-**Estado:** Aceptada
+**Estado:** Reemplazada por la D-033
 
 **El requisito 7 del relevamiento** (revisiones diarias, semanales o mensuales del operario) **no se implementa.** Son controles de minutos: cargarlos en el sistema le agrega trabajo al operario y no da información que se use.
 
@@ -440,3 +440,16 @@ El circuito ya está cubierto: el operario hace la revisión como hoy, y si encu
 7. **Solo se guarda lo que declara el usuario.** El ritmo y las fechas se calculan siempre.
 
 **Motivo:** el preventivo por uso no le decía al responsable de mantenimiento cuándo planificar. La estimación da esa fecha, sin el riesgo de la falsa tranquilidad, porque nunca reemplaza a la lectura. Además, convierte la falta de lecturas en un aviso concreto.
+
+## D-033 — Tareas de rutina del operario
+
+**Estado:** Aceptada. Reemplaza la D-024.
+
+1. **Cada máquina puede tener tareas de rutina cortas,** diarias o semanales, que hace el operario. Por ejemplo, cambiar el agua del refrigerante o limpiar el lente.
+2. **No son intervenciones ni preventivos:** no tienen estados, repuestos, costos ni avisos, y no van al calendario. Si aparece un problema, se usa "Reportar falla".
+3. **Se marcan con un toque,** con una nota opcional, y solo en el período actual: el día, o la semana de lunes a domingo. Lo que no se marcó a tiempo queda como no hecho.
+4. **Las diarias corresponden de lunes a viernes,** más el sábado si la tarea lo indica. Las semanales, cualquier día de la semana.
+5. **Las ve y las marca** cualquier usuario con `RUTINAS_REALIZAR` dentro de su alcance. Para el operario, son los sectores que tiene asignados.
+6. **El administrador ve el cumplimiento** por máquina y en Reportes.
+
+**Motivo:** en la entrevista del 19/11, GI-RE contó una rotura por una tarea de rutina que no se hizo durante meses. La D-024 suponía que estas tareas no aportaban información. El cliente mostró que sí, siempre que marcarlas no le agregue trabajo al operario.

@@ -8,6 +8,7 @@ import { validarIntervaloReporte } from './intervalos.ts';
 import { veCostos } from './repuestos/permisos.ts';
 import { reportePreventivos } from './reportes/cumplimiento.ts';
 import { reporteCompras } from './reportes/compras.ts';
+import { reporteRutinas } from './rutinas/reporte.ts';
 
 const reportesApp = new Hono();
 reportesApp.use('*', jwtVerify, dbVerify);
@@ -901,5 +902,8 @@ reportesApp.get('/preventivos', requirePermission('REPORTES_CONSULTAR'), reporte
 
 // PC1, 5: lo que se compró en el período (D-029)
 reportesApp.get('/compras', requirePermission('REPORTES_CONSULTAR'), reporteCompras);
+
+// RT1, 2.3: el cumplimiento de las tareas de rutina (D-033)
+reportesApp.get('/rutinas', requirePermission('REPORTES_CONSULTAR'), reporteRutinas);
 
 export default reportesApp;

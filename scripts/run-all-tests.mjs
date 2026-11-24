@@ -67,6 +67,8 @@ const TABLAS_CONTROL = [
   'medidores',
   'lecturas_medidor',
   'avisos_vencimiento',
+  'rutinas',
+  'rutina_registros',
 ];
 
 async function contarFilas() {

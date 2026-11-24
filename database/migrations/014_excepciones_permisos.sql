@@ -2,7 +2,7 @@
 -- Etapa API-05: Excepciones de permisos por usuario
 BEGIN;
 
--- 1. Columna usa_alcance en permisos (propiedad del sistema, TRUE en los 5 permisos cuyo alcance se usa)
+-- 1. Columna usa_alcance en permisos (propiedad del sistema, TRUE en los permisos cuyo alcance se usa)
 ALTER TABLE permisos
     ADD COLUMN IF NOT EXISTS usa_alcance BOOLEAN NOT NULL DEFAULT FALSE;
 
@@ -12,7 +12,8 @@ SET usa_alcance = (codigo IN (
     'INTERVENCIONES_CREAR',
     'INTERVENCIONES_EDITAR',
     'REPORTES_CONSULTAR',
-    'NOTIFICACIONES_FALLAS_RECIBIR'
+    'NOTIFICACIONES_FALLAS_RECIBIR',
+    'RUTINAS_REALIZAR'
 ));
 
 -- 2. Restricción ck_auditoria_permisos_accion ampliada para aceptar acciones de excepciones

@@ -63,6 +63,7 @@ test('Migración 014 — Excepciones de permisos (usa_alcance y acciones de audi
         'INTERVENCIONES_EDITAR',
         'REPORTES_CONSULTAR',
         'NOTIFICACIONES_FALLAS_RECIBIR',
+        'RUTINAS_REALIZAR',
       ]);
 
       for (const row of resPermisos.rows) {
@@ -74,7 +75,7 @@ test('Migración 014 — Excepciones de permisos (usa_alcance y acciones de audi
       }
 
       const encontradosTrue = resPermisos.rows.filter((r) => r.usa_alcance === true);
-      assert.strictEqual(encontradosTrue.length, 5, 'Debe haber exactamente 5 permisos con usa_alcance = TRUE');
+      assert.strictEqual(encontradosTrue.length, 6, 'Debe haber exactamente 6 permisos con usa_alcance = TRUE');
     });
 
     // M14-04: Restricción de auditoría dentro de una transacción con ROLLBACK
