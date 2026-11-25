@@ -20,6 +20,7 @@ import {
 } from '../../api/tipos';
 import { ApiError, mensajeError } from '../../lib/errores';
 import { cuerpoRepuesto, validarCosto } from '../../lib/repuestos';
+import { AYUDA_STOCK_MINIMO } from '../../lib/avisos';
 import { CampoNumero } from '../CampoNumero';
 
 /** Stock inicial y mínimo: vacíos o desde 0. */
@@ -255,6 +256,7 @@ export function ModalRepuesto({ abierto, onCerrar, repuesto, onExito }: ModalRep
               )}
               <CampoNumero
                 label="Stock mínimo"
+                description={AYUDA_STOCK_MINIMO}
                 placeholder="Opcional"
                 decimalScale={3}
                 value={stockMinimo}

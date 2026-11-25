@@ -83,6 +83,8 @@ export interface Notificacion {
   mensaje: string;
   intervencion_id: number | null;
   maquina_id?: number | null;
+  /** AV1: el repuesto del aviso de stock bajo. */
+  repuesto_id?: number | null;
   creada_en: string;
   leida: boolean;
   leida_en: string | null;
@@ -516,6 +518,8 @@ export interface ConfiguracionAvisos {
   canales: CanalAviso[];
   reglas: ReglaAviso[];
   pendientes: number;
+  /** AV1, 2: si la detención registrada después de reportar la falla también avisa la parada crítica. */
+  critico_por_detencion_posterior: boolean;
 }
 
 export interface EnvioAviso {

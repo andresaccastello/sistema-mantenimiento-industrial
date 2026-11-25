@@ -17,6 +17,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { clienteApi } from '../api/cliente';
 import { formatHace } from '../lib/formato';
 import { destinoAviso } from '../lib/avisos';
+import { useAuth } from '../auth/AuthContext';
 import { EncabezadoPagina } from '../componentes/EncabezadoPagina';
 import { PantallaVacia } from '../componentes/PantallaVacia';
 import type { Notificacion } from '../api/tipos';
@@ -32,6 +33,9 @@ export function Notificaciones() {
 
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  // AV1, 5: el stock bajo lleva al repuesto solo con REPUESTOS_GESTIONAR
+  const { tienePermiso } = useAuth();
+  const opcionesDestino = { gestionaRepuestos: tienePermiso('REPUESTOS_GESTIONAR') };
 
   const cargarNotificaciones = useCallback(
     async (reiniciar = true) => {
@@ -130,8 +134,9 @@ export function Notificaciones() {
       }
     }
 
-    // LE1, 4.5: las lecturas atrasadas llevan a la ronda; las demás, a su intervención o máquina
-    const destino = destinoAviso(notif);
+    // LE1, 4.5: las lecturas atrasadas llevan a la ronda; AV1: el stock bajo, al repuesto; las
+    // demás, a su intervención o máquina
+    const destino = destinoAviso(notif, opcionesDestino);
     if (destino) navigate(destino);
   };
 
@@ -199,7 +204,7 @@ export function Notificaciones() {
                 // style.backgroundColor, React avisa al cambiar de no leída a leída
                 bg={noLeida ? 'var(--sm-no-leida)' : 'var(--sm-superficie)'}
                 style={{
-                  cursor: destinoAviso(notif) ? 'pointer' : 'default',
+                  cursor: destinoAviso(notif, opcionesDestino) ? 'pointer' : 'default',
                   borderColor: noLeida ? 'var(--sm-no-leida-borde)' : 'var(--sm-borde-suave)',
                   transition: 'background-color 150ms ease',
                 }}

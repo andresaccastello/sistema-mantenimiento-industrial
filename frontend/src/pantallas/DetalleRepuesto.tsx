@@ -46,6 +46,7 @@ import { ModalReactivarElemento } from '../componentes/admin/ModalReactivarEleme
 import { formatCantidad, formatFechaHora, formatMoneda } from '../lib/formato';
 import { nombreCompleto } from '../lib/personas';
 import { ApiError } from '../lib/errores';
+import { AYUDA_STOCK_MINIMO } from '../lib/avisos';
 import {
   infoEstadoStock,
   badgeColorStock,
@@ -258,6 +259,11 @@ export function DetalleRepuesto() {
                 ? `${formatCantidad(repuesto.stock_minimo)} ${repuesto.unidad}`
                 : '—'}
             </Text>
+            {repuesto.lleva_stock && (
+              <Text size="xs" c="var(--sm-tenue)">
+                {AYUDA_STOCK_MINIMO}
+              </Text>
+            )}
           </Stack>
           <Stack gap={2}>
             <Text size="xs" c="dimmed">Costo unitario vigente</Text>

@@ -12,7 +12,7 @@ export interface TipoAvisoInfo {
 }
 
 /**
- * Los 10 tipos de eventos notificables en el mismo orden que REGLAS_EVENTOS_NOTIFICACION del backend.
+ * Los 12 tipos de eventos notificables en el mismo orden que REGLAS_EVENTOS_NOTIFICACION del backend.
  */
 export const TIPOS_AVISO: readonly TipoAvisoInfo[] = [
   {
@@ -20,6 +20,12 @@ export const TIPOS_AVISO: readonly TipoAvisoInfo[] = [
     nombre: 'Falla reportada',
     destinatarios:
       'A quienes reciben avisos de fallas, según sus sectores. Es de prioridad alta si la máquina quedó detenida o si su criticidad es de prioridad alta.',
+  },
+  {
+    tipo_evento: 'PARADA_CRITICA',
+    nombre: 'Parada crítica',
+    destinatarios:
+      'A quienes reciben avisos de paradas críticas, según sus sectores, también a quien reportó. Sale cuando se detiene una máquina cuya criticidad es de prioridad alta. Siempre es de prioridad alta.',
   },
   {
     tipo_evento: 'INTERVENCION_ASIGNADA',
@@ -64,6 +70,12 @@ export const TIPOS_AVISO: readonly TipoAvisoInfo[] = [
       'Al responsable del plan o, si no tiene, a quienes gestionan los planes del sector. Es de prioridad alta si vence una tarea de una máquina de criticidad de prioridad alta.',
   },
   {
+    tipo_evento: 'STOCK_BAJO',
+    nombre: 'Stock bajo',
+    destinatarios:
+      'A quienes reciben avisos de stock bajo. Sale una vez cuando un repuesto llega a su stock mínimo, hasta que se repone.',
+  },
+  {
     tipo_evento: 'LECTURA_ATRASADA',
     nombre: 'Lecturas atrasadas',
     destinatarios:
@@ -73,18 +85,35 @@ export const TIPOS_AVISO: readonly TipoAvisoInfo[] = [
 
 /**
  * Adónde lleva un aviso al tocarlo: las lecturas atrasadas, a la ronda con solo los atrasados
- * (LE1, 4.5); si no, a su intervención o a su máquina. Sin destino, null.
+ * (LE1, 4.5); el stock bajo, a la ficha del repuesto, solo con REPUESTOS_GESTIONAR (AV1, 5);
+ * si no, a su intervención o a su máquina. Sin destino, null.
  */
-export function destinoAviso(n: {
-  tipo_evento?: string;
-  intervencion_id: number | null;
-  maquina_id?: number | null;
-}): string | null {
+export function destinoAviso(
+  n: {
+    tipo_evento?: string;
+    intervencion_id: number | null;
+    maquina_id?: number | null;
+    repuesto_id?: number | null;
+  },
+  opciones: { gestionaRepuestos?: boolean } = {}
+): string | null {
   if (n.tipo_evento === 'LECTURA_ATRASADA') return '/lecturas?solo_atrasados=true';
+  if (n.tipo_evento === 'STOCK_BAJO') {
+    return opciones.gestionaRepuestos && n.repuesto_id ? `/repuestos/${n.repuesto_id}` : null;
+  }
   if (n.intervencion_id) return `/intervenciones/${n.intervencion_id}`;
   if (n.maquina_id) return `/maquinas/${n.maquina_id}`;
   return null;
 }
+
+/** AV1, 5: la tarjeta "Paradas críticas" de Configuración. */
+export const ETIQUETA_DETENCION_POSTERIOR =
+  'Avisar también cuando la detención se registra después de reportar la falla';
+export const AYUDA_PARADAS_CRITICAS =
+  "Qué máquinas son críticas: la criticidad con prioridad alta, en Sectores y catálogos. Quién recibe el aviso: el permiso 'Recibir avisos de paradas críticas', en Perfiles o en cada usuario";
+
+/** AV1, 5: junto al stock mínimo del repuesto. */
+export const AYUDA_STOCK_MINIMO = 'Avisa cuando el stock llega a este número. Sin mínimo, no avisa';
 
 export function nombreTipoAviso(tipo: string): string {
   const item = TIPOS_AVISO.find((t) => t.tipo_evento === tipo);

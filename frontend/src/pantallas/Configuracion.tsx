@@ -9,6 +9,7 @@ import { TarjetaCanales } from '../componentes/configuracion/TarjetaCanales';
 import { TablaReglas } from '../componentes/configuracion/TablaReglas';
 import { TablaUltimosEnvios } from '../componentes/configuracion/TablaUltimosEnvios';
 import { TarjetaIdentidad } from '../componentes/configuracion/TarjetaIdentidad';
+import { TarjetaParadasCriticas } from '../componentes/configuracion/TarjetaParadasCriticas';
 import { mensajeError } from '../lib/errores';
 
 export function Configuracion() {
@@ -75,7 +76,7 @@ export function Configuracion() {
     );
   }
 
-  const { canales, reglas, pendientes } = avisosQuery.data;
+  const { canales, reglas, pendientes, critico_por_detencion_posterior } = avisosQuery.data;
   const enviosData = enviosQuery.data;
 
   return (
@@ -97,6 +98,12 @@ export function Configuracion() {
         <TarjetaCanales
           canales={canales}
           pendientes={pendientes}
+          onActualizado={refetchTodo}
+        />
+
+        {/* AV1, 5: Paradas críticas */}
+        <TarjetaParadasCriticas
+          criticoPorDetencionPosterior={critico_por_detencion_posterior}
           onActualizado={refetchTodo}
         />
 

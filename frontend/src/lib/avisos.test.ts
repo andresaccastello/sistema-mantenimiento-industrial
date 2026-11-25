@@ -7,13 +7,17 @@ import {
   estadoEnvio,
   detalleEnvio,
   destinoAviso,
+  AYUDA_PARADAS_CRITICAS,
+  AYUDA_STOCK_MINIMO,
+  ETIQUETA_DETENCION_POSTERIOR,
 } from './avisos';
 
 describe('FE-39: lib/avisos.ts', () => {
-  it('orden de TIPOS_AVISO: los 10 códigos coinciden exactamente con REGLAS_EVENTOS_NOTIFICACION del backend', () => {
+  it('orden de TIPOS_AVISO: los 12 códigos coinciden exactamente con REGLAS_EVENTOS_NOTIFICACION del backend', () => {
     // Debe coincidir estrictamente con REGLAS_EVENTOS_NOTIFICACION de backend/functions/intervenciones/notificaciones.ts
     const codigosEsperados = [
       'FALLA_REGISTRADA',
+      'PARADA_CRITICA',
       'INTERVENCION_ASIGNADA',
       'INTERVENCION_REASIGNADA',
       'INTERVENCION_DESASIGNADA',
@@ -22,6 +26,7 @@ describe('FE-39: lib/avisos.ts', () => {
       'INTERVENCION_REABIERTA',
       'DETENCION_PENDIENTE_CONFIRMACION',
       'PREVENTIVO_VENCIMIENTO',
+      'STOCK_BAJO',
       'LECTURA_ATRASADA',
     ];
 
@@ -116,5 +121,37 @@ describe('FE-155: el aviso de lecturas atrasadas (LE1, 4.5)', () => {
     assert.equal(destinoAviso({ tipo_evento: 'FALLA_REGISTRADA', intervencion_id: 85, maquina_id: 3 }), '/intervenciones/85');
     assert.equal(destinoAviso({ tipo_evento: 'PREVENTIVO_VENCIMIENTO', intervencion_id: null, maquina_id: 3 }), '/maquinas/3');
     assert.equal(destinoAviso({ intervencion_id: null }), null);
+  });
+});
+
+describe('FE-179: los rótulos de parada crítica y stock bajo (AV1, 5)', () => {
+  it('con sus nombres en castellano en la tabla de reglas', () => {
+    assert.equal(nombreTipoAviso('PARADA_CRITICA'), 'Parada crítica');
+    assert.equal(nombreTipoAviso('STOCK_BAJO'), 'Stock bajo');
+    for (const tipo of ['PARADA_CRITICA', 'STOCK_BAJO']) {
+      const info = TIPOS_AVISO.find((t) => t.tipo_evento === tipo);
+      assert.ok(info && info.destinatarios.length > 0, tipo);
+    }
+  });
+  it('los textos de Configuración y del repuesto', () => {
+    assert.equal(ETIQUETA_DETENCION_POSTERIOR, 'Avisar también cuando la detención se registra después de reportar la falla');
+    assert.equal(
+      AYUDA_PARADAS_CRITICAS,
+      "Qué máquinas son críticas: la criticidad con prioridad alta, en Sectores y catálogos. Quién recibe el aviso: el permiso 'Recibir avisos de paradas críticas', en Perfiles o en cada usuario"
+    );
+    assert.equal(AYUDA_STOCK_MINIMO, 'Avisa cuando el stock llega a este número. Sin mínimo, no avisa');
+  });
+});
+
+describe('FE-180: adónde llevan los avisos de AV1 (AV1, 5)', () => {
+  it('la parada crítica, a su intervención', () => {
+    assert.equal(destinoAviso({ tipo_evento: 'PARADA_CRITICA', intervencion_id: 91, maquina_id: 4 }), '/intervenciones/91');
+  });
+  it('el stock bajo, al repuesto solo con REPUESTOS_GESTIONAR; si no, sin enlace', () => {
+    const aviso = { tipo_evento: 'STOCK_BAJO', intervencion_id: null, maquina_id: null, repuesto_id: 12 };
+    assert.equal(destinoAviso(aviso, { gestionaRepuestos: true }), '/repuestos/12');
+    assert.equal(destinoAviso(aviso, { gestionaRepuestos: false }), null);
+    assert.equal(destinoAviso(aviso), null, 'Sin opciones, sin enlace');
+    assert.equal(destinoAviso({ ...aviso, repuesto_id: null }, { gestionaRepuestos: true }), null, 'Sin repuesto, sin enlace');
   });
 });
