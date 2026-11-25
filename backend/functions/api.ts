@@ -20,6 +20,7 @@ import costosApp from './costos.ts';
 import planesApp from './planes.ts';
 import medidoresApp from './medidores.ts';
 import { maquinaRutinasApp, rutinasApp } from './rutinas/api.ts';
+import { maquinaDocumentosApp, documentosApp } from './documentos.ts';
 
 import { JWT_SECRET } from './config.ts';
 
@@ -28,7 +29,7 @@ const app = new Hono();
 const allowedOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
 app.use('*', cors({
   origin: allowedOrigin,
-  exposeHeaders: ['X-Total-Count'],
+  exposeHeaders: ['X-Total-Count', 'Content-Disposition'],
 }));
 
 
@@ -59,6 +60,9 @@ app.route('/api/medidores', medidoresApp);
 // RT1: las rutinas de una máquina van bajo /api/maquinas/:id/rutinas
 app.route('/api/maquinas', maquinaRutinasApp);
 app.route('/api/rutinas', rutinasApp);
+// MQ1: los documentos de una máquina van bajo /api/maquinas/:id/documentos
+app.route('/api/maquinas', maquinaDocumentosApp);
+app.route('/api/documentos', documentosApp);
 
 app.get('/health', (c) => {
   return c.json({

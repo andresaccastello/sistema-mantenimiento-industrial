@@ -1028,7 +1028,8 @@ test('Etapa F3a — Datos de la máquina y API para el tablero y las máquinas',
       createdIntervencionIds.push(intA.id);
 
       const resNotifA = await client.query(
-        'SELECT prioridad, titulo FROM notificaciones WHERE intervencion_id = $1 AND usuario_id = $2',
+        // MQ1 (con OK): desde AV1 también llega PARADA_CRITICA; acá se controla el aviso de falla
+        "SELECT prioridad, titulo FROM notificaciones WHERE intervencion_id = $1 AND usuario_id = $2 AND tipo_evento = 'FALLA_REGISTRADA'",
         [intA.id, respId]
       );
       assert.strictEqual(resNotifA.rows.length, 1);
@@ -1053,7 +1054,8 @@ test('Etapa F3a — Datos de la máquina y API para el tablero y las máquinas',
       createdIntervencionIds.push(intB.id);
 
       const resNotifB = await client.query(
-        'SELECT prioridad, titulo FROM notificaciones WHERE intervencion_id = $1 AND usuario_id = $2',
+        // MQ1 (con OK): desde AV1 también llega PARADA_CRITICA; acá se controla el aviso de falla
+        "SELECT prioridad, titulo FROM notificaciones WHERE intervencion_id = $1 AND usuario_id = $2 AND tipo_evento = 'FALLA_REGISTRADA'",
         [intB.id, respId]
       );
       assert.strictEqual(resNotifB.rows.length, 1);
@@ -1078,7 +1080,8 @@ test('Etapa F3a — Datos de la máquina y API para el tablero y las máquinas',
       createdIntervencionIds.push(intC.id);
 
       const resNotifC = await client.query(
-        'SELECT prioridad, titulo FROM notificaciones WHERE intervencion_id = $1 AND usuario_id = $2',
+        // MQ1 (con OK): desde AV1 también llega PARADA_CRITICA; acá se controla el aviso de falla
+        "SELECT prioridad, titulo FROM notificaciones WHERE intervencion_id = $1 AND usuario_id = $2 AND tipo_evento = 'FALLA_REGISTRADA'",
         [intC.id, respId]
       );
       assert.strictEqual(resNotifC.rows.length, 1);

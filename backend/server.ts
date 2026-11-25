@@ -4,9 +4,10 @@ import { procesarEnvios } from './functions/avisos/procesarEnvios.ts';
 import { procesarVencimientos } from './functions/preventivos/vencimientos.ts';
 
 const port = 3000;
-console.log(`🚀 Servidor backend Hono corriendo en http://localhost:${port}`);
 
-if (process.env.EMAIL_TRANSPORTE) {
+/** Lo programado: solo arranca cuando el servidor ya escucha (MQ1, 5). */
+function arrancarProgramado() {
+  if (!process.env.EMAIL_TRANSPORTE) return;
   setInterval(async () => {
     // PV5, 4: primero los vencimientos, igual que el programado; si fallan, los envíos igual
     try {
@@ -18,7 +19,21 @@ if (process.env.EMAIL_TRANSPORTE) {
   }, 60000);
 }
 
-serve({
-  fetch: app.fetch,
-  port
+const server = serve(
+  {
+    fetch: app.fetch,
+    port,
+  },
+  () => {
+    console.log(`🚀 Servidor backend Hono corriendo en http://localhost:${port}`);
+    arrancarProgramado();
+  }
+);
+
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`El puerto ${port} ya está en uso: cerrá el otro servidor`);
+    process.exit(1);
+  }
+  throw err;
 });

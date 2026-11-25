@@ -1,17 +1,50 @@
 import { Hono } from 'hono';
+import type { PoolClient } from 'pg';
 import { pool } from './db.ts';
 import { jwtVerify, dbVerify, requirePermission, requireAlgunPermiso } from './middleware.ts';
 import { ErrorNegocio, responderError } from './intervenciones/errores.ts';
 import { validarEmail, parseIdRuta, validarBooleano } from './repuestos/validaciones.ts';
+import { textoOpcional } from './preventivos/validaciones.ts';
 
 const proveedoresApp = new Hono();
 
 proveedoresApp.use('*', jwtVerify, dbVerify);
 
+/** Los permisos de /opciones: también dan la ficha (MQ1, 3). */
+const PERMISOS_OPCIONES = ['REPUESTOS_GESTIONAR', 'INTERVENCIONES_CAMBIAR_ESTADO', 'COSTOS_REGISTRAR', 'PLANES_GESTIONAR'];
+
+/** MQ1, 3: el código del proveedor en SAE. Vacío o null: null. */
+function validarCodigoExterno(val: unknown): string | null {
+  return textoOpcional(val, 'codigo_externo', 40);
+}
+
+function codigoDuplicado(): ErrorNegocio {
+  return new ErrorNegocio(409, 'CODIGO_DUPLICADO', 'Ya existe un proveedor con ese código en SAE');
+}
+
+/** Un único repetido: según el índice, nombre o código. */
+function traducirUnico(dbErr: any): unknown {
+  if (dbErr?.code === '23505') {
+    if (dbErr.constraint === 'uq_proveedores_codigo_externo') return codigoDuplicado();
+    return new ErrorNegocio(409, 'NOMBRE_DUPLICADO', 'Ya existe un proveedor con ese nombre');
+  }
+  return dbErr;
+}
+
+async function hayCodigoRepetido(db: Pick<PoolClient, 'query'>, codigo: string, exceptoId: number | null) {
+  const res = await db.query(
+    `SELECT 1 FROM proveedores
+     WHERE codigo_externo IS NOT NULL AND upper(trim(codigo_externo)) = upper(trim($1))
+       AND ($2::bigint IS NULL OR id <> $2)`,
+    [codigo, exceptoId]
+  );
+  return res.rows.length > 0;
+}
+
 // GET /opciones (declarado antes de /:id)
 proveedoresApp.get(
   '/opciones',
-  requireAlgunPermiso(['REPUESTOS_GESTIONAR', 'INTERVENCIONES_CAMBIAR_ESTADO', 'COSTOS_REGISTRAR', 'PLANES_GESTIONAR']),
+  requireAlgunPermiso(PERMISOS_OPCIONES),
   async (c) => {
     try {
       const res = await pool.query(
@@ -28,6 +61,32 @@ proveedoresApp.get(
   }
 );
 
+// GET /:id/ficha (MQ1, 3): la ficha a un clic, con los permisos de /opciones
+proveedoresApp.get('/:id/ficha', requireAlgunPermiso(PERMISOS_OPCIONES), async (c) => {
+  try {
+    const id = parseIdRuta(c.req.param('id'));
+    if (!id) throw new ErrorNegocio(404, 'PROVEEDOR_NO_ENCONTRADO', 'Proveedor no encontrado');
+    const res = await pool.query(
+      'SELECT id, nombre, codigo_externo, contacto, telefono, email, notas, activo FROM proveedores WHERE id = $1',
+      [id]
+    );
+    if (res.rows.length === 0) throw new ErrorNegocio(404, 'PROVEEDOR_NO_ENCONTRADO', 'Proveedor no encontrado');
+    const p = res.rows[0];
+    return c.json({
+      id: Number(p.id),
+      nombre: p.nombre,
+      codigo_externo: p.codigo_externo || null,
+      contacto: p.contacto || null,
+      telefono: p.telefono || null,
+      email: p.email || null,
+      notas: p.notas || null,
+      activo: Boolean(p.activo),
+    });
+  } catch (err) {
+    return responderError(c, err);
+  }
+});
+
 // GET /
 proveedoresApp.get('/', requirePermission('REPUESTOS_GESTIONAR'), async (c) => {
   try {
@@ -38,6 +97,7 @@ proveedoresApp.get('/', requirePermission('REPUESTOS_GESTIONAR'), async (c) => {
       SELECT
         p.id,
         p.nombre,
+        p.codigo_externo,
         p.contacto,
         p.telefono,
         p.email,
@@ -61,6 +121,7 @@ proveedoresApp.get('/', requirePermission('REPUESTOS_GESTIONAR'), async (c) => {
     const proveedores = res.rows.map((p) => ({
       id: Number(p.id),
       nombre: p.nombre,
+      codigo_externo: p.codigo_externo || null,
       contacto: p.contacto || null,
       telefono: p.telefono || null,
       email: p.email || null,
@@ -106,6 +167,8 @@ proveedoresApp.post('/', requirePermission('REPUESTOS_GESTIONAR'), async (c) => 
       throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'Las notas no pueden superar los 1000 caracteres');
     }
 
+    const codigoExterno = validarCodigoExterno(body.codigo_externo);
+
     // Verificar nombre duplicado
     const dup = await pool.query(
       'SELECT id FROM proveedores WHERE lower(trim(nombre)) = lower(trim($1))',
@@ -114,27 +177,28 @@ proveedoresApp.post('/', requirePermission('REPUESTOS_GESTIONAR'), async (c) => 
     if (dup.rows.length > 0) {
       throw new ErrorNegocio(409, 'NOMBRE_DUPLICADO', 'Ya existe un proveedor con ese nombre');
     }
+    if (codigoExterno !== null && (await hayCodigoRepetido(pool, codigoExterno, null))) {
+      throw codigoDuplicado();
+    }
 
     let nuevo: any;
     try {
       const ins = await pool.query(
-        `INSERT INTO proveedores (nombre, contacto, telefono, email, notas, activo, creado_en, actualizado_en)
-         VALUES ($1, $2, $3, $4, $5, TRUE, NOW(), NOW())
-         RETURNING id, nombre, contacto, telefono, email, notas, activo, creado_en, actualizado_en`,
-        [nombreRaw, contacto, telefono, email, notas]
+        `INSERT INTO proveedores (nombre, codigo_externo, contacto, telefono, email, notas, activo, creado_en, actualizado_en)
+         VALUES ($1, $2, $3, $4, $5, $6, TRUE, NOW(), NOW())
+         RETURNING id, nombre, codigo_externo, contacto, telefono, email, notas, activo, creado_en, actualizado_en`,
+        [nombreRaw, codigoExterno, contacto, telefono, email, notas]
       );
       nuevo = ins.rows[0];
     } catch (dbErr: any) {
-      if (dbErr.code === '23505' || dbErr.constraint === 'uq_proveedores_nombre') {
-        throw new ErrorNegocio(409, 'NOMBRE_DUPLICADO', 'Ya existe un proveedor con ese nombre');
-      }
-      throw dbErr;
+      throw traducirUnico(dbErr);
     }
 
     return c.json(
       {
         id: Number(nuevo.id),
         nombre: nuevo.nombre,
+        codigo_externo: nuevo.codigo_externo || null,
         contacto: nuevo.contacto || null,
         telefono: nuevo.telefono || null,
         email: nuevo.email || null,
@@ -189,6 +253,14 @@ proveedoresApp.put('/:id', requirePermission('REPUESTOS_GESTIONAR'), async (c) =
       nombre = nombreRaw;
     }
 
+    let codigoExterno = actual.codigo_externo;
+    if (body.codigo_externo !== undefined) {
+      codigoExterno = validarCodigoExterno(body.codigo_externo);
+      if (codigoExterno !== null && (await hayCodigoRepetido(client, codigoExterno, id))) {
+        throw codigoDuplicado();
+      }
+    }
+
     let email = actual.email;
     if (body.email !== undefined) {
       email = validarEmail(body.email);
@@ -228,17 +300,15 @@ proveedoresApp.put('/:id', requirePermission('REPUESTOS_GESTIONAR'), async (c) =
     try {
       const upd = await client.query(
         `UPDATE proveedores
-         SET nombre = $1, contacto = $2, telefono = $3, email = $4, notas = $5, activo = $6, actualizado_en = NOW()
+         SET nombre = $1, contacto = $2, telefono = $3, email = $4, notas = $5, activo = $6,
+             codigo_externo = $8, actualizado_en = NOW()
          WHERE id = $7
-         RETURNING id, nombre, contacto, telefono, email, notas, activo, creado_en, actualizado_en`,
-        [nombre, contacto, telefono, email, notas, activo, id]
+         RETURNING id, nombre, codigo_externo, contacto, telefono, email, notas, activo, creado_en, actualizado_en`,
+        [nombre, contacto, telefono, email, notas, activo, id, codigoExterno]
       );
       mod = upd.rows[0];
     } catch (dbErr: any) {
-      if (dbErr.code === '23505' || dbErr.constraint === 'uq_proveedores_nombre') {
-        throw new ErrorNegocio(409, 'NOMBRE_DUPLICADO', 'Ya existe un proveedor con ese nombre');
-      }
-      throw dbErr;
+      throw traducirUnico(dbErr);
     }
 
     await client.query('COMMIT');
@@ -252,6 +322,7 @@ proveedoresApp.put('/:id', requirePermission('REPUESTOS_GESTIONAR'), async (c) =
       {
         id: Number(mod.id),
         nombre: mod.nombre,
+        codigo_externo: mod.codigo_externo || null,
         contacto: mod.contacto || null,
         telefono: mod.telefono || null,
         email: mod.email || null,

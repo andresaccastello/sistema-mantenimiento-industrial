@@ -69,6 +69,8 @@
     "test:estimacion-uso": "tsx --env-file=.env --test backend/tests/estimacion_uso.test.ts",
     "test:rutinas": "tsx --env-file=.env --test backend/tests/rutinas.test.ts",
     "test:avisos-criticos": "tsx --env-file=.env --test backend/tests/avisos_criticos.test.ts",
+    "test:migration-026": "tsx --env-file=.env --test backend/tests/migration_026.test.ts",
+    "test:maquina-extras": "tsx --env-file=.env --test backend/tests/maquina_extras.test.ts",
     "test:front": "tsx --test frontend/src/lib/*.test.ts frontend/src/api/*.test.ts",
     "test:e2e": "tsx --env-file=.env --test backend/tests/crud.test.ts",
     "test:todo": "node scripts/run-all-tests.mjs",

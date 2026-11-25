@@ -1092,6 +1092,9 @@ test('Etapa R1 — Repuestos, proveedores y stock (RE-01 a RE-09)', async (t) =>
         await client.query('DELETE FROM intervenciones WHERE id = ANY($1)', [createdIntervencionIds]);
       }
       if (createdRepuestoIds.length > 0) {
+        // MQ1 (con OK): el alta con el stock inicial en el mínimo avisa; se borran los avisos de estos repuestos
+        await client.query('DELETE FROM notificacion_envios WHERE notificacion_id IN (SELECT id FROM notificaciones WHERE repuesto_id = ANY($1))', [createdRepuestoIds]);
+        await client.query('DELETE FROM notificaciones WHERE repuesto_id = ANY($1)', [createdRepuestoIds]);
         await client.query('DELETE FROM movimientos_stock WHERE repuesto_id = ANY($1)', [createdRepuestoIds]);
         await client.query('DELETE FROM repuesto_costos WHERE repuesto_id = ANY($1)', [createdRepuestoIds]);
         await client.query('DELETE FROM repuestos WHERE id = ANY($1)', [createdRepuestoIds]);

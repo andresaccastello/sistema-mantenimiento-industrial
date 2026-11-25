@@ -346,6 +346,9 @@ repuestosApp.post('/', requirePermission('REPUESTOS_GESTIONAR'), async (c) => {
       );
     }
 
+    // Un alta con el stock inicial en el mínimo o por debajo también avisa (pedido junto con MQ1)
+    await revisarStockBajo(client, repuestoId);
+
     await client.query('COMMIT');
 
     const detalle = await obtenerDetalleRepuesto(repuestoId, veCostos(c));

@@ -349,7 +349,7 @@ El circuito ya está cubierto: el operario hace la revisión como hoy, y si encu
 
 **Estado:** Aceptada
 
-1. **Documentos (requisito 11): no se implementan.** Adjuntar manuales, facturas o remitos no cambia el circuito de GI-RE: los comprobantes ya están en SAE y el 87 % del trabajo lo hacen externos. Queda como mejora futura.
+1. Reemplazado por la D-035.
 2. **WhatsApp (requisito 12): no se implementa en esta versión.** La bandeja de salida y la API quedan preparadas (D-36), pero la interfaz no muestra el canal: ni la configuración, ni las reglas, ni el teléfono del usuario. Los avisos salen por la campana y por email.
 3. **El sistema es de escritorio.** GI-RE trabaja en puestos con PC. En el celular solo se puede:
    - el operario: reportar una falla, ver sus reportes y sus notificaciones;
@@ -459,8 +459,18 @@ El circuito ya está cubierto: el operario hace la revisión como hoy, y si encu
 **Estado:** Aceptada
 
 1. **Una parada crítica** es una detención de una máquina cuya criticidad tiene "prioridad alta". Avisa siempre al reportar la falla, y también al registrar una detención después, si así está configurado.
-2. **El aviso de stock bajo** sale cuando un movimiento deja un repuesto en su stock mínimo o por debajo. Avisa una vez hasta que se repone. Un repuesto sin mínimo no avisa.
+2. **El aviso de stock bajo** sale cuando un movimiento deja un repuesto en su stock mínimo o por debajo, o cuando se da de alta con el stock inicial ya en el mínimo o por debajo. Avisa una vez hasta que se repone. Un repuesto sin mínimo no avisa.
 3. **Quién los recibe se decide con dos permisos,** por perfil o por usuario. El de paradas usa alcance por sectores. Solo reciben usuarios del sistema: no hay direcciones sueltas, y los proveedores externos no reciben avisos.
 4. **El mail sale según la regla de cada tipo de aviso.**
 
 **Motivo:** el profesor y GI-RE pidieron que en una parada crítica se entere enseguida gente fuera de mantenimiento, y que el sistema avise cuando falta un repuesto. Configurarlo con permisos y reglas que ya existen evita una pantalla nueva de destinatarios.
+
+## D-035 — Documentos de la máquina como enlaces
+
+**Estado:** Aceptada. Reemplaza el punto 1 de la D-027.
+
+1. **Cada máquina tiene una lista de documentos:** título, tipo, enlace y notas.
+2. **El archivo vive afuera:** en el almacenamiento de SAE, en una carpeta compartida o en la web del fabricante. El sistema guarda solo el enlace.
+3. **Solo se aceptan enlaces `http` o `https`.**
+
+**Motivo:** GI-RE pidió tener los manuales, fotos e instructivos a mano desde la máquina. Guardar archivos pesados en la base no tiene sentido, y el almacenamiento ya lo está resolviendo SAE.

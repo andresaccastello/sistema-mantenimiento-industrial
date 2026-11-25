@@ -69,6 +69,7 @@ const TABLAS_CONTROL = [
   'avisos_vencimiento',
   'rutinas',
   'rutina_registros',
+  'maquina_documentos',
 ];
 
 async function contarFilas() {

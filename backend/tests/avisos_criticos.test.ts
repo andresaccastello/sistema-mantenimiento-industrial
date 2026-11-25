@@ -60,7 +60,7 @@ async function pedir(method: string, path: string, token: string | null, body?: 
   return { status: r.status, cuerpo };
 }
 
-test('Etapa AV1 — Avisos de parada crítica y de stock bajo (AC-01 a AC-12)', async (t) => {
+test('Etapa AV1 — Avisos de parada crítica y de stock bajo (AC-01 a AC-13)', async (t) => {
   let client = await pool.connect();
 
   const createdPlantaIds: number[] = [];
@@ -497,6 +497,39 @@ test('Etapa AV1 — Avisos de parada crítica y de stock bajo (AC-01 a AC-12)', 
         assert.strictEqual(Number((await client.query('SELECT cantidad_disponible FROM repuestos WHERE id = $1', [rep.id])).rows[0].cantidad_disponible), 2);
         assert.strictEqual((await paraA(rep.id)).length, 1, `Ronda ${ronda}: un solo aviso`);
       }
+    });
+
+    // =========================================================================
+    await t.test('AC-13: El alta con el stock inicial en el mínimo o por debajo avisa', async () => {
+      const enElMinimo = await crearRepuesto({ stock_inicial: 3, stock_minimo: 3, proveedor_id: prov });
+      const avisos = await avisosStock(enElMinimo.id);
+      const ids = new Set(avisos.map((x) => x.usuario_id));
+      assert.ok(ids.has(A.id), 'Administrador');
+      assert.ok(ids.has(Compras.id), 'Operario con CONCEDER del aviso de stock');
+      assert.ok(!ids.has(OP.id), 'Sin el permiso');
+      const a = avisos.find((x) => x.usuario_id === A.id);
+      assert.strictEqual(a.titulo, `Stock bajo: ${enElMinimo.nombre}`);
+      assert.strictEqual(a.mensaje, `Quedan 3 u (mínimo: 3). Proveedor habitual: Proveedor AC ${suf}`);
+      assert.strictEqual(Number(a.generada_por_usuario_id), sistemaId);
+      assert.ok(await marca(enElMinimo.id), 'Queda la marca, en la misma transacción del alta');
+
+      await mover(enElMinimo.id, 'EGRESO', 1);
+      assert.strictEqual((await paraA(enElMinimo.id)).length, 1, 'Un consumo después no repite');
+
+      const sinStock = await crearRepuesto({ stock_inicial: 0, stock_minimo: 2 });
+      const avisosSinStock = await paraA(sinStock.id);
+      assert.strictEqual(avisosSinStock.length, 1, 'Stock inicial 0, por debajo del mínimo');
+      assert.strictEqual(avisosSinStock[0].mensaje, 'Quedan 0 u (mínimo: 2).');
+
+      const sinStockInicial = await crearRepuesto({ stock_minimo: 1 });
+      assert.strictEqual((await paraA(sinStockInicial.id)).length, 1, 'Sin stock_inicial también es 0');
+
+      const porEncima = await crearRepuesto({ stock_inicial: 5, stock_minimo: 2 });
+      assert.deepStrictEqual(await avisosStock(porEncima.id), [], 'Por encima del mínimo');
+      assert.strictEqual(await marca(porEncima.id), null);
+
+      const sinMinimo = await crearRepuesto({ stock_inicial: 0 });
+      assert.deepStrictEqual(await avisosStock(sinMinimo.id), [], 'Sin mínimo');
     });
   } finally {
     client = await clienteSano(client);

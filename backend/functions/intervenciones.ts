@@ -23,7 +23,9 @@ import {
 } from './intervenciones/motor.ts';
 import { registrarDetencionIntervencion } from './intervenciones/detenciones.ts';
 import { responsablesHabilitados } from './intervenciones/responsables.ts';
-import { validarFechaISO } from './intervenciones/fechas.ts';
+import { obtenerParticipantes } from './intervenciones/participantes.ts';
+import { exportarIntervenciones } from './intervenciones/exportar.ts';
+import { armarFiltrosListado } from './intervenciones/filtrosListado.ts';
 
 const intervencionesApp = new Hono();
 
@@ -209,112 +211,17 @@ intervencionesApp.post('/', requirePermission('INTERVENCIONES_CREAR'), async (c)
 intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) => {
   const usuario = getUsuarioContext(c);
   const userScope = getUserScope(c, 'INTERVENCIONES_VER') || 'TODAS';
-  const sinAsignar = c.req.query('sin_asignar') === 'true';
-  const incluirEliminadas = c.req.query('incluir_eliminadas') === 'true';
-
-  if (incluirEliminadas) {
-    if (!('INTERVENCIONES_ELIMINAR' in usuario.permisos)) {
-      return responderError(
-        c,
-        new ErrorNegocio(
-          403,
-          'PERMISO_INSUFICIENTE',
-          'No posees permiso para consultar intervenciones eliminadas'
-        )
-      );
-    }
-  }
 
   try {
-    // 1. Validación de parámetros de filtro y paginación
-    const estadoParam = c.req.query('estado');
-    let estadosFiltro: string[] | null = null;
-    if (estadoParam !== undefined && estadoParam !== null && estadoParam.trim() !== '') {
-      const tokens = estadoParam.split(',').map((s) => s.trim());
-      const estadosValidos = ['PENDIENTE', 'EN_PROCESO', 'EN_ESPERA_REPUESTOS', 'FINALIZADA', 'CANCELADA'];
-      for (const tok of tokens) {
-        if (!estadosValidos.includes(tok)) {
-          throw new ErrorNegocio(422, 'DATOS_INVALIDOS', `Estado de intervención inválido: ${tok}`);
-        }
-      }
-      estadosFiltro = tokens;
+    // 1. Los filtros y la visibilidad (MQ1: compartidos con la exportación)
+    const filtros = await armarFiltrosListado(c, usuario, userScope);
+    if (filtros.vacio) {
+      c.header('X-Total-Count', '0');
+      return c.json([]);
     }
+    const { whereClause, params } = filtros;
 
-    const maquinaIdParam = c.req.query('maquina_id');
-    let maquinaIdFiltro: number | null = null;
-    if (maquinaIdParam !== undefined && maquinaIdParam !== null && maquinaIdParam.trim() !== '') {
-      const parsed = parseId(maquinaIdParam);
-      if (!parsed) {
-        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El parámetro maquina_id debe ser un número entero positivo');
-      }
-      maquinaIdFiltro = parsed;
-    }
-
-    const sectorIdParam = c.req.query('sector_id');
-    let sectorIdFiltro: number | null = null;
-    if (sectorIdParam !== undefined && sectorIdParam !== null && sectorIdParam.trim() !== '') {
-      const parsed = parseId(sectorIdParam);
-      if (!parsed) {
-        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El parámetro sector_id debe ser un número entero positivo');
-      }
-      sectorIdFiltro = parsed;
-    }
-
-    const plantaIdParam = c.req.query('planta_id');
-    let plantaIdFiltro: number | null = null;
-    if (plantaIdParam !== undefined && plantaIdParam !== null && plantaIdParam.trim() !== '') {
-      const parsed = parseId(plantaIdParam);
-      if (!parsed) {
-        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El parámetro planta_id debe ser un número entero positivo');
-      }
-      plantaIdFiltro = parsed;
-    }
-
-    const tipoParam = c.req.query('tipo');
-    let tipoFiltro: string | null = null;
-    if (tipoParam !== undefined && tipoParam !== null && tipoParam.trim() !== '') {
-      const tTrim = tipoParam.trim().toUpperCase();
-      if (tTrim !== 'CORRECTIVO' && tTrim !== 'PREVENTIVO') {
-        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', `Tipo de intervención inválido: ${tipoParam}`);
-      }
-      tipoFiltro = tTrim;
-    }
-
-    const responsableIdParam = c.req.query('responsable_id');
-    let responsableIdFiltro: number | null = null;
-    if (responsableIdParam !== undefined && responsableIdParam !== null && responsableIdParam.trim() !== '') {
-      const parsed = parseId(responsableIdParam);
-      if (!parsed) {
-        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El parámetro responsable_id debe ser un número entero positivo');
-      }
-      responsableIdFiltro = parsed;
-    }
-
-    const miasParam = c.req.query('mias');
-    const filtrarMias = miasParam === 'true';
-
-    const desdeParam = c.req.query('desde');
-    let desdeFiltro: string | null = null;
-    if (desdeParam !== undefined && desdeParam !== null && desdeParam.trim() !== '') {
-      desdeFiltro = await validarFechaISO(pool, desdeParam.trim(), 'desde');
-    }
-
-    const hastaParam = c.req.query('hasta');
-    let hastaFiltro: string | null = null;
-    if (hastaParam !== undefined && hastaParam !== null && hastaParam.trim() !== '') {
-      hastaFiltro = await validarFechaISO(pool, hastaParam.trim(), 'hasta');
-    }
-
-    const qParam = c.req.query('q');
-    let qFiltro: string | null = null;
-    if (qParam !== undefined && qParam !== null) {
-      const qTrim = qParam.trim();
-      if (qTrim.length < 2 || qTrim.length > 100) {
-        throw new ErrorNegocio(422, 'DATOS_INVALIDOS', 'El parámetro de búsqueda q debe tener entre 2 y 100 caracteres');
-      }
-      qFiltro = qTrim;
-    }
-
+    // Paginación
     const limitParam = c.req.query('limit');
     let limitVal: number | null = null;
     if (limitParam !== undefined && limitParam !== null && limitParam.trim() !== '') {
@@ -334,82 +241,6 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
       }
       offsetVal = parsedOffset;
     }
-
-    // 2. Construcción de condiciones WHERE
-    const conditions: string[] = [];
-    const params: any[] = [];
-
-    if (!incluirEliminadas) {
-      conditions.push('i.eliminado_en IS NULL');
-    }
-
-    if (userScope === 'PROPIAS') {
-      params.push(usuario.id);
-      conditions.push(`(i.creado_por_usuario_id = $${params.length} OR i.responsable_usuario_id = $${params.length})`);
-    } else if (userScope === 'SECTORES') {
-      if (usuario.sectores.length === 0) {
-        c.header('X-Total-Count', '0');
-        return c.json([]);
-      }
-      params.push(usuario.sectores);
-      conditions.push(`m.sector_id = ANY($${params.length})`);
-    }
-
-    if (sinAsignar) {
-      conditions.push("i.responsable_usuario_id IS NULL AND i.estado = 'PENDIENTE'");
-    }
-
-    if (estadosFiltro) {
-      params.push(estadosFiltro);
-      conditions.push(`i.estado = ANY($${params.length})`);
-    }
-
-    if (maquinaIdFiltro !== null) {
-      params.push(maquinaIdFiltro);
-      conditions.push(`i.maquina_id = $${params.length}`);
-    }
-
-    if (sectorIdFiltro !== null) {
-      params.push(sectorIdFiltro);
-      conditions.push(`m.sector_id = $${params.length}`);
-    }
-
-    if (plantaIdFiltro !== null) {
-      params.push(plantaIdFiltro);
-      conditions.push(`s.planta_id = $${params.length}`);
-    }
-
-    if (tipoFiltro !== null) {
-      params.push(tipoFiltro);
-      conditions.push(`ti.codigo = $${params.length}`);
-    }
-
-    if (responsableIdFiltro !== null) {
-      params.push(responsableIdFiltro);
-      conditions.push(`i.responsable_usuario_id = $${params.length}`);
-    }
-
-    if (filtrarMias) {
-      params.push(usuario.id);
-      conditions.push(`i.responsable_usuario_id = $${params.length}`);
-    }
-
-    if (desdeFiltro !== null) {
-      params.push(desdeFiltro);
-      conditions.push(`i.fecha_creacion >= $${params.length}::timestamptz`);
-    }
-
-    if (hastaFiltro !== null) {
-      params.push(hastaFiltro);
-      conditions.push(`i.fecha_creacion <= $${params.length}::timestamptz`);
-    }
-
-    if (qFiltro !== null) {
-      params.push(`%${qFiltro}%`);
-      conditions.push(`(i.descripcion ILIKE $${params.length} OR m.nombre ILIKE $${params.length} OR m.codigo ILIKE $${params.length})`);
-    }
-
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // 3. Consulta de conteo total para X-Total-Count
     const countQuery = `
@@ -565,6 +396,12 @@ intervencionesApp.get('/', requirePermission('INTERVENCIONES_VER'), async (c) =>
 });
 
 /**
+ * MQ1, 2.2: GET /api/intervenciones/exportar (declarado antes de /:id).
+ * El CSV del historial, con los mismos filtros y la misma visibilidad que el listado.
+ */
+intervencionesApp.get('/exportar', requirePermission('INTERVENCIONES_VER'), exportarIntervenciones);
+
+/**
  * 7.3 GET /api/intervenciones/:id
  * Consulta de detalle: fuera de alcance devuelve 404 INTERVENCION_NO_ENCONTRADA.
  * Historial ordenado por cambiado_en ASC, id ASC.
@@ -698,6 +535,9 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
       tieneDetencionAbierta
     );
 
+    // MQ1, 2.1: quién participó (sin montos ni horas)
+    const participantes = (await obtenerParticipantes(pool, [Number(r.id)])).get(Number(r.id))!;
+
     return c.json({
       id: Number(r.id),
       descripcion: r.descripcion,
@@ -746,6 +586,7 @@ intervencionesApp.get('/:id', requirePermission('INTERVENCIONES_VER'), async (c)
             apellido: r.responsable_apellido ?? null,
           }
         : null,
+      participantes,
       historial_estados: resHistorial.rows.map((h) => ({
         id: Number(h.id),
         estado_anterior: h.estado_anterior,
