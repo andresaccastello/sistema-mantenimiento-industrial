@@ -20,6 +20,8 @@ import { clienteApi } from '../api/cliente';
 import { PantallaVacia } from '../componentes/PantallaVacia';
 import { FiltrosIntervenciones } from '../componentes/intervenciones/FiltrosIntervenciones';
 import { TablaIntervenciones } from '../componentes/intervenciones/TablaIntervenciones';
+import { BotonExportar } from '../componentes/intervenciones/BotonExportar';
+import { paramsExportacion } from '../lib/exportacion';
 import {
   vistasDisponibles,
   leerFiltros,
@@ -332,11 +334,15 @@ export function IntervencionesLista() {
           <Text size="sm" c="dimmed">
             {data.total} {data.total === 1 ? 'intervención' : 'intervenciones'}
           </Text>
-          {tieneFiltrosActivos && (
-            <Button variant="subtle" color="gray" size="sm" onClick={handleLimpiarFiltros}>
-              Limpiar filtros
-            </Button>
-          )}
+          <Group gap="xs">
+            {tieneFiltrosActivos && (
+              <Button variant="subtle" color="gray" size="sm" onClick={handleLimpiarFiltros}>
+                Limpiar filtros
+              </Button>
+            )}
+            {/* MQ1, 4.3: con los filtros que estén puestos */}
+            {data.total > 0 && <BotonExportar params={paramsExportacion(filtros)} />}
+          </Group>
         </Group>
       )}
 

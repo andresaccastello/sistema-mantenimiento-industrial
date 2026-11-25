@@ -259,9 +259,39 @@ export interface IntervencionDetalle {
   };
   creado_por: Persona;
   responsable: Persona | null;
+  /** MQ1, 2.1: quién participó, sin montos ni horas. */
+  participantes: ParticipantesIntervencion;
   historial_estados: HistorialEstado[];
   periodos_detencion: PeriodoDetencion[];
   auditoria: AuditoriaItem[];
+}
+
+/** MQ1, 2.1: el responsable y la mano de obra vigente; los externos, proveedores. */
+export interface ParticipantesIntervencion {
+  internos: Array<{ id: number; legajo: string; nombre: string; apellido: string | null }>;
+  externos: Array<{ id: number; nombre: string }>;
+}
+
+/** MQ1, 1: `GET /api/maquinas/:id/documentos`, `POST` y `PATCH /api/documentos/:id`. */
+export type TipoDocumento = 'MANUAL' | 'FOTO' | 'VIDEO' | 'INSTRUCTIVO' | 'PLANO' | 'OTRO';
+
+export interface DocumentoMaquina {
+  id: number;
+  maquina_id: number;
+  titulo: string;
+  tipo: TipoDocumento;
+  url: string;
+  notas: string | null;
+  creado_por: { id: number; nombre: string; apellido: string | null };
+  creado_en: string;
+  actualizado_en: string;
+}
+
+export interface CuerpoDocumento {
+  titulo?: string;
+  tipo?: TipoDocumento;
+  url?: string;
+  notas?: string | null;
 }
 
 export interface IntervencionCreada {
@@ -622,6 +652,8 @@ export interface ProveedorRepuesto {
 export interface ProveedorItem {
   id: number;
   nombre: string;
+  /** MQ1, 3: el código del proveedor en SAE. */
+  codigo_externo: string | null;
   contacto: string | null;
   telefono: string | null;
   email: string | null;
@@ -630,6 +662,18 @@ export interface ProveedorItem {
   repuestos_activos: number;
 }
 export type ProveedorFila = ProveedorItem;
+
+/** MQ1, 3: `GET /api/proveedores/:id/ficha`. */
+export interface FichaProveedorDatos {
+  id: number;
+  nombre: string;
+  codigo_externo: string | null;
+  contacto: string | null;
+  telefono: string | null;
+  email: string | null;
+  notas: string | null;
+  activo: boolean;
+}
 
 export type EstadoStockRepuesto = 'OK' | 'BAJO' | 'SIN_STOCK' | 'SIN_CONTROL';
 

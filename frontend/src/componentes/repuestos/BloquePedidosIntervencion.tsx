@@ -24,6 +24,7 @@ import {
   IconInfoCircle,
 } from '@tabler/icons-react';
 import { clienteApi } from '../../api/cliente';
+import { FichaProveedor } from './FichaProveedor';
 import {
   IntervencionPedidosRespuesta,
   IntervencionRepuestosRespuesta,
@@ -174,7 +175,7 @@ export function BloquePedidosIntervencion({
                       <Group gap="xs" align="center">
                         {p.proveedor && (
                           <Text size="xs" c="dimmed">
-                            Proveedor: {p.proveedor.nombre}
+                            Proveedor: <FichaProveedor proveedor={p.proveedor} size="xs" />
                           </Text>
                         )}
                         {info.plazo && (

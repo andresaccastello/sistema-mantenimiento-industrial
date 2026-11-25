@@ -15,6 +15,7 @@ import {
 } from '@mantine/core';
 import { IconAlertCircle, IconCheck, IconX, IconPackage } from '@tabler/icons-react';
 import { clienteApi } from '../../api/cliente';
+import { FichaProveedor } from './FichaProveedor';
 import { PedidoRepuestoItem } from '../../api/tipos';
 import { formatCantidad } from '../../lib/formato';
 import {
@@ -126,7 +127,7 @@ export function TabPedidos({ filtros, onCambiarFiltros }: TabPedidosProps) {
                       </Table.Td>
 
                       <Table.Td>
-                        <Text size="sm">{p.proveedor?.nombre || '—'}</Text>
+                        <Text size="sm">{p.proveedor ? <FichaProveedor proveedor={p.proveedor} /> : '—'}</Text>
                       </Table.Td>
 
                       <Table.Td>

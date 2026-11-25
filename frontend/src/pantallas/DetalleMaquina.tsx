@@ -31,6 +31,7 @@ import { DatosMaquina } from '../componentes/maquinas/DatosMaquina';
 import { DetencionesAbiertasMaquina } from '../componentes/maquinas/DetencionesAbiertasMaquina';
 import { DialogosEstadoMaquina } from '../componentes/maquinas/DialogosEstadoMaquina';
 import { IntervencionesMaquina } from '../componentes/maquinas/IntervencionesMaquina';
+import { BloqueDocumentosMaquina } from '../componentes/maquinas/BloqueDocumentosMaquina';
 
 export function DetalleMaquina() {
   const { id: idParam } = useParams<{ id: string }>();
@@ -175,7 +176,13 @@ export function DetalleMaquina() {
     setAccionActiva(codigo);
   };
 
-  const bloqueDatos = <DatosMaquina maquina={maquina} />;
+  // MQ1, 4.1: los documentos, debajo de los datos
+  const bloqueDatos = (
+    <Stack gap="md">
+      <DatosMaquina maquina={maquina} />
+      <BloqueDocumentosMaquina maquinaId={maquina.id} maquinaActiva={maquina.activo} />
+    </Stack>
+  );
 
   const bloqueIzquierda = (
     <Stack gap="md">

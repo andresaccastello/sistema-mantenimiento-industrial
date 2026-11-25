@@ -4,6 +4,7 @@ import type { IntervencionLista } from '../../api/tipos';
 import { formatHace } from '../../lib/formato';
 import { nombreCompleto } from '../../lib/personas';
 import { EstadoBadge } from '../EstadoBadge';
+import { BotonExportar } from '../intervenciones/BotonExportar';
 
 interface Props {
   maquinaId: number;
@@ -114,9 +115,13 @@ export function IntervencionesMaquina({ maquinaId, cargando, intervenciones, tot
                   Ver cerradas
                 </Text>
               </Group>
-              <Text size="xs" c="dimmed">
-                Total: {total}
-              </Text>
+              <Group gap="sm">
+                <Text size="xs" c="dimmed">
+                  Total: {total}
+                </Text>
+                {/* MQ1, 4.3: todas las de la máquina, abiertas y cerradas */}
+                <BotonExportar size="xs" params={{ maquina_id: maquinaId }} />
+              </Group>
             </Group>
           </>
         )}

@@ -5,6 +5,8 @@ import { etiquetaMaquina } from '../../lib/maquinas';
 import { formatFechaHora } from '../../lib/formato';
 import { nombreCompleto, textoAutor } from '../../lib/personas';
 import { EstadoBadge } from '../EstadoBadge';
+import { FichaProveedor } from '../repuestos/FichaProveedor';
+import { hayParticipantes, textoInternos } from '../../lib/participantes';
 
 /** La columna lateral del detalle: los datos de la intervención y su máquina. */
 export function DatosIntervencion({ reporte }: { reporte: IntervencionDetalle }) {
@@ -56,6 +58,20 @@ export function DatosIntervencion({ reporte }: { reporte: IntervencionDetalle })
             <Text size="sm" c="dimmed">Finalización</Text>
             <Text size="sm">{formatFechaHora(reporte.fecha_finalizacion)}</Text>
           </Group>
+        )}
+        {/* MQ1, 4.2: quién participó; los externos abren la ficha del proveedor */}
+        {hayParticipantes(reporte.participantes) && (
+          <Text size="sm" c="var(--sm-texto)" style={{ overflowWrap: 'anywhere' }}>
+            <Text component="span" size="sm" c="dimmed">Participaron: </Text>
+            {textoInternos(reporte.participantes)}
+            {reporte.participantes.internos.length > 0 && reporte.participantes.externos.length > 0 && ' · '}
+            {reporte.participantes.externos.map((p, i) => (
+              <span key={p.id}>
+                {i > 0 && ', '}
+                <FichaProveedor proveedor={p} />
+              </span>
+            ))}
+          </Text>
         )}
       </Stack>
     </Card>

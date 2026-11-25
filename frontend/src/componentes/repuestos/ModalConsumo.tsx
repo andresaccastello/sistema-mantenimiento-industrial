@@ -17,6 +17,7 @@ import { ApiError, mensajeError } from '../../lib/errores';
 import { formatCantidad } from '../../lib/formato';
 import { validarCantidad, validarCosto } from '../../lib/repuestos';
 import { CampoNumero } from '../CampoNumero';
+import { EnlaceAltaRapida, ModalAltaRapidaRepuesto } from './ModalAltaRapidaRepuesto';
 
 export interface ModalConsumoProps {
   abierto: boolean;
@@ -56,6 +57,7 @@ export function ModalConsumo({
   const [errorCosto, setErrorCosto] = useState<string | null>(null);
   const [errorMotivo, setErrorMotivo] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [altaRapida, setAltaRapida] = useState(false);
 
   // Opciones de repuestos
   const { data: opcionesRepuestos } = useQuery<RepuestoOpcion[]>({
@@ -196,6 +198,8 @@ export function ModalConsumo({
             searchable
             required
           />
+          {/* MQ1, 4.5: el repuesto nuevo queda elegido */}
+          <EnlaceAltaRapida onClick={() => setAltaRapida(true)} />
 
           {repuestoElegido && (
             <CampoNumero
@@ -254,6 +258,16 @@ export function ModalConsumo({
           </Group>
         </Stack>
       </form>
+      <ModalAltaRapidaRepuesto
+        abierto={altaRapida}
+        onCerrar={() => setAltaRapida(false)}
+        onCreado={(r) => {
+          setAltaRapida(false);
+          setRepuestoId(String(r.id));
+          setErrorRepuesto(null);
+          setCostoUnitario(r.costo_unitario ?? '');
+        }}
+      />
     </Modal>
   );
 }

@@ -20,7 +20,11 @@ interface ExecuteResponse<T> {
   response: Response;
 }
 
-async function executeRequest<T>(path: string, options: RequestOptions = {}): Promise<ExecuteResponse<T>> {
+async function executeRequest<T>(
+  path: string,
+  options: RequestOptions = {},
+  comoArchivo = false
+): Promise<ExecuteResponse<T>> {
   const url = new URL(path.startsWith('http') ? path : `${BASE_URL}${path.startsWith('/') ? path : `/${path}`}`);
 
   if (options.params) {
@@ -88,7 +92,10 @@ async function executeRequest<T>(path: string, options: RequestOptions = {}): Pr
   }
 
   let data: T;
-  if (response.status === 204) {
+  if (comoArchivo) {
+    // MQ1, 4.3: los bytes tal cual, sin decodificar (así queda el BOM del CSV)
+    data = (await response.blob()) as unknown as T;
+  } else if (response.status === 204) {
     data = {} as T;
   } else {
     const contentType = response.headers.get('content-type');
@@ -154,6 +161,12 @@ export const clienteApi = {
     const { data, response } = await executeRequest<T>(path, { ...options, method: 'GET' });
     const totalHeader = response.headers.get('X-Total-Count') || response.headers.get('x-total-count');
     return { datos: data, total: totalHeader ? Number(totalHeader) : null };
+  },
+
+  /** MQ1, 4.3: un GET que devuelve un archivo, con el nombre de Content-Disposition (null si no viene). */
+  async descargar(path: string, options?: RequestOptions): Promise<{ archivo: Blob; disposicion: string | null }> {
+    const { data, response } = await executeRequest<Blob>(path, { ...options, method: 'GET' }, true);
+    return { archivo: data, disposicion: response.headers.get('Content-Disposition') };
   },
 
   async listar<T>(path: string, options?: RequestOptions): Promise<ListaResultado<T>> {

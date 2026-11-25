@@ -21,6 +21,7 @@ import {
 import { mensajeError } from '../../lib/errores';
 import { hoyLocal, validarCantidad } from '../../lib/repuestos';
 import { CampoNumero } from '../CampoNumero';
+import { EnlaceAltaRapida, ModalAltaRapidaRepuesto } from './ModalAltaRapidaRepuesto';
 
 export interface ModalPedidoProps {
   abierto: boolean;
@@ -63,6 +64,7 @@ export function ModalPedido({
   const [errorCantidad, setErrorCantidad] = useState<string | null>(null);
   const [errorFechas, setErrorFechas] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [altaRapida, setAltaRapida] = useState(false);
 
   // Opciones de repuestos
   const { data: opcionesRepuestos } = useQuery<RepuestoOpcion[]>({
@@ -202,6 +204,8 @@ export function ModalPedido({
             clearable
             searchable
           />
+          {/* MQ1, 4.5: el repuesto nuevo queda elegido */}
+          <EnlaceAltaRapida onClick={() => setAltaRapida(true)} />
 
           {!repuestoId && (
             <TextInput
@@ -286,6 +290,14 @@ export function ModalPedido({
           </Group>
         </Stack>
       </form>
+      <ModalAltaRapidaRepuesto
+        abierto={altaRapida}
+        onCerrar={() => setAltaRapida(false)}
+        onCreado={(r) => {
+          setAltaRapida(false);
+          setRepuestoId(String(r.id));
+        }}
+      />
     </Modal>
   );
 }

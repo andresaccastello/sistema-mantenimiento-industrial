@@ -85,7 +85,7 @@ const costoItem: CostoHistorialItem = {
 };
 
 const proveedorFila: ProveedorFila = {
-  "id": 13, "nombre": "ZZR1 Ferretería Prueba", "contacto": null, "telefono": null,
+  "id": 13, "nombre": "ZZR1 Ferretería Prueba", "codigo_externo": null, "contacto": null, "telefono": null,
   "email": "ventas@ejemplo.com", "notas": null, "activo": true, "repuestos_activos": 1
 };
 

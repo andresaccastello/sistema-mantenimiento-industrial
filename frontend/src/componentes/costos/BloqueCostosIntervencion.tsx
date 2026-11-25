@@ -21,6 +21,7 @@ import { nombreCompleto } from '../../lib/personas';
 import { etiquetaTipoCosto, filasResumenCostos, formatHoras } from '../../lib/costos';
 import { ModalCosto } from './ModalCosto';
 import { ModalAnularCosto } from './ModalAnularCosto';
+import { FichaProveedor } from '../repuestos/FichaProveedor';
 
 export interface BloqueCostosIntervencionProps {
   intervencionId: number;
@@ -117,7 +118,8 @@ export function BloqueCostosIntervencion({ intervencionId, estadoIntervencion }:
               </Table.Thead>
               <Table.Tbody>
                 {renglones.map((r) => {
-                  const quien = r.persona ? nombreCompleto(r.persona) : r.proveedor ? r.proveedor.nombre : null;
+                  // MQ1, 4.4: el proveedor de la mano de obra externa abre su ficha
+                  const quien = r.persona ? nombreCompleto(r.persona) : r.proveedor ? <FichaProveedor proveedor={r.proveedor} size="xs" /> : null;
                   return (
                     <Table.Tr key={r.id} style={{ opacity: r.anulado ? 0.6 : 1 }}>
                       <Table.Td style={{ textDecoration: r.anulado ? 'line-through' : 'none' }}>

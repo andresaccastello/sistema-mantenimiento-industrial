@@ -34,6 +34,8 @@ export function ModalProveedor({
   const [telefono, setTelefono] = useState('');
   const [email, setEmail] = useState('');
   const [notas, setNotas] = useState('');
+  const [codigoExterno, setCodigoExterno] = useState('');
+  const [errorCodigo, setErrorCodigo] = useState<string | null>(null);
 
   const [errorNombre, setErrorNombre] = useState<string | null>(null);
   const [errorEmail, setErrorEmail] = useState<string | null>(null);
@@ -43,6 +45,8 @@ export function ModalProveedor({
     if (abierto) {
       setErrorNombre(null);
       setErrorEmail(null);
+      setErrorCodigo(null);
+      setCodigoExterno(proveedor?.codigo_externo || '');
       if (proveedor) {
         setNombre(proveedor.nombre);
         setContacto(proveedor.contacto || '');
@@ -75,6 +79,7 @@ export function ModalProveedor({
     try {
       const payload = {
         nombre: nomTrim,
+        codigo_externo: codigoExterno.trim() ? codigoExterno.trim() : null,
         contacto: contacto.trim() ? contacto.trim() : null,
         telefono: telefono.trim() ? telefono.trim() : null,
         email: email.trim() ? email.trim() : null,
@@ -97,6 +102,10 @@ export function ModalProveedor({
       if (err instanceof ApiError) {
         if (err.codigo === 'NOMBRE_DUPLICADO') {
           setErrorNombre('Ya existe un proveedor con este nombre.');
+          return;
+        }
+        if (err.codigo === 'CODIGO_DUPLICADO') {
+          setErrorCodigo('Ya existe un proveedor con este código en SAE.');
           return;
         }
         if (err.codigo === 'EMAIL_INVALIDO') {
@@ -128,6 +137,18 @@ export function ModalProveedor({
               if (errorNombre) setErrorNombre(null);
             }}
             error={errorNombre}
+          />
+
+          <TextInput
+            label="Código en SAE"
+            placeholder="Opcional"
+            maxLength={40}
+            value={codigoExterno}
+            onChange={(e) => {
+              setCodigoExterno(e.currentTarget.value);
+              if (errorCodigo) setErrorCodigo(null);
+            }}
+            error={errorCodigo}
           />
 
           <TextInput

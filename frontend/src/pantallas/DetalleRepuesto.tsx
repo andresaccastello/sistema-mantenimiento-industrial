@@ -47,6 +47,7 @@ import { formatCantidad, formatFechaHora, formatMoneda } from '../lib/formato';
 import { nombreCompleto } from '../lib/personas';
 import { ApiError } from '../lib/errores';
 import { AYUDA_STOCK_MINIMO } from '../lib/avisos';
+import { FichaProveedor } from '../componentes/repuestos/FichaProveedor';
 import {
   infoEstadoStock,
   badgeColorStock,
@@ -271,7 +272,7 @@ export function DetalleRepuesto() {
           </Stack>
           <Stack gap={2}>
             <Text size="xs" c="dimmed">Proveedor habitual</Text>
-            <Text size="sm" fw={500}>{repuesto.proveedor?.nombre || '—'}</Text>
+            <Text size="sm" fw={500}>{repuesto.proveedor ? <FichaProveedor proveedor={repuesto.proveedor} fw={500} /> : '—'}</Text>
           </Stack>
           <Stack gap={2}>
             <Text size="xs" c="dimmed">Ubicación en planta / depósito</Text>

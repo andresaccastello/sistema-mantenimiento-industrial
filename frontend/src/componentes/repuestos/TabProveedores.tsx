@@ -88,11 +88,12 @@ export function TabProveedores({ filtros, onCambiarFiltros }: TabProveedoresProp
         </Paper>
       ) : (
         <Paper withBorder>
-          <Table.ScrollContainer minWidth={750}>
+          <Table.ScrollContainer minWidth={850}>
             <Table verticalSpacing="sm">
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Nombre</Table.Th>
+                  <Table.Th>Código en SAE</Table.Th>
                   <Table.Th>Contacto</Table.Th>
                   <Table.Th>Teléfono</Table.Th>
                   <Table.Th>Email</Table.Th>
@@ -116,6 +117,10 @@ export function TabProveedores({ filtros, onCambiarFiltros }: TabProveedoresProp
                           {prov.notas}
                         </Text>
                       )}
+                    </Table.Td>
+
+                    <Table.Td>
+                      <Text size="sm">{prov.codigo_externo || '—'}</Text>
                     </Table.Td>
 
                     <Table.Td>
