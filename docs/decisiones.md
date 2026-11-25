@@ -453,3 +453,14 @@ El circuito ya está cubierto: el operario hace la revisión como hoy, y si encu
 6. **El administrador ve el cumplimiento** por máquina y en Reportes.
 
 **Motivo:** en la entrevista del 19/11, GI-RE contó una rotura por una tarea de rutina que no se hizo durante meses. La D-024 suponía que estas tareas no aportaban información. El cliente mostró que sí, siempre que marcarlas no le agregue trabajo al operario.
+
+## D-034 — Avisos de parada crítica y de stock bajo
+
+**Estado:** Aceptada
+
+1. **Una parada crítica** es una detención de una máquina cuya criticidad tiene "prioridad alta". Avisa siempre al reportar la falla, y también al registrar una detención después, si así está configurado.
+2. **El aviso de stock bajo** sale cuando un movimiento deja un repuesto en su stock mínimo o por debajo. Avisa una vez hasta que se repone. Un repuesto sin mínimo no avisa.
+3. **Quién los recibe se decide con dos permisos,** por perfil o por usuario. El de paradas usa alcance por sectores. Solo reciben usuarios del sistema: no hay direcciones sueltas, y los proveedores externos no reciben avisos.
+4. **El mail sale según la regla de cada tipo de aviso.**
+
+**Motivo:** el profesor y GI-RE pidieron que en una parada crítica se entere enseguida gente fuera de mantenimiento, y que el sistema avise cuando falta un repuesto. Configurarlo con permisos y reglas que ya existen evita una pantalla nueva de destinatarios.

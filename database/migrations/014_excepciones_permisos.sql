@@ -13,7 +13,8 @@ SET usa_alcance = (codigo IN (
     'INTERVENCIONES_EDITAR',
     'REPORTES_CONSULTAR',
     'NOTIFICACIONES_FALLAS_RECIBIR',
-    'RUTINAS_REALIZAR'
+    'RUTINAS_REALIZAR',
+    'NOTIFICACIONES_CRITICAS_RECIBIR'
 ));
 
 -- 2. Restricción ck_auditoria_permisos_accion ampliada para aceptar acciones de excepciones

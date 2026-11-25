@@ -98,6 +98,8 @@ function usuarioPuedeVerIntervencion(
 
 export const REGLAS_EVENTOS_NOTIFICACION = [
   'FALLA_REGISTRADA',
+  // AV1: al abrirse una detención de una máquina crítica
+  'PARADA_CRITICA',
   'INTERVENCION_ASIGNADA',
   'INTERVENCION_REASIGNADA',
   'INTERVENCION_DESASIGNADA',
@@ -107,9 +109,27 @@ export const REGLAS_EVENTOS_NOTIFICACION = [
   'DETENCION_PENDIENTE_CONFIRMACION',
   // PV5: lo genera procesarVencimientos, no una intervención
   'PREVENTIVO_VENCIMIENTO',
+  // AV1: lo genera moverStock
+  'STOCK_BAJO',
   // LE1: también de procesarVencimientos, por las lecturas atrasadas
   'LECTURA_ATRASADA',
 ] as const;
+
+/** El usuario "Sistema" (PV5, D-025): el autor de los avisos de AV1. */
+export async function usuarioSistemaId(client: pg.PoolClient | pg.Pool): Promise<number> {
+  const r = await client.query('SELECT id FROM usuarios WHERE es_sistema LIMIT 1');
+  if (r.rows.length === 0) throw new Error('No existe el usuario del sistema');
+  return Number(r.rows[0].id);
+}
+
+/**
+ * AV1, 2: si una detención registrada después de reportar la falla (o al reabrir) también avisa
+ * PARADA_CRITICA. Sin la fila de configuración, el valor por omisión: TRUE.
+ */
+export async function avisaDetencionPosterior(client: pg.PoolClient): Promise<boolean> {
+  const r = await client.query('SELECT critico_por_detencion_posterior FROM configuracion_sistema WHERE id = 1');
+  return r.rows.length === 0 ? true : Boolean(r.rows[0].critico_por_detencion_posterior);
+}
 
 export type TipoEventoNotificable = (typeof REGLAS_EVENTOS_NOTIFICACION)[number];
 
@@ -140,6 +160,9 @@ export async function registrarNotificaciones(
 
   // Cache de intervenciones consultadas
   const cacheIntervenciones = new Map<number, IntervencionDatosNotif>();
+
+  // AV1, 2: PARADA_CRITICA la genera el usuario del sistema, así también la recibe quien reportó
+  let sistemaId: number | null = null;
 
   // Colección para inserción en lote (Etapa 7.1)
   const notificacionesAInsertar: Array<{
@@ -215,8 +238,37 @@ export async function registrarNotificaciones(
     const candidatos: CandidatoNotificacion[] = [];
     let nuevoResponsableId: number | null = null;
     let responsableAnteriorId: number | null = null;
+    // El autor de cada notificación del evento: quien actuó, salvo en PARADA_CRITICA
+    let autorId: number | null = actorId;
 
-    if (ev.tipo === 'FALLA_REGISTRADA') {
+    if (ev.tipo === 'PARADA_CRITICA') {
+      // AV1, 2: solo una máquina cuya criticidad tiene prioridad alta
+      if (!intervencion.criticidad_prioridad_alta) {
+        continue;
+      }
+      if (sistemaId === null) sistemaId = await usuarioSistemaId(client);
+      autorId = sistemaId;
+      const nombreMaq = [intervencion.maquina_codigo, intervencion.maquina_nombre].filter(Boolean).join(' · ');
+      const titulo = `Parada crítica: ${nombreMaq}`;
+      const mensaje = `Sector: ${sectorNombre}. ${descCorta}`;
+
+      const usuariosCriticas = await usuariosConPermiso(client, 'NOTIFICACIONES_CRITICAS_RECIBIR');
+      for (const u of usuariosCriticas) {
+        let alcanza = false;
+        if (u.alcance === 'TODAS') {
+          alcanza = true;
+        } else if (u.alcance === 'SECTORES') {
+          alcanza = u.sectores.includes(intervencion.sector_id);
+        } else if (u.alcance === 'PROPIAS') {
+          alcanza =
+            u.usuario_id === intervencion.creado_por_usuario_id ||
+            u.usuario_id === intervencion.responsable_usuario_id;
+        }
+        if (alcanza) {
+          candidatos.push({ usuarioId: u.usuario_id, titulo, mensaje, prioridad: 'ALTA' });
+        }
+      }
+    } else if (ev.tipo === 'FALLA_REGISTRADA') {
       const esCritica = Boolean(intervencion.criticidad_prioridad_alta);
       const prioridad: 'ALTA' | 'NORMAL' =
         intervencion.tiene_periodo_abierto || esCritica ? 'ALTA' : 'NORMAL';
@@ -368,8 +420,8 @@ export async function registrarNotificaciones(
     const procesadosEnEsteEvento = new Set<number>();
 
     for (const cand of candidatos) {
-      // 1. Quitar al actor (D-38 a)
-      if (actorId != null && cand.usuarioId === actorId) {
+      // 1. Quitar al actor (D-38 a). En PARADA_CRITICA el autor es el sistema: quien reportó también la recibe
+      if (autorId != null && cand.usuarioId === autorId) {
         continue;
       }
 
@@ -405,7 +457,7 @@ export async function registrarNotificaciones(
         mensaje: cand.mensaje,
         intervencionId: intervencion.id,
         maquinaId: intervencion.maquina_id,
-        actorId,
+        actorId: autorId,
       });
     }
   }

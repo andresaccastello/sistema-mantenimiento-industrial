@@ -184,6 +184,7 @@ test('Etapa API-05 — Excepciones de permisos por usuario (EX-01 a EX-10)', asy
         'REPORTES_CONSULTAR',
         'NOTIFICACIONES_FALLAS_RECIBIR',
         'RUTINAS_REALIZAR',
+        'NOTIFICACIONES_CRITICAS_RECIBIR',
       ]);
 
       for (const p of catalogo) {

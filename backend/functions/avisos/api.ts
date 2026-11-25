@@ -134,10 +134,16 @@ export async function obtenerConfiguracionAvisos(db = pool) {
   );
   const pendientes = Number(resPendientes.rows[0]?.count || 0);
 
+  // AV1, 2: si la detención registrada después de reportar la falla también avisa
+  const resCfg = await db.query('SELECT critico_por_detencion_posterior FROM configuracion_sistema WHERE id = 1');
+  const criticoPorDetencionPosterior =
+    resCfg.rows.length === 0 ? true : Boolean(resCfg.rows[0].critico_por_detencion_posterior);
+
   return {
     canales,
     reglas,
     pendientes,
+    critico_por_detencion_posterior: criticoPorDetencionPosterior,
   };
 }
 
@@ -148,6 +154,40 @@ configuracionAvisosApp.get('/', async (c) => {
     return c.json(data);
   } catch (err) {
     console.error('Error al obtener configuracion de avisos:', err);
+    return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
+  }
+});
+
+// PUT /api/configuracion/avisos (AV1, 2): el switch de las paradas críticas
+configuracionAvisosApp.put('/', async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'El cuerpo de la solicitud debe ser un objeto JSON', codigo: 'DATOS_INVALIDOS' }, 422);
+  }
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    return c.json({ error: 'El cuerpo de la solicitud debe ser un objeto JSON', codigo: 'DATOS_INVALIDOS' }, 422);
+  }
+  const b = body as Record<string, unknown>;
+  const desconocidos = Object.keys(b).filter((k) => k !== 'critico_por_detencion_posterior');
+  if (desconocidos.length > 0) {
+    return c.json({ error: `Campo desconocido: ${desconocidos.join(', ')}`, codigo: 'DATOS_INVALIDOS' }, 422);
+  }
+  if (typeof b.critico_por_detencion_posterior !== 'boolean') {
+    return c.json(
+      { error: 'El campo critico_por_detencion_posterior debe ser true o false', codigo: 'DATOS_INVALIDOS' },
+      422
+    );
+  }
+
+  try {
+    await pool.query('UPDATE configuracion_sistema SET critico_por_detencion_posterior = $1 WHERE id = 1', [
+      b.critico_por_detencion_posterior,
+    ]);
+    return c.json(await obtenerConfiguracionAvisos(), 200);
+  } catch (err) {
+    console.error('Error al actualizar el aviso de paradas críticas:', err);
     return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
   }
 });

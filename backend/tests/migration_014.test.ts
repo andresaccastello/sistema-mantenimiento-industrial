@@ -41,8 +41,8 @@ test('Migración 014 — Excepciones de permisos (usa_alcance y acciones de audi
       assert.ok(true, 'Segunda ejecución de migración 014 exitosa sin errores');
     });
 
-    // M14-03: usa_alcance exactamente en los 5 permisos
-    await t.test('M14-03: usa_alcance en TRUE exactamente en los cinco permisos especificados', async () => {
+    // M14-03: usa_alcance exactamente en los permisos que lo usan
+    await t.test('M14-03: usa_alcance en TRUE exactamente en los permisos especificados', async () => {
       const resCol = await client.query(`
         SELECT column_name, data_type, is_nullable, column_default
         FROM information_schema.columns
@@ -64,6 +64,7 @@ test('Migración 014 — Excepciones de permisos (usa_alcance y acciones de audi
         'REPORTES_CONSULTAR',
         'NOTIFICACIONES_FALLAS_RECIBIR',
         'RUTINAS_REALIZAR',
+        'NOTIFICACIONES_CRITICAS_RECIBIR',
       ]);
 
       for (const row of resPermisos.rows) {
@@ -75,7 +76,7 @@ test('Migración 014 — Excepciones de permisos (usa_alcance y acciones de audi
       }
 
       const encontradosTrue = resPermisos.rows.filter((r) => r.usa_alcance === true);
-      assert.strictEqual(encontradosTrue.length, 6, 'Debe haber exactamente 6 permisos con usa_alcance = TRUE');
+      assert.strictEqual(encontradosTrue.length, 7, 'Debe haber exactamente 7 permisos con usa_alcance = TRUE');
     });
 
     // M14-04: Restricción de auditoría dentro de una transacción con ROLLBACK

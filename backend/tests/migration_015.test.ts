@@ -128,10 +128,10 @@ test('Migración 015 — Avisos por email: base de datos', async (t) => {
       }
     });
 
-    // M15-03: notificacion_reglas tiene las 20 filas iniciales y restricciones (PV5: PREVENTIVO_VENCIMIENTO; LE1: LECTURA_ATRASADA)
-    await t.test('M15-03: notificacion_reglas tiene 20 filas con modos correctos y restricciones', async () => {
+    // M15-03: notificacion_reglas tiene las 24 filas iniciales y restricciones (PV5: PREVENTIVO_VENCIMIENTO; LE1: LECTURA_ATRASADA; AV1: PARADA_CRITICA y STOCK_BAJO)
+    await t.test('M15-03: notificacion_reglas tiene 24 filas con modos correctos y restricciones', async () => {
       const res = await client.query('SELECT tipo_evento, canal, modo FROM notificacion_reglas');
-      assert.strictEqual(res.rows.length, 20);
+      assert.strictEqual(res.rows.length, 24);
 
       const mapaModos: Record<string, Record<string, string>> = {};
       for (const row of res.rows) {

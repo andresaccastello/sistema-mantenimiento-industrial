@@ -12,6 +12,7 @@ import {
   validarBooleano,
 } from './repuestos/validaciones.ts';
 import { moverStock, cambiarCosto } from './repuestos/stock.ts';
+import { revisarStockBajo } from './repuestos/avisoStock.ts';
 import { parseEnteroTexto } from './validations.ts';
 
 const repuestosApp = new Hono();
@@ -547,6 +548,14 @@ repuestosApp.put('/:id', requirePermission('REPUESTOS_GESTIONAR'), async (c) => 
         throw new ErrorNegocio(409, 'CODIGO_DUPLICADO', 'Ya existe un repuesto con ese código');
       }
       throw dbErr;
+    }
+
+    // AV1, 3: si cambia el mínimo, la marca vuelve a NULL; si el stock ya está en el mínimo nuevo o
+    // por debajo, avisa ahora
+    const minimoAnterior = actual.stock_minimo !== null ? Number(actual.stock_minimo) : null;
+    if (stockMinimo !== minimoAnterior) {
+      await client.query('UPDATE repuestos SET stock_bajo_avisado_en = NULL WHERE id = $1', [id]);
+      await revisarStockBajo(client, id);
     }
 
     if (nuevoCosto !== undefined) {

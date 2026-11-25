@@ -4,6 +4,7 @@ import { UsuarioVisibilidad, puedeVerIntervencion } from './visibilidad.ts';
 import { validarFechaISO } from './fechas.ts';
 import { recalcularEstadoMaquina } from './recalculoMaquina.ts';
 import { registrarNotificaciones } from './auditoria.ts';
+import { avisaDetencionPosterior } from './notificaciones.ts';
 import { bloquearIntervencion } from './bloqueos.ts';
 import { parseId, validarMotivo } from '../validations.ts';
 
@@ -543,6 +544,11 @@ export async function registrarDetencionIntervencion(
       payload: { intervencionId, maquinaId: maquina.id, periodoId: Number(nuevoPeriodo.id) },
     },
   ];
+
+  // AV1, 2: la detención registrada después avisa PARADA_CRITICA si así está configurado
+  if (await avisaDetencionPosterior(client)) {
+    eventos.push({ tipo: 'PARADA_CRITICA', payload: { intervencionId } });
+  }
 
   if (recalculo.cambio) {
     eventos.push({

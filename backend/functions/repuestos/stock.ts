@@ -1,5 +1,6 @@
 import { PoolClient } from 'pg';
 import { ErrorNegocio } from '../intervenciones/errores.ts';
+import { revisarStockBajo } from './avisoStock.ts';
 
 export interface MoverStockParams {
   repuestoId: number;
@@ -88,6 +89,9 @@ export async function moverStock(client: PoolClient, params: MoverStockParams) {
     'UPDATE repuestos SET cantidad_disponible = $1, actualizado_en = NOW() WHERE id = $2',
     [nuevo, repuestoId]
   );
+
+  // AV1, 3: el aviso de stock bajo, con la fila ya bloqueada; nunca frena el movimiento
+  await revisarStockBajo(client, repuestoId);
 
   // 6. Devuelve el movimiento formateado
   const userRes = await client.query(

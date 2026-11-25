@@ -164,6 +164,10 @@ intervencionesApp.post('/', requirePermission('INTERVENCIONES_CREAR'), async (c)
       const eventos: Array<{ tipo: string; payload: any }> = [
         { tipo: 'FALLA_REGISTRADA', payload: { intervencionId: Number(intervencion.id) } },
       ];
+      // AV1, 2: con la máquina detenida, también PARADA_CRITICA (avisa solo si la criticidad es de prioridad alta)
+      if (detieneMaquina) {
+        eventos.push({ tipo: 'PARADA_CRITICA', payload: { intervencionId: Number(intervencion.id) } });
+      }
       if (estadoMaquinaFinal !== maquina.estado) {
         eventos.push({
           tipo: 'MAQUINA_CAMBIO_ESTADO',

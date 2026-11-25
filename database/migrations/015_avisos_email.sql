@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS notificacion_reglas (
 );
 
 -- Los tipos de aviso, con DROP/ADD para que una base existente tome los nuevos
--- (PV5: PREVENTIVO_VENCIMIENTO; LE1: LECTURA_ATRASADA)
+-- (PV5: PREVENTIVO_VENCIMIENTO; LE1: LECTURA_ATRASADA; AV1: PARADA_CRITICA y STOCK_BAJO)
 ALTER TABLE notificacion_reglas
     DROP CONSTRAINT IF EXISTS ck_notificacion_reglas_tipo_evento;
 
@@ -65,10 +65,12 @@ ALTER TABLE notificacion_reglas
         'INTERVENCION_REABIERTA',
         'DETENCION_PENDIENTE_CONFIRMACION',
         'PREVENTIVO_VENCIMIENTO',
-        'LECTURA_ATRASADA'
+        'LECTURA_ATRASADA',
+        'PARADA_CRITICA',
+        'STOCK_BAJO'
     ));
 
--- Valores iniciales para notificacion_reglas (20 filas, no sobrescribe cambios posteriores)
+-- Valores iniciales para notificacion_reglas (24 filas, no sobrescribe cambios posteriores)
 INSERT INTO notificacion_reglas (tipo_evento, canal, modo) VALUES
     ('FALLA_REGISTRADA', 'EMAIL', 'SOLO_ALTA'),
     ('FALLA_REGISTRADA', 'WHATSAPP', 'NUNCA'),
@@ -89,7 +91,11 @@ INSERT INTO notificacion_reglas (tipo_evento, canal, modo) VALUES
     ('PREVENTIVO_VENCIMIENTO', 'EMAIL', 'SOLO_ALTA'),
     ('PREVENTIVO_VENCIMIENTO', 'WHATSAPP', 'NUNCA'),
     ('LECTURA_ATRASADA', 'EMAIL', 'NUNCA'),
-    ('LECTURA_ATRASADA', 'WHATSAPP', 'NUNCA')
+    ('LECTURA_ATRASADA', 'WHATSAPP', 'NUNCA'),
+    ('PARADA_CRITICA', 'EMAIL', 'SIEMPRE'),
+    ('PARADA_CRITICA', 'WHATSAPP', 'NUNCA'),
+    ('STOCK_BAJO', 'EMAIL', 'SIEMPRE'),
+    ('STOCK_BAJO', 'WHATSAPP', 'NUNCA')
 ON CONFLICT (tipo_evento, canal) DO NOTHING;
 
 -- 4. Permiso CONFIGURACION_GESTIONAR

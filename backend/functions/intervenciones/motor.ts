@@ -7,6 +7,7 @@ import { bloquearIntervencion } from './bloqueos.ts';
 import { recalcularEstadoMaquina } from './recalculoMaquina.ts';
 import { registrarCambioEstado } from './cambioEstado.ts';
 import { registrarAuditoria, registrarNotificaciones } from './auditoria.ts';
+import { avisaDetencionPosterior } from './notificaciones.ts';
 import { AccionTransicion, buscarTransicion, transicionesDeAccion, TransicionDef } from './transiciones.ts';
 import { validarFechaISO } from './fechas.ts';
 import { validarDecisionRecuperacion, aplicarDecisionRecuperacion } from './recuperacion.ts';
@@ -1506,6 +1507,10 @@ export async function reabrirIntervencionServicio(
       tipo: 'DETENCION_REGISTRADA',
       payload: { intervencionId, maquinaId: maquina.id, periodoId: periodoVigente.id },
     });
+    // AV1, 2: reabrir con la máquina detenida, como una detención registrada después
+    if (await avisaDetencionPosterior(client)) {
+      eventos.push({ tipo: 'PARADA_CRITICA', payload: { intervencionId } });
+    }
   }
 
   if (recalculo.cambio) {

@@ -181,6 +181,7 @@ notificacionesApp.get('/', async (c) => {
         mensaje,
         intervencion_id,
         maquina_id,
+        repuesto_id,
         creada_en,
         (leida_en IS NOT NULL) AS leida,
         leida_en
@@ -210,6 +211,8 @@ notificacionesApp.get('/', async (c) => {
       mensaje: r.mensaje,
       intervencion_id: r.intervencion_id != null ? Number(r.intervencion_id) : null,
       maquina_id: r.maquina_id != null ? Number(r.maquina_id) : null,
+      // AV1: el enlace del aviso de stock bajo
+      repuesto_id: r.repuesto_id != null ? Number(r.repuesto_id) : null,
       creada_en: r.creada_en instanceof Date ? r.creada_en.toISOString() : r.creada_en,
       leida: Boolean(r.leida),
       leida_en: r.leida_en != null
