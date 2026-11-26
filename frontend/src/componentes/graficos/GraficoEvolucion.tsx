@@ -66,6 +66,7 @@ export function GraficoEvolucion({ titulo, datos, barras, linea, formatear, carg
           ]}
           withLegend
           legendProps={{ verticalAlign: 'bottom' }}
+          curveType="linear"
           withRightYAxis
           rightYAxisProps={{
             domain: [0, 1],

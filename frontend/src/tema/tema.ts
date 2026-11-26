@@ -81,6 +81,9 @@ export const variablesTema: CSSVariablesResolver = () => ({
     '--sm-graf-4': '#7c3aed',
     '--sm-graf-5': '#db2777',
     '--sm-graf-linea': '#334155',
+    // Correctivo y preventivo, los mismos en los gráficos y en las barras de Inactividad
+    '--sm-correctivo': 'var(--mantine-color-red-6)',
+    '--sm-preventivo': 'var(--mantine-color-blue-6)',
   },
   dark: {
     '--sm-titulo': '#f1f5f9',
@@ -113,5 +116,7 @@ export const variablesTema: CSSVariablesResolver = () => ({
     '--sm-graf-4': '#a78bfa',
     '--sm-graf-5': '#f472b6',
     '--sm-graf-linea': '#e2e8f0',
+    '--sm-correctivo': 'var(--mantine-color-red-6)',
+    '--sm-preventivo': 'var(--mantine-color-blue-6)',
   },
 });

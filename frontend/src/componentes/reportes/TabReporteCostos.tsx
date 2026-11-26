@@ -113,6 +113,7 @@ export function TabReporteCostos({ datos, evolucion, cargandoEvolucion = false, 
               color="var(--sm-graf-2)"
               formatear={formatPesos}
               formatearEje={formatPesosEje}
+              formatearEtiqueta={formatPesosEje}
               vacio={r.items.length === 0}
             />
           );

@@ -3,7 +3,7 @@ import { IconDownload } from '@tabler/icons-react';
 import { EvolucionReporte, IndicadoresReporte } from '../../api/tipos';
 import { GraficoEvolucion } from '../graficos/GraficoEvolucion';
 import { GraficoProporcion } from '../graficos/GraficoProporcion';
-import { formatEntero, formatTiempo } from '../../lib/graficos';
+import { COLOR_CORRECTIVO, COLOR_PREVENTIVO, formatEntero, formatTiempo } from '../../lib/graficos';
 import {
   evolucionVacia,
   filasEvolucion,
@@ -118,8 +118,8 @@ export function TabIndicadores({ data, rango, evolucion, cargandoEvolucion = fal
             titulo={evolucion ? tituloEvolucion(evolucion) : 'Fallas y preventivas hechas'}
             datos={evolucion ? filasEvolucion(evolucion) : []}
             barras={[
-              { clave: 'fallas', etiqueta: 'Fallas', color: 'var(--sm-graf-1)' },
-              { clave: 'preventivas', etiqueta: 'Preventivas hechas', color: 'var(--sm-graf-2)' },
+              { clave: 'fallas', etiqueta: 'Fallas', color: COLOR_CORRECTIVO },
+              { clave: 'preventivas', etiqueta: 'Preventivas hechas', color: COLOR_PREVENTIVO },
             ]}
             linea={{ clave: 'disponibilidad', etiqueta: 'Disponibilidad', color: 'var(--sm-graf-linea)' }}
             formatear={formatEntero}
@@ -129,7 +129,7 @@ export function TabIndicadores({ data, rango, evolucion, cargandoEvolucion = fal
         )}
         <GraficoProporcion
           titulo={tituloInactividadTipo(data)}
-          partes={partesInactividad(data).map((p, i) => ({ ...p, color: i === 0 ? 'var(--sm-graf-3)' : 'var(--sm-graf-2)' }))}
+          partes={partesInactividad(data)}
           formatear={formatTiempo}
         />
       </SimpleGrid>

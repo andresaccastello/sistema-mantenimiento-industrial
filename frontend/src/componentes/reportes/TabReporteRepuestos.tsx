@@ -111,6 +111,7 @@ export function TabReporteRepuestos({ datos }: TabReporteRepuestosProps) {
             color="var(--sm-graf-1)"
             formatear={r.porImporte ? formatPesos : formatEntero}
             formatearEje={r.porImporte ? formatPesosEje : formatEntero}
+            formatearEtiqueta={r.porImporte ? formatPesosEje : formatEntero}
             vacio={r.items.length === 0}
           />
         );

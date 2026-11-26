@@ -16,7 +16,7 @@ import { Link } from 'react-router';
 import { InactividadMaquinaFila } from '../../api/tipos';
 import { formatDuracion } from '../../lib/formato';
 import { GraficoRanking } from '../graficos/GraficoRanking';
-import { formatHorasEje, formatTiempo } from '../../lib/graficos';
+import { COLOR_CORRECTIVO, COLOR_PREVENTIVO, formatHorasEje, formatTiempo } from '../../lib/graficos';
 import { cantidadRanking, rankingInactividad } from '../../lib/graficosReportes';
 import { useEsCelular } from '../../lib/useEsCelular';
 import {
@@ -93,11 +93,11 @@ export function TabInactividad({ data, rango }: Props) {
         <Group gap="lg" align="center" wrap="wrap">
           {/* Leyenda de colores */}
           <Group gap="xs" align="center">
-            <ColorSwatch color="var(--mantine-color-red-6)" size={12} />
+            <ColorSwatch color={COLOR_CORRECTIVO} size={12} />
             <Text size="sm">Correctivo</Text>
           </Group>
           <Group gap="xs" align="center">
-            <ColorSwatch color="var(--mantine-color-blue-6)" size={12} />
+            <ColorSwatch color={COLOR_PREVENTIVO} size={12} />
             <Text size="sm">Preventivo</Text>
           </Group>
 
@@ -152,10 +152,10 @@ export function TabInactividad({ data, rango }: Props) {
                 <Box style={{ width: '100%' }}>
                   <Progress.Root size="md" radius="sm">
                     {b.correctivo > 0 && (
-                      <Progress.Section value={b.correctivo} color="red" />
+                      <Progress.Section value={b.correctivo} color={COLOR_CORRECTIVO} />
                     )}
                     {b.preventivo > 0 && (
-                      <Progress.Section value={b.preventivo} color="blue" />
+                      <Progress.Section value={b.preventivo} color={COLOR_PREVENTIVO} />
                     )}
                   </Progress.Root>
                 </Box>

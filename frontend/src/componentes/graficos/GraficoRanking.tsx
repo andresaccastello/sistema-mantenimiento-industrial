@@ -1,5 +1,5 @@
 import { BarChart } from '@mantine/charts';
-import { acortar, type ItemRanking } from '../../lib/graficos';
+import { acortar, sinCortes, type ItemRanking } from '../../lib/graficos';
 import { useEsCelular } from '../../lib/useEsCelular';
 import { COLOR_GRILLA, COLOR_TEXTO_EJES, TarjetaGrafico, contenidoTooltip, useAltoGrafico } from './TarjetaGrafico';
 
@@ -10,10 +10,12 @@ interface Props {
   /** El nombre del valor en el tooltip: "Horas paradas", "Importe". */
   nombreValor: string;
   color: string;
-  /** El valor al final de cada barra y en el tooltip. */
+  /** El valor en el tooltip y, si no se pasa `formatearEtiqueta`, al final de cada barra. */
   formatear: (n: number) => string;
   /** El eje de los valores, más corto. */
   formatearEje: (n: number) => string;
+  /** El valor al final de cada barra, si va distinto del tooltip (la plata, corta como en el eje). */
+  formatearEtiqueta?: (n: number) => string;
   /** Un eje fijo, por ejemplo [0, 1] para un porcentaje. */
   dominio?: [number, number];
   cargando?: boolean;
@@ -24,7 +26,18 @@ interface Props {
  * GR1, 3: barras horizontales, con la etiqueta de la máquina o el repuesto a la izquierda y el
  * valor formateado al final de cada barra.
  */
-export function GraficoRanking({ titulo, items, nombreValor, color, formatear, formatearEje, dominio, cargando, vacio }: Props) {
+export function GraficoRanking({
+  titulo,
+  items,
+  nombreValor,
+  color,
+  formatear,
+  formatearEje,
+  formatearEtiqueta = formatear,
+  dominio,
+  cargando,
+  vacio,
+}: Props) {
   const alto = useAltoGrafico();
   const celular = useEsCelular();
   const largo = celular ? 12 : 22;
@@ -49,7 +62,11 @@ export function GraficoRanking({ titulo, items, nombreValor, color, formatear, f
         yAxisProps={{ width: celular ? 84 : 150, tick: { fontSize: celular ? 10 : 12 }, interval: 0 }}
         xAxisProps={{ tickFormatter: formatearEje, domain: dominio }}
         withBarValueLabel
-        valueLabelProps={{ position: 'right', formatter: (v: unknown) => formatear(Number(v)), fontSize: celular ? 10 : 12 }}
+        valueLabelProps={{
+          position: 'right',
+          formatter: (v: unknown) => sinCortes(formatearEtiqueta(Number(v))),
+          fontSize: celular ? 10 : 12,
+        }}
         barChartProps={{ margin: { right: celular ? 56 : 80 } }}
         tooltipProps={{ content: tooltip }}
         maxBarWidth={24}

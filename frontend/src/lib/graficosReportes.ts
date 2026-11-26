@@ -13,6 +13,8 @@ import type {
 } from '../api/tipos';
 import {
   AgrupacionEvolucion,
+  COLOR_CORRECTIVO,
+  COLOR_PREVENTIVO,
   ItemRanking,
   conclusionEvolucion,
   conclusionProporcion,
@@ -86,10 +88,12 @@ export function evolucionVacia(evolucion: EvolucionReporte): boolean {
 }
 
 /** La inactividad correctiva contra la preventiva, de /indicadores. */
-export function partesInactividad(ind: IndicadoresReporte): { clave: string; etiqueta: string; valor: number }[] {
+export function partesInactividad(
+  ind: IndicadoresReporte
+): { clave: string; etiqueta: string; valor: number; color: string }[] {
   return [
-    { clave: 'correctiva', etiqueta: 'Correctiva', valor: ind.inactividad_correctiva_minutos },
-    { clave: 'preventiva', etiqueta: 'Preventiva', valor: ind.inactividad_preventiva_minutos },
+    { clave: 'correctiva', etiqueta: 'Correctiva', valor: ind.inactividad_correctiva_minutos, color: COLOR_CORRECTIVO },
+    { clave: 'preventiva', etiqueta: 'Preventiva', valor: ind.inactividad_preventiva_minutos, color: COLOR_PREVENTIVO },
   ];
 }
 

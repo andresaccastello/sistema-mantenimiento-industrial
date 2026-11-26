@@ -1,6 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  COLOR_CORRECTIVO,
+  COLOR_PREVENTIVO,
   UMBRAL_CONCENTRA,
   UMBRAL_ESTABLE,
   UMBRAL_PREDOMINA,
@@ -17,6 +19,7 @@ import {
   formatTiempo,
   hayValores,
   periodoCompleto,
+  sinCortes,
   topConOtras,
 } from './graficos';
 import {
@@ -27,6 +30,7 @@ import {
   filasEvolucion,
   filasTiemposGrafico,
   notaOtrosRecortado,
+  partesInactividad,
   rankingCumplimiento,
   rankingInactividad,
   rankingRepuestos,
@@ -36,6 +40,7 @@ import {
 import type {
   EvolucionReporte,
   GrupoCumplimientoPreventivos,
+  IndicadoresReporte,
   InactividadMaquinaFila,
   PeriodoEvolucion,
   ReporteRepuestosRespuesta,
@@ -320,5 +325,44 @@ describe('FE-191: los datos de los gráficos de cada pestaña (GR1, 4)', () => {
 
   it('el resumen del celular con 7 días', () => {
     assert.equal(TEXTO_EVOLUCION_7_DIAS, 'Elegí 30 días para ver la evolución');
+  });
+});
+
+describe('FE-192: colores, montos y etiquetas de los gráficos (GR1, correcciones)', () => {
+  it('correctivo y preventivo usan las variables de tema.ts, las mismas de Inactividad', () => {
+    assert.equal(COLOR_CORRECTIVO, 'var(--sm-correctivo)');
+    assert.equal(COLOR_PREVENTIVO, 'var(--sm-preventivo)');
+    const ind: IndicadoresReporte = {
+      desde: '2026-09-01T03:00:00.000Z',
+      hasta: '2026-10-01T03:00:00.000Z',
+      maquinas: 3,
+      minutos_periodo: 43_200,
+      inactividad_minutos: 300,
+      inactividad_correctiva_minutos: 240,
+      inactividad_preventiva_minutos: 60,
+      disponibilidad: 0.993,
+      fallas: 2,
+      correctivas_finalizadas: 2,
+      preventivas_finalizadas: 1,
+      mttr_minutos: 120,
+      respuesta_promedio_minutos: 30,
+      mtbf_horas: null,
+    };
+    assert.deepEqual(
+      partesInactividad(ind).map((p) => [p.clave, p.color]),
+      [
+        ['correctiva', COLOR_CORRECTIVO],
+        ['preventiva', COLOR_PREVENTIVO],
+      ]
+    );
+  });
+
+  it('el valor al final de la barra: la plata corta, como en el eje, y en un solo renglón', () => {
+    assert.equal(sinCortes(formatPesosEje(338_000)), '$ 338 mil');
+    assert.equal(sinCortes(formatPesosEje(1_500)), '$ 1,5 mil');
+    assert.equal(sinCortes(formatPesosEje(950)), '$ 950');
+    assert.equal(sinCortes(formatTiempo(150)), formatTiempo(150).replace(/ /g, ' '));
+    assert.ok(!sinCortes(formatTiempo(150)).includes(' '));
+    assert.equal(sinCortes('12'), '12');
   });
 });

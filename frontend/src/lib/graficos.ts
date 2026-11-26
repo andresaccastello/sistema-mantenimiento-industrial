@@ -6,6 +6,10 @@ import { formatCantidad, formatDuracion, formatMoneda } from './formato';
 
 export type AgrupacionEvolucion = 'mes' | 'semana';
 
+/** Correctivo y preventivo, en todos los gráficos y en Inactividad: definidos en tema.ts. */
+export const COLOR_CORRECTIVO = 'var(--sm-correctivo)';
+export const COLOR_PREVENTIVO = 'var(--sm-preventivo)';
+
 // ---------------------------------------------------------------------------
 // Top N con "Otras"
 // ---------------------------------------------------------------------------
@@ -188,6 +192,14 @@ export function formatTiempo(minutos: number): string {
 /** El eje y el tooltip de los porcentajes, desde una fracción: 0.974 -> "97,4 %". */
 export function formatPorcentajeFraccion(fraccion: number): string {
   return `${formatCantidad(Math.round(fraccion * 1000) / 10)} %`;
+}
+
+/**
+ * El valor al final de una barra, en un solo renglón: recharts parte la etiqueta en cada espacio
+ * cuando no le alcanza el lugar, así que los espacios pasan a ser espacios duros.
+ */
+export function sinCortes(texto: string): string {
+  return texto.replace(/ /g, ' ');
 }
 
 /** Algún valor distinto de 0: si no, va "Sin datos en el período". */

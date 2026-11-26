@@ -17,7 +17,7 @@ import {
 } from '../../lib/reportes';
 import { GraficoEvolucion } from '../graficos/GraficoEvolucion';
 import { GraficoRanking } from '../graficos/GraficoRanking';
-import { formatEntero, formatHorasEje, formatTiempo, hayValores } from '../../lib/graficos';
+import { COLOR_CORRECTIVO, formatEntero, formatHorasEje, formatTiempo, hayValores } from '../../lib/graficos';
 import {
   TEXTO_EVOLUCION_7_DIAS,
   filasFallasSemana,
@@ -210,7 +210,7 @@ export function ResumenCelular() {
         <GraficoEvolucion
           titulo={queryEvolucion.data ? tituloFallasSemana(queryEvolucion.data) : 'Fallas por semana'}
           datos={queryEvolucion.data ? filasFallasSemana(queryEvolucion.data) : []}
-          barras={[{ clave: 'fallas', etiqueta: 'Fallas', color: 'var(--sm-graf-1)' }]}
+          barras={[{ clave: 'fallas', etiqueta: 'Fallas', color: COLOR_CORRECTIVO }]}
           formatear={formatEntero}
           cargando={queryEvolucion.isLoading}
           vacio={queryEvolucion.data ? !hayValores(queryEvolucion.data.periodos.map((p) => p.fallas)) : false}
@@ -236,7 +236,7 @@ export function ResumenCelular() {
       )}
 
       <Text size="xs" c="dimmed" ta="center" mt="xs">
-        El detalle completo está en Reportes, desde la computadora.
+        Para ver todos los reportes, apagá el modo simple en Mi cuenta
       </Text>
     </Stack>
   );
