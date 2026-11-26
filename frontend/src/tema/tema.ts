@@ -74,6 +74,13 @@ export const variablesTema: CSSVariablesResolver = () => ({
     '--sm-texto-oscuro': 'var(--mantine-color-dark-text)',
     '--sm-aviso-texto': 'var(--mantine-color-orange-8)',
     '--sm-marca-texto': 'var(--mantine-color-marca-8)',
+    // GR1, 3: las series de los gráficos (el 1 es el verde de marca), la línea y nada más
+    '--sm-graf-1': '#059669',
+    '--sm-graf-2': '#2563eb',
+    '--sm-graf-3': '#d97706',
+    '--sm-graf-4': '#7c3aed',
+    '--sm-graf-5': '#db2777',
+    '--sm-graf-linea': '#334155',
   },
   dark: {
     '--sm-titulo': '#f1f5f9',
@@ -100,5 +107,11 @@ export const variablesTema: CSSVariablesResolver = () => ({
     '--sm-texto-oscuro': '#e2e8f0',
     '--sm-aviso-texto': 'var(--mantine-color-orange-4)',
     '--sm-marca-texto': 'var(--mantine-color-marca-3)',
+    '--sm-graf-1': '#34d399',
+    '--sm-graf-2': '#60a5fa',
+    '--sm-graf-3': '#fbbf24',
+    '--sm-graf-4': '#a78bfa',
+    '--sm-graf-5': '#f472b6',
+    '--sm-graf-linea': '#e2e8f0',
   },
 });
