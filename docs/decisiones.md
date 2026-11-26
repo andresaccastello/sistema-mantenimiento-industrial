@@ -474,3 +474,14 @@ El circuito ya está cubierto: el operario hace la revisión como hoy, y si encu
 3. **Solo se aceptan enlaces `http` o `https`.**
 
 **Motivo:** GI-RE pidió tener los manuales, fotos e instructivos a mano desde la máquina. Guardar archivos pesados en la base no tiene sentido, y el almacenamiento ya lo está resolviendo SAE.
+
+## D-036 — Gráficos en reportes
+
+**Estado:** Aceptada
+
+1. **Cada pestaña de Reportes muestra un gráfico arriba de su tabla.** La tabla sigue: es el detalle y la forma accesible de leer los mismos números.
+2. **La evolución por período sale de un pedido propio,** con las mismas cuentas que los totales.
+3. **Se usa `@mantine/charts`,** que dibuja con Recharts: toma el tema del sistema (claro, oscuro y los colores de marca) y se carga solo en Reportes.
+4. **En el celular hay gráficos chicos en el resumen,** porque hoy el sistema se usa mucho desde el teléfono.
+
+**Motivo:** el pedido del profesor. Además, los números sueltos no muestran tendencias ni comparaciones; un gráfico sí.

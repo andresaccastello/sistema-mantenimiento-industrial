@@ -42,6 +42,7 @@
     "test:tiempos": "tsx --env-file=.env --test backend/tests/tiempos.test.ts",
     "test:reportes": "tsx --env-file=.env --test backend/tests/reportes.test.ts",
     "test:reportes-preventivos": "tsx --env-file=.env --test backend/tests/reportes_preventivos.test.ts",
+    "test:reportes-evolucion": "tsx --env-file=.env --test backend/tests/reportes_evolucion.test.ts",
     "test:motor": "tsx --env-file=.env --test backend/tests/motor_estados.test.ts",
     "test:cierres": "tsx --env-file=.env --test backend/tests/motor_cierres.test.ts",
     "test:etapa6": "tsx --env-file=.env --test backend/tests/reapertura_eliminacion.test.ts",
