@@ -3,6 +3,7 @@ import { Paper, SegmentedControl, Skeleton, Stack, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { clienteApi } from '../../api/cliente';
 import type {
+  EvolucionReporte,
   InactividadMaquinaFila,
   IndicadoresReporte,
   ReporteCostosRespuesta,
@@ -14,6 +15,15 @@ import {
   rangoResumenCelular,
   tarjetasResumenCelular,
 } from '../../lib/reportes';
+import { GraficoEvolucion } from '../graficos/GraficoEvolucion';
+import { GraficoRanking } from '../graficos/GraficoRanking';
+import { formatEntero, formatHorasEje, formatTiempo, hayValores } from '../../lib/graficos';
+import {
+  TEXTO_EVOLUCION_7_DIAS,
+  filasFallasSemana,
+  rankingInactividad,
+  tituloFallasSemana,
+} from '../../lib/graficosReportes';
 
 export function ResumenCelular() {
   const { usuario, tienePermiso } = useAuth();
@@ -61,6 +71,17 @@ export function ResumenCelular() {
   const queryInactividad = useQuery<InactividadMaquinaFila[]>({
     queryKey: ['reportes', 'inactividad', 'celular', paramsBase],
     queryFn: () => clienteApi.get<InactividadMaquinaFila[]>('/api/reportes/inactividad', { params: paramsBase }),
+  });
+
+  // GR1, 4: la evolución de las fallas por semana; con 7 días hay una sola semana y no se pide
+  const paramsEvolucion = useMemo(
+    () => ({ desde: rango.desde, hasta: rango.hasta, agrupar: 'semana' }),
+    [rango.desde, rango.hasta]
+  );
+  const queryEvolucion = useQuery<EvolucionReporte>({
+    queryKey: ['reportes', 'evolucion', 'celular', paramsEvolucion],
+    queryFn: () => clienteApi.get<EvolucionReporte>('/api/reportes/evolucion', { params: paramsEvolucion }),
+    enabled: periodo !== '7d',
   });
 
   const tarjetas = useMemo(
@@ -173,6 +194,46 @@ export function ResumenCelular() {
           );
         })}
       </Stack>
+
+      {/* GR1, 4: debajo de las tarjetas, dos gráficos chicos */}
+      {periodo === '7d' ? (
+        <Paper withBorder p="md" radius="md">
+          <Text size="sm" c="var(--sm-tenue)" ta="center">
+            {TEXTO_EVOLUCION_7_DIAS}
+          </Text>
+        </Paper>
+      ) : queryEvolucion.isError ? (
+        <Text size="sm" c="var(--sm-peligro)">
+          No se pudo cargar la evolución.
+        </Text>
+      ) : (
+        <GraficoEvolucion
+          titulo={queryEvolucion.data ? tituloFallasSemana(queryEvolucion.data) : 'Fallas por semana'}
+          datos={queryEvolucion.data ? filasFallasSemana(queryEvolucion.data) : []}
+          barras={[{ clave: 'fallas', etiqueta: 'Fallas', color: 'var(--sm-graf-1)' }]}
+          formatear={formatEntero}
+          cargando={queryEvolucion.isLoading}
+          vacio={queryEvolucion.data ? !hayValores(queryEvolucion.data.periodos.map((p) => p.fallas)) : false}
+        />
+      )}
+
+      {queryInactividad.isError ? null : (
+        (() => {
+          const r = rankingInactividad(queryInactividad.data ?? [], 5);
+          return (
+            <GraficoRanking
+              titulo={r.titulo}
+              items={r.items}
+              nombreValor="Tiempo parada"
+              color="var(--sm-graf-3)"
+              formatear={formatTiempo}
+              formatearEje={formatHorasEje}
+              cargando={queryInactividad.isLoading}
+              vacio={r.items.length === 0}
+            />
+          );
+        })()
+      )}
 
       <Text size="xs" c="dimmed" ta="center" mt="xs">
         El detalle completo está en Reportes, desde la computadora.

@@ -620,6 +620,40 @@ export interface InactividadMaquinaFila {
   intervenciones_con_detencion: number;
 }
 
+/** GR1, 1: el costo de un período de la evolución, con los mismos tipos que `/reportes/costos`. */
+export interface CostoPeriodoEvolucion {
+  repuestos: number;
+  mano_obra: number;
+  servicio_externo: number;
+  transporte: number;
+  otro: number;
+  ajuste: number;
+  total: number;
+}
+
+/** GR1, 1: un período de `GET /api/reportes/evolucion`. */
+export interface PeriodoEvolucion {
+  /** YYYY-MM-DD; el primero y el último, recortados a desde y hasta. */
+  inicio: string;
+  fin: string;
+  fallas: number;
+  correctivas_finalizadas: number;
+  preventivas_finalizadas: number;
+  inactividad_minutos: number;
+  /** Fracción de 0 a 1, como en /indicadores; null sin máquinas. */
+  disponibilidad: number | null;
+  /** null sin COSTOS_VER. */
+  costo: CostoPeriodoEvolucion | null;
+}
+
+/** GR1, 1: `GET /api/reportes/evolucion`. */
+export interface EvolucionReporte {
+  desde: string;
+  hasta: string;
+  agrupar: 'mes' | 'semana';
+  periodos: PeriodoEvolucion[];
+}
+
 export interface TiemposAgrupadosFila {
   grupo: string;
   cantidad: number;

@@ -9,6 +9,7 @@ import {
   Planta,
   SectorLista,
   IndicadoresReporte,
+  EvolucionReporte,
   InactividadMaquinaFila,
   TiemposAgrupadosFila,
   ReporteCostosRespuesta,
@@ -105,6 +106,13 @@ function ReportesEscritorio() {
     queryKey: ['reportes', 'indicadores', queryParams],
     queryFn: () => clienteApi.get<IndicadoresReporte>('/api/reportes/indicadores', { params: queryParams }),
     enabled: vista === 'indicadores',
+  });
+
+  // GR1, 4: la evolución por período, para Indicadores y Costos
+  const queryEvolucion = useQuery<EvolucionReporte>({
+    queryKey: ['reportes', 'evolucion', queryParams],
+    queryFn: () => clienteApi.get<EvolucionReporte>('/api/reportes/evolucion', { params: queryParams }),
+    enabled: vista === 'indicadores' || vista === 'costos',
   });
 
   const queryInactividad = useQuery<InactividadMaquinaFila[]>({
@@ -216,7 +224,13 @@ function ReportesEscritorio() {
             </Alert>
           )}
           {queryIndicadores.data && (
-            <TabIndicadores data={queryIndicadores.data} rango={rango} />
+            <TabIndicadores
+              data={queryIndicadores.data}
+              rango={rango}
+              evolucion={queryEvolucion.data}
+              cargandoEvolucion={queryEvolucion.isLoading}
+              errorEvolucion={queryEvolucion.isError}
+            />
           )}
         </Tabs.Panel>
 
@@ -283,7 +297,14 @@ function ReportesEscritorio() {
                 <Text size="sm">No se pudo cargar el reporte de costos.</Text>
               </Alert>
             )}
-            {queryCostos.data && <TabReporteCostos datos={queryCostos.data} />}
+            {queryCostos.data && (
+              <TabReporteCostos
+                datos={queryCostos.data}
+                evolucion={queryEvolucion.data}
+                cargandoEvolucion={queryEvolucion.isLoading}
+                errorEvolucion={queryEvolucion.isError}
+              />
+            )}
           </Tabs.Panel>
         )}
 

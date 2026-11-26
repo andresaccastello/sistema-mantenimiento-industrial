@@ -10,6 +10,9 @@ import {
 import { IconDownload } from '@tabler/icons-react';
 import { TiemposAgrupadosFila } from '../../api/tipos';
 import { formatDuracion } from '../../lib/formato';
+import { GraficoApilado } from '../graficos/GraficoApilado';
+import { formatHorasEje, formatTiempo } from '../../lib/graficos';
+import { filasTiemposGrafico, tituloTiempos } from '../../lib/graficosReportes';
 import {
   AgrupacionTiempos,
   aCsv,
@@ -70,6 +73,21 @@ export function TabTiempos({ data, agrupar, onAgruparChange, rango }: Props) {
           Descargar CSV
         </Button>
       </Group>
+
+      {/* GR1, 4: los promedios de cada grupo, según el agrupar elegido */}
+      <GraficoApilado
+        titulo={tituloTiempos(agrupar)}
+        datos={filasTiemposGrafico(data, agrupar)}
+        series={[
+          { clave: 'espera', etiqueta: 'Espera', color: 'var(--sm-graf-3)' },
+          { clave: 'trabajo', etiqueta: 'Trabajo', color: 'var(--sm-graf-1)' },
+          { clave: 'total', etiqueta: 'Total', color: 'var(--sm-graf-2)' },
+        ]}
+        agrupadas
+        formatear={formatTiempo}
+        formatearEje={formatHorasEje}
+        vacio={data.length === 0}
+      />
 
       {filasVisuales.length === 0 ? (
         <Text c="dimmed" my="md">

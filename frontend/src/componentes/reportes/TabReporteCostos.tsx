@@ -2,7 +2,19 @@ import { useMemo } from 'react';
 import { Link } from 'react-router';
 import { Stack, SimpleGrid, Paper, Text, Title, Table, Group, Button } from '@mantine/core';
 import { IconDownload, IconReceipt } from '@tabler/icons-react';
-import { ReporteCostosRespuesta } from '../../api/tipos';
+import { EvolucionReporte, ReporteCostosRespuesta } from '../../api/tipos';
+import { GraficoApilado } from '../graficos/GraficoApilado';
+import { GraficoRanking } from '../graficos/GraficoRanking';
+import { formatPesos, formatPesosEje } from '../../lib/graficos';
+import {
+  cantidadRanking,
+  costoPeriodoVacio,
+  filasCostoPeriodo,
+  notaOtrosRecortado,
+  rankingCostosMaquinas,
+  tituloCostoPeriodo,
+} from '../../lib/graficosReportes';
+import { useEsCelular } from '../../lib/useEsCelular';
 import { formatMoneda } from '../../lib/formato';
 import { nombreCompleto } from '../../lib/personas';
 import { formatHoras } from '../../lib/costos';
@@ -10,6 +22,10 @@ import { aCsv, descargarCsv, nombreArchivoReporte, filasReporteCostos } from '..
 
 export interface TabReporteCostosProps {
   datos?: ReporteCostosRespuesta | null;
+  /** GR1, 4: el costo por período, de /reportes/evolucion con los mismos filtros. */
+  evolucion?: EvolucionReporte;
+  cargandoEvolucion?: boolean;
+  errorEvolucion?: boolean;
 }
 
 const sinCorte = { whiteSpace: 'nowrap' as const };
@@ -29,7 +45,8 @@ function Tarjeta({ titulo, importe }: { titulo: string; importe: number }) {
   );
 }
 
-export function TabReporteCostos({ datos }: TabReporteCostosProps) {
+export function TabReporteCostos({ datos, evolucion, cargandoEvolucion = false, errorEvolucion = false }: TabReporteCostosProps) {
+  const celular = useEsCelular();
   const { columnas, filas } = useMemo(() => filasReporteCostos(datos), [datos]);
 
   if (!datos || datos.intervenciones === 0) {
@@ -59,6 +76,47 @@ export function TabReporteCostos({ datos }: TabReporteCostosProps) {
         <Tarjeta titulo="Repuestos" importe={por_tipo.repuestos} />
         <Tarjeta titulo="Mano de obra" importe={por_tipo.mano_obra} />
         <Tarjeta titulo="Otros" importe={otros} />
+      </SimpleGrid>
+
+      {/* GR1, 4: el costo por período y las máquinas que más costaron, lado a lado en la computadora */}
+      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+        {errorEvolucion ? (
+          <Paper p="md" withBorder>
+            <Text size="sm" c="var(--sm-peligro)">
+              No se pudo cargar el costo por período.
+            </Text>
+          </Paper>
+        ) : (
+          <GraficoApilado
+            titulo={evolucion ? tituloCostoPeriodo(evolucion) : 'Costo por período, por tipo'}
+            datos={evolucion ? filasCostoPeriodo(evolucion) : []}
+            series={[
+              { clave: 'repuestos', etiqueta: 'Repuestos', color: 'var(--sm-graf-1)' },
+              { clave: 'mano_obra', etiqueta: 'Mano de obra', color: 'var(--sm-graf-2)' },
+              { clave: 'servicio_externo', etiqueta: 'Servicio externo', color: 'var(--sm-graf-3)' },
+              { clave: 'otros', etiqueta: 'Otros', color: 'var(--sm-graf-4)' },
+            ]}
+            formatear={formatPesos}
+            formatearEje={formatPesosEje}
+            nota={(f) => notaOtrosRecortado({ otros_real: Number(f.otros_real), otros_recortado: f.otros_recortado === true })}
+            cargando={cargandoEvolucion || !evolucion}
+            vacio={evolucion ? costoPeriodoVacio(evolucion) : false}
+          />
+        )}
+        {(() => {
+          const r = rankingCostosMaquinas(datos, cantidadRanking(celular));
+          return (
+            <GraficoRanking
+              titulo={r.titulo}
+              items={r.items}
+              nombreValor="Costo"
+              color="var(--sm-graf-2)"
+              formatear={formatPesos}
+              formatearEje={formatPesosEje}
+              vacio={r.items.length === 0}
+            />
+          );
+        })()}
       </SimpleGrid>
 
       {/* Por máquina */}

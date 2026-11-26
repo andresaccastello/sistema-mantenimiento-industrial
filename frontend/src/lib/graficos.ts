@@ -160,11 +160,12 @@ export function formatEntero(n: number): string {
   return formatCantidad(Math.round(n));
 }
 
-/** El eje de la plata, corto: "$ 950", "$ 120 mil", "$ 1,2 M". */
+/** El eje de la plata, corto: "$ 950", "$ 1,5 mil", "$ 120 mil", "$ 1,2 M". */
 export function formatPesosEje(n: number): string {
   const abs = Math.abs(n);
   const signo = n < 0 ? '-' : '';
   if (abs >= 1_000_000) return `${signo}$ ${formatCantidad(Math.round(abs / 100_000) / 10)} M`;
+  if (abs >= 1_000 && abs < 10_000) return `${signo}$ ${formatCantidad(Math.round(abs / 100) / 10)} mil`;
   if (abs >= 1_000) return `${signo}$ ${formatCantidad(Math.round(abs / 1_000))} mil`;
   return `${signo}$ ${formatCantidad(Math.round(abs))}`;
 }

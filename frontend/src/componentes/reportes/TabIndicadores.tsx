@@ -1,6 +1,16 @@
 import { SimpleGrid, Paper, Text, Stack, Group, Button } from '@mantine/core';
 import { IconDownload } from '@tabler/icons-react';
-import { IndicadoresReporte } from '../../api/tipos';
+import { EvolucionReporte, IndicadoresReporte } from '../../api/tipos';
+import { GraficoEvolucion } from '../graficos/GraficoEvolucion';
+import { GraficoProporcion } from '../graficos/GraficoProporcion';
+import { formatEntero, formatTiempo } from '../../lib/graficos';
+import {
+  evolucionVacia,
+  filasEvolucion,
+  partesInactividad,
+  tituloEvolucion,
+  tituloInactividadTipo,
+} from '../../lib/graficosReportes';
 import { formatDuracion } from '../../lib/formato';
 import {
   formatPorcentaje,
@@ -13,6 +23,10 @@ import {
 interface Props {
   data: IndicadoresReporte;
   rango: { desde: string; hasta: string };
+  /** GR1, 4: la evolución, de /reportes/evolucion con los mismos filtros. */
+  evolucion?: EvolucionReporte;
+  cargandoEvolucion?: boolean;
+  errorEvolucion?: boolean;
 }
 
 interface TarjetaIndicador {
@@ -23,7 +37,7 @@ interface TarjetaIndicador {
   definicion: string;
 }
 
-export function TabIndicadores({ data, rango }: Props) {
+export function TabIndicadores({ data, rango, evolucion, cargandoEvolucion = false, errorEvolucion = false }: Props) {
   const tarjetas: TarjetaIndicador[] = [
     {
       id: 'disponibilidad',
@@ -90,6 +104,35 @@ export function TabIndicadores({ data, rango }: Props) {
           Descargar CSV
         </Button>
       </Group>
+
+      {/* GR1, 4: la evolución y la inactividad por tipo, lado a lado en la computadora */}
+      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+        {errorEvolucion ? (
+          <Paper withBorder p="md" radius="sm">
+            <Text size="sm" c="var(--sm-peligro)">
+              No se pudo cargar la evolución.
+            </Text>
+          </Paper>
+        ) : (
+          <GraficoEvolucion
+            titulo={evolucion ? tituloEvolucion(evolucion) : 'Fallas y preventivas hechas'}
+            datos={evolucion ? filasEvolucion(evolucion) : []}
+            barras={[
+              { clave: 'fallas', etiqueta: 'Fallas', color: 'var(--sm-graf-1)' },
+              { clave: 'preventivas', etiqueta: 'Preventivas hechas', color: 'var(--sm-graf-2)' },
+            ]}
+            linea={{ clave: 'disponibilidad', etiqueta: 'Disponibilidad', color: 'var(--sm-graf-linea)' }}
+            formatear={formatEntero}
+            cargando={cargandoEvolucion || !evolucion}
+            vacio={evolucion ? evolucionVacia(evolucion) : false}
+          />
+        )}
+        <GraficoProporcion
+          titulo={tituloInactividadTipo(data)}
+          partes={partesInactividad(data).map((p, i) => ({ ...p, color: i === 0 ? 'var(--sm-graf-3)' : 'var(--sm-graf-2)' }))}
+          formatear={formatTiempo}
+        />
+      </SimpleGrid>
 
       <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
         {tarjetas.map((t) => (

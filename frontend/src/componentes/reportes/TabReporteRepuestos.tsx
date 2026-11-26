@@ -15,6 +15,10 @@ import { IconDownload, IconPackage } from '@tabler/icons-react';
 import { clienteApi } from '../../api/cliente';
 import { ReporteRepuestosRespuesta } from '../../api/tipos';
 import { formatCantidad, formatMoneda } from '../../lib/formato';
+import { GraficoRanking } from '../graficos/GraficoRanking';
+import { formatEntero, formatPesos, formatPesosEje } from '../../lib/graficos';
+import { cantidadRanking, rankingRepuestos } from '../../lib/graficosReportes';
+import { useEsCelular } from '../../lib/useEsCelular';
 import {
   aCsv,
   descargarCsv,
@@ -29,6 +33,7 @@ export interface TabReporteRepuestosProps {
 }
 
 export function TabReporteRepuestos({ datos }: TabReporteRepuestosProps) {
+  const celular = useEsCelular();
   const sinDatos = !datos || datos.consumos === 0;
 
   const { columnas, filas } = useMemo(() => {
@@ -94,6 +99,22 @@ export function TabReporteRepuestos({ datos }: TabReporteRepuestosProps) {
           </Stack>
         </Paper>
       </SimpleGrid>
+
+      {/* GR1, 4: los 10 con más importe (5 en el celular); sin importes, por consumos */}
+      {(() => {
+        const r = rankingRepuestos(datos, cantidadRanking(celular));
+        return (
+          <GraficoRanking
+            titulo={r.titulo}
+            items={r.items}
+            nombreValor={r.porImporte ? 'Importe' : 'Consumos'}
+            color="var(--sm-graf-1)"
+            formatear={r.porImporte ? formatPesos : formatEntero}
+            formatearEje={r.porImporte ? formatPesosEje : formatEntero}
+            vacio={r.items.length === 0}
+          />
+        );
+      })()}
 
       {/* Tabla 1: Más usados */}
       <Paper p="md" withBorder>

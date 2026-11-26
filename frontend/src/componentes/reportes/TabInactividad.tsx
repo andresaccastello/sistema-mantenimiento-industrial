@@ -15,6 +15,10 @@ import { IconDownload } from '@tabler/icons-react';
 import { Link } from 'react-router';
 import { InactividadMaquinaFila } from '../../api/tipos';
 import { formatDuracion } from '../../lib/formato';
+import { GraficoRanking } from '../graficos/GraficoRanking';
+import { formatHorasEje, formatTiempo } from '../../lib/graficos';
+import { cantidadRanking, rankingInactividad } from '../../lib/graficosReportes';
+import { useEsCelular } from '../../lib/useEsCelular';
 import {
   barrasInactividad,
   aCsv,
@@ -30,6 +34,8 @@ interface Props {
 export function TabInactividad({ data, rango }: Props) {
   const [incluirSinDetenciones, setIncluirSinDetenciones] = useState(false);
   const [mostrarTodas, setMostrarTodas] = useState(false);
+  // GR1, 4: las 10 máquinas con más horas paradas (5 en el celular)
+  const ranking = rankingInactividad(data, cantidadRanking(useEsCelular()));
 
   // Filtrar según el switch
   const filasFiltradas = incluirSinDetenciones
@@ -72,6 +78,16 @@ export function TabInactividad({ data, rango }: Props) {
 
   return (
     <Stack gap="md" mt="md">
+      <GraficoRanking
+        titulo={ranking.titulo}
+        items={ranking.items}
+        nombreValor="Tiempo parada"
+        color="var(--sm-graf-3)"
+        formatear={formatTiempo}
+        formatearEje={formatHorasEje}
+        vacio={ranking.items.length === 0}
+      />
+
       {/* Controles superiores: leyenda, switch y botón descargar CSV */}
       <Group justify="space-between" align="center" wrap="wrap">
         <Group gap="lg" align="center" wrap="wrap">

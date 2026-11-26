@@ -24,6 +24,9 @@ import {
   textoAtrasoPromedio,
   textoCumplimiento,
 } from '../../lib/reportes';
+import { GraficoRanking } from '../graficos/GraficoRanking';
+import { cantidadRanking, rankingCumplimiento } from '../../lib/graficosReportes';
+import { useEsCelular } from '../../lib/useEsCelular';
 
 interface TabPreventivosProps {
   datos?: ReportePreventivosRespuesta;
@@ -46,6 +49,7 @@ export function TabPreventivos({
   desde,
   hasta,
 }: TabPreventivosProps) {
+  const celular = useEsCelular();
   if (cargando) {
     return (
       <Stack gap="md" mt="md">
@@ -179,6 +183,23 @@ export function TabPreventivos({
           Descargar CSV
         </Button>
       </Group>
+
+      {/* GR1, 4: el cumplimiento de cada grupo, de 0 a 100 % */}
+      {(() => {
+        const r = rankingCumplimiento(grupos, agrupar, cantidadRanking(celular));
+        return (
+          <GraficoRanking
+            titulo={r.titulo}
+            items={r.items}
+            nombreValor="Cumplimiento"
+            color="var(--sm-graf-1)"
+            formatear={textoCumplimiento}
+            formatearEje={(n) => `${Math.round(n)} %`}
+            dominio={[0, 100]}
+            vacio={r.items.length === 0}
+          />
+        );
+      })()}
 
       {/* Tabla o mensaje vacío */}
       {sinDatos ? (
