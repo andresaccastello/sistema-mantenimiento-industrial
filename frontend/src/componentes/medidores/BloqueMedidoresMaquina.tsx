@@ -200,13 +200,18 @@ export function BloqueMedidoresMaquina({ maquinaId, maquinaActiva }: Props) {
                   {lista.map((m) => (
                     <Table.Tr key={m.id}>
                       <Table.Td>
-                        <Group gap="xs" wrap="nowrap">
-                          <Text size="sm" fw={600}>
+                        {/* Las insignias debajo del nombre, para no pisar la columna Unidad */}
+                        <Stack gap={4} align="flex-start">
+                          <Text size="sm" fw={600} style={{ overflowWrap: 'anywhere' }}>
                             {m.nombre}
                           </Text>
-                          {insigniaInactivo(m)}
-                          {insigniaAtrasado(m)}
-                        </Group>
+                          {(!m.activo || m.atraso_por_dias) && (
+                            <Group gap={4} wrap="wrap">
+                              {insigniaInactivo(m)}
+                              {insigniaAtrasado(m)}
+                            </Group>
+                          )}
+                        </Stack>
                       </Table.Td>
                       <Table.Td>
                         <Text size="sm">{m.unidad}</Text>

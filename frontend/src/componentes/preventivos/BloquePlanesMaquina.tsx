@@ -3,10 +3,13 @@ import { useQuery } from '@tanstack/react-query';
 import { Paper, Stack, Group, Title, Button, Divider, Table, Text, Anchor, Badge, Skeleton } from '@mantine/core';
 import { IconPlus } from '@tabler/icons-react';
 import { clienteApi } from '../../api/cliente';
-import type { PlanLista } from '../../api/tipos';
+import type { PlanLista, UsoTareaPlan, VencimientosRespuesta } from '../../api/tipos';
 import { useAuth } from '../../auth/AuthContext';
 import { nombreCompleto } from '../../lib/personas';
 import { formatFechaDia, textoPendientes } from '../../lib/preventivos';
+import { ESTADOS_PROXIMA_PLAN, proximasPorUso } from '../../lib/proximaPlan';
+import { CeldaProxima } from './CeldaProxima';
+import { TextoEstimada } from './TextoEstimada';
 
 /** R5: los planes preventivos de la máquina, solo con PLANES_GESTIONAR (PV2, 5.4). */
 export function BloquePlanesMaquina({ maquinaId }: { maquinaId: number }) {
@@ -18,6 +21,17 @@ export function BloquePlanesMaquina({ maquinaId }: { maquinaId: number }) {
     queryFn: () => clienteApi.get<PlanLista[]>('/api/planes', { params: { maquina_id: maquinaId, all: 'true' } }),
     enabled: puede,
   });
+
+  // La próxima por uso de cada plan, como en el detalle del plan (HE1): de sus tareas en los vencimientos
+  const { data: vencimientos } = useQuery<VencimientosRespuesta>({
+    queryKey: ['planes', 'maquina', maquinaId, 'proximas-uso'],
+    queryFn: () =>
+      clienteApi.get<VencimientosRespuesta>('/api/planes/vencimientos', {
+        params: { maquina_id: maquinaId, estado: ESTADOS_PROXIMA_PLAN, limit: 500 },
+      }),
+    enabled: puede,
+  });
+  const porUso = proximasPorUso(vencimientos?.tareas ?? []);
 
   if (!puede) return null;
 
@@ -53,7 +67,7 @@ export function BloquePlanesMaquina({ maquinaId }: { maquinaId: number }) {
                   <Table.Th style={{ minWidth: 180 }}>Plan</Table.Th>
                   <Table.Th style={{ minWidth: 140 }}>Responsable</Table.Th>
                   <Table.Th style={{ minWidth: 130 }}>Pendientes</Table.Th>
-                  <Table.Th style={{ minWidth: 110 }}>Próxima</Table.Th>
+                  <Table.Th style={{ minWidth: 150 }}>Próxima</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -79,7 +93,9 @@ export function BloquePlanesMaquina({ maquinaId }: { maquinaId: number }) {
                     <Table.Td>
                       <Text size="sm">{textoPendientes(p)}</Text>
                     </Table.Td>
-                    <Table.Td>{formatFechaDia(p.proxima_fecha)}</Table.Td>
+                    <Table.Td>
+                      <CeldaProximaPlan fecha={p.proxima_fecha} uso={p.activo ? porUso.get(p.id) ?? null : null} />
+                    </Table.Td>
                   </Table.Tr>
                 ))}
               </Table.Tbody>
@@ -88,5 +104,26 @@ export function BloquePlanesMaquina({ maquinaId }: { maquinaId: number }) {
         )}
       </Stack>
     </Paper>
+  );
+}
+
+/**
+ * La próxima del plan: por fecha, la fecha; por uso, "A las N <unidad>" con lo que falta y la
+ * fecha estimada "≈ dd/mm", igual que en el detalle del plan. Con las dos, una debajo de la otra;
+ * sin ninguna, "—".
+ */
+function CeldaProximaPlan({ fecha, uso }: { fecha: string | null; uso: UsoTareaPlan | null }) {
+  if (!fecha && !uso) return <Text size="sm">—</Text>;
+  return (
+    <Stack gap={4}>
+      {fecha && <Text size="sm">{formatFechaDia(fecha)}</Text>}
+      {fecha && uso && <Divider variant="dashed" />}
+      {uso && (
+        <>
+          <CeldaProxima proxima_fecha={null} dias={null} uso={uso} />
+          <TextoEstimada uso={uso} />
+        </>
+      )}
+    </Stack>
   );
 }

@@ -27,8 +27,16 @@ export function TarjetaRutinaHoy({ rutina, hoy, usuarioId, ocupada, onHecha, onC
     >
       <Stack gap={4} style={{ flex: '1 1 180px', minWidth: 0 }}>
         <Group gap="xs" wrap="wrap">
-          {registro && <IconCircleCheck size={18} color="var(--sm-exito)" aria-label="Hecha" />}
+          {/* El tilde dentro del texto, en la misma línea que la descripción aunque sea larga */}
           <Text fw={500} c="var(--sm-titulo)" style={{ overflowWrap: 'anywhere' }}>
+            {registro && (
+              <IconCircleCheck
+                size={18}
+                color="var(--sm-exito)"
+                aria-label="Hecha"
+                style={{ verticalAlign: '-3px', marginRight: 6 }}
+              />
+            )}
             {rutina.descripcion}
           </Text>
           <Badge variant="light" color="gray" size="sm">
