@@ -3,12 +3,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Card, FileButton, Group, Image, Modal, Stack, Text, TextInput, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconTrash, IconUpload } from '@tabler/icons-react';
-import { clienteApi } from '../../api/cliente';
+import { BASE_URL, clienteApi } from '../../api/cliente';
 import type { ConfiguracionPublica } from '../../api/tipos';
 import { mensajeError } from '../../lib/errores';
 import { AYUDA_LOGO, cuerpoIdentidad, errorArchivoLogo, erroresIdentidad, urlLogo } from '../../lib/identidad';
-
-const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:3000';
 
 /** D1, 6: el nombre del sistema, el de la empresa y el logo, con CONFIGURACION_GESTIONAR. */
 export function TarjetaIdentidad() {

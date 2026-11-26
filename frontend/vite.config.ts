@@ -3,6 +3,12 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    // En desarrollo, el front llama a /api en su mismo origen y Vite lo pasa al backend.
+    proxy: {
+      '/api': { target: 'http://localhost:3000', changeOrigin: true },
+    },
+  },
   build: {
     rolldownOptions: {
       output: {

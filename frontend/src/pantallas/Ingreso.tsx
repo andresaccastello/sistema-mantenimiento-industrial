@@ -16,12 +16,10 @@ import { IconAlertCircle } from '@tabler/icons-react';
 import { useLocation, useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
-import { clienteApi } from '../api/cliente';
+import { BASE_URL, clienteApi } from '../api/cliente';
 import { ApiError, mensajeError } from '../lib/errores';
 import { urlLogo } from '../lib/identidad';
 import type { ConfiguracionPublica, LoginResponse } from '../api/tipos';
-
-const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:3000';
 
 export function Ingreso() {
   const [legajo, setLegajo] = useState('');

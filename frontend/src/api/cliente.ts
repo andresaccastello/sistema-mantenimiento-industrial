@@ -2,7 +2,8 @@ import { ApiError, reaccionError } from '../lib/errores';
 import { obtenerToken, eliminarToken } from '../auth/sesion';
 import type { ListaResultado } from './tipos';
 
-const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:3000';
+// Sin VITE_API_URL, la API va por el mismo origen que el front (en desarrollo, con el proxy de Vite).
+export const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) || window.location.origin;
 
 type ReaccionCallback = (reaccion: 'cerrar_sesion' | 'cambiar_password') => void;
 let reaccionListener: ReaccionCallback | null = null;
