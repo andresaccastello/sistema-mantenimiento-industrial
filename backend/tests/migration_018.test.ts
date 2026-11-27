@@ -731,9 +731,12 @@ test('Migración 018 — Preventivos por calendario', async (t) => {
         assert.deepStrictEqual([c?.data_type, c?.numeric_precision, c?.numeric_scale, c?.is_nullable], ['numeric', 14, 2, nullable]);
 
       const med = await columnas('medidores');
+      // Las 8 columnas de la 018 tienen que estar; las que agregan migraciones posteriores (021, 023) no molestan
+      const columnas018 = ['activo', 'actualizado_en', 'creado_en', 'creado_por_usuario_id', 'id', 'maquina_id', 'nombre', 'unidad'];
       assert.deepStrictEqual(
-        Object.keys(med).sort(),
-        ['activo', 'actualizado_en', 'creado_en', 'creado_por_usuario_id', 'id', 'maquina_id', 'nombre', 'unidad']
+        columnas018.filter((c) => !(c in med)),
+        [],
+        'Faltan columnas de la 018 en medidores'
       );
       assert.deepStrictEqual([med.id.data_type, med.maquina_id.is_nullable], ['bigint', 'NO']);
       assert.deepStrictEqual([med.nombre.character_maximum_length, med.nombre.is_nullable], [60, 'NO']);

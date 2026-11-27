@@ -84,7 +84,8 @@ function sumarAnios(fecha: string, anios: number): string {
   return `${Number(fecha.slice(0, 4)) + anios}${fecha.slice(4)}`;
 }
 
-test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-21)', async (t) => {
+// La suite completa supera los 30 minutos de --test-timeout del runner: su límite propio es de 60
+test('Etapa PV1 — Preventivos por calendario (PV-01 a PV-21)', { timeout: 60 * 60 * 1000 }, async (t) => {
   let client = await pool.connect();
 
   const createdPlantaIds: number[] = [];

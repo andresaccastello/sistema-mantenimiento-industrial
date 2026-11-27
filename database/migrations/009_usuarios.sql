@@ -47,30 +47,33 @@ WHERE p.nombre = 'DIRECCION'
 ON CONFLICT (perfil_id, permiso_id) DO NOTHING;
 
 -- 5. CHECK en auditoria_permisos.accion
+-- Se crea solo si no existe. Si ya existe (por ejemplo, la que amplió la 014), no se toca:
+-- reaplicar la 009 no deshace lo que agregaron migraciones posteriores. El control de filas
+-- solo corre cuando se va a crear.
 DO $$
 DECLARE
     invalid_count INTEGER;
 BEGIN
-    SELECT COUNT(*) INTO invalid_count
-    FROM auditoria_permisos
-    WHERE accion NOT IN (
-        'USUARIO_CREADO',
-        'USUARIO_MODIFICADO',
-        'PERFIL_CAMBIADO',
-        'SECTORES_CAMBIADOS',
-        'USUARIO_DESACTIVADO',
-        'USUARIO_REACTIVADO',
-        'PASSWORD_RESTABLECIDA',
-        'PASSWORD_CAMBIADA'
-    );
-
-    IF invalid_count > 0 THEN
-        RAISE EXCEPTION 'Hay % filas en auditoria_permisos con acciones no reconocidas para la migración 009', invalid_count;
-    END IF;
-
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint WHERE conname = 'ck_auditoria_permisos_accion'
     ) THEN
+        SELECT COUNT(*) INTO invalid_count
+        FROM auditoria_permisos
+        WHERE accion NOT IN (
+            'USUARIO_CREADO',
+            'USUARIO_MODIFICADO',
+            'PERFIL_CAMBIADO',
+            'SECTORES_CAMBIADOS',
+            'USUARIO_DESACTIVADO',
+            'USUARIO_REACTIVADO',
+            'PASSWORD_RESTABLECIDA',
+            'PASSWORD_CAMBIADA'
+        );
+
+        IF invalid_count > 0 THEN
+            RAISE EXCEPTION 'Hay % filas en auditoria_permisos con acciones no reconocidas para la migración 009', invalid_count;
+        END IF;
+
         ALTER TABLE auditoria_permisos
             ADD CONSTRAINT ck_auditoria_permisos_accion
             CHECK (accion IN (
