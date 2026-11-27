@@ -2,6 +2,11 @@
 
 Los pasos para dejar el sistema en internet (parte B de la Etapa PUB1). Se siguen en orden y desde la raíz del proyecto. Si un paso no sale como dice, **frená ahí** y no sigas con el siguiente.
 
+**Todo se corre en PowerShell, no en cmd.**
+- Las variables de proceso se ponen con `$env:NOMBRE="valor"`, no con `set NOMBRE=valor`, y se sacan con `Remove-Item Env:NOMBRE`.
+- Los comandos de este instructivo están escritos para PowerShell: en cmd algunos no andan.
+- Los archivos `.env.*` creálos con un editor (por ejemplo, VS Code), guardados en UTF-8. No los armes con `echo … > archivo`: en Windows PowerShell 5.1 eso los escribe en UTF-16 y node no los lee.
+
 **Cómo queda:**
 - la API, en **Neon Functions**, sobre la rama `main`;
 - el front, en **Vercel**;
