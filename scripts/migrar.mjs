@@ -2,7 +2,8 @@
 //
 //   node --env-file=<archivo> scripts/migrar.mjs --desde 005 [--hasta 026] [--si]
 //
-// Muestra solo el nombre de la base y el usuario, nunca la cadena de conexión ni el host. Pide
+// Muestra solo el nombre de la base, el usuario y el id del endpoint (ep-…), nunca la cadena de
+// conexión ni el resto del host. Pide
 // escribir MIGRAR antes de aplicar, salvo con --si. Cada archivo trae su BEGIN y su COMMIT, y al
 // primer error frena. No toca datos que no estén en las migraciones ni borra nada.
 import fs from 'node:fs';
@@ -35,6 +36,19 @@ function sinSecretos(texto) {
     // sin una URL válida no hay partes que sacar
   }
   return t.replace(/postgres(?:ql)?:\/\/[^\s'"]+/g, '[conexión]');
+}
+
+/**
+ * El id del endpoint de Neon (ep-…): la primera parte del host, sin "-pooler". El resto del host
+ * no se muestra. Es lo que se compara en la consola de Neon para saber a qué rama se conectó.
+ */
+function endpointDe(url) {
+  try {
+    const primera = new URL(url).hostname.split('.')[0];
+    return /^ep-[a-z0-9-]+$/.test(primera) ? primera.replace(/-pooler$/, '') : null;
+  } catch {
+    return null;
+  }
 }
 
 function leerArgumentos(argv) {
@@ -84,6 +98,7 @@ try {
   const { rows } = await client.query('SELECT current_database() AS base, current_user AS usuario');
   console.log(`\nBase: ${rows[0].base}`);
   console.log(`Usuario: ${rows[0].usuario}`);
+  console.log(`Endpoint: ${endpointDe(process.env.DATABASE_URL) ?? 'no se reconoce (el host no es de Neon)'}`);
 
   // 3. La confirmación
   if (!opciones.si) {

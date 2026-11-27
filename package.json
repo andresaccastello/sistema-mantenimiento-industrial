@@ -81,7 +81,7 @@
     "build:frontend": "npm run build --workspace frontend"
   },
   "dependencies": {
-    "@neon/config": "1.8.6",
+    "@neon/config": "1.14.8",
     "bcryptjs": "3.0.3",
     "hono": "4.13.13",
     "nodemailer": "10.3.1",
