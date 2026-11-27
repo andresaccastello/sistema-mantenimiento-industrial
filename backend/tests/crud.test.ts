@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import { pool } from '../functions/db.ts';
 import { serve } from '@hono/node-server';
 import app from '../functions/api.ts';
+import { seguirIngresos } from './ingresos.ts';
 
 const API_URL = 'http://localhost:3000/api';
 
@@ -28,6 +29,8 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 
 test('Security, Auth & CRUD Tests', async (t) => {
   const server = serve({ fetch: app.fetch, port: 3000 });
+  // PUB1: los intentos de ingreso que deja la prueba se borran al final
+  const ingresos = await seguirIngresos(pool, app);
   try {
     let validToken = '';
 
@@ -88,6 +91,7 @@ test('Security, Auth & CRUD Tests', async (t) => {
     assert.strictEqual(res.status, 400);
   });
   } finally {
+    await ingresos.borrar(pool);
     server.close();
   }
 });

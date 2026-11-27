@@ -485,3 +485,13 @@ El circuito ya está cubierto: el operario hace la revisión como hoy, y si encu
 4. **En el celular hay gráficos chicos en el resumen,** porque hoy el sistema se usa mucho desde el teléfono.
 
 **Motivo:** el pedido del profesor. Además, los números sueltos no muestran tendencias ni comparaciones; un gráfico sí.
+
+## D-037 — Límite de intentos de ingreso
+
+**Estado:** Aceptada
+
+1. **El ingreso se bloquea 15 minutos después de 5 fallos seguidos de un legajo.** Se cuentan los fallos de los últimos 15 minutos que vinieron después de su último ingreso exitoso; con 5 o más, `POST /api/auth/login` responde 429 `DEMASIADOS_INTENTOS` sin comparar la contraseña.
+2. **Exista o no el legajo, la respuesta es la misma,** así no se puede averiguar qué legajos existen. El legajo se cuenta normalizado con `upper(trim())`.
+3. **Cada intento se registra en `intentos_ingreso`,** y en cada ingreso exitoso se borran los de más de 7 días.
+
+**Motivo:** el sistema queda expuesto en internet.

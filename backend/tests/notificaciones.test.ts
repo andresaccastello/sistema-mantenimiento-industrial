@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { pool } from '../functions/db.ts';
 import { clienteSano } from './conexion.ts';
+import { seguirIngresos } from './ingresos.ts';
 import app from '../functions/api.ts';
 import { usuariosConPermiso } from '../functions/intervenciones/notificaciones.ts';
 import { resolverPermisosEfectivos } from '../functions/intervenciones/permisos.ts';
@@ -24,6 +25,8 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 
 test('Etapa 7 — Notificaciones internas, reglas de destinatarios, bandeja y canales', async (t) => {
   let client = await pool.connect();
+  // PUB1: los intentos de ingreso que deja la prueba se borran al final
+  const ingresos = await seguirIngresos(client, app);
   const createdIntervencionIds: number[] = [];
   const createdMaquinaIds: number[] = [];
   const createdUsuarioIds: number[] = [];
@@ -1471,6 +1474,7 @@ test('Etapa 7 — Notificaciones internas, reglas de destinatarios, bandeja y ca
 
   } finally {
     client = await clienteSano(client);
+    await ingresos.borrar(client);
     // Limpieza final
     await limpiarIntervenciones(createdIntervencionIds);
     for (const mId of createdMaquinaIds) {

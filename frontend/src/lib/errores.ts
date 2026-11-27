@@ -59,6 +59,8 @@ export function reaccionError(error: unknown): ReaccionError {
 
 const MENSAJES_POR_CODIGO: Record<string, string> = {
   SIN_CONEXION: 'No se pudo conectar con el servidor.',
+  // PUB1, 1 (D-037): 5 fallos seguidos de un legajo bloquean el ingreso 15 minutos
+  DEMASIADOS_INTENTOS: 'Demasiados intentos. Probá de nuevo en unos minutos',
   PERMISO_INSUFICIENTE: 'No tenés permiso para realizar esta acción.',
   ESTADO_DESACTUALIZADO: 'Otra persona modificó esta intervención. Actualizá la pantalla.',
   EDICION_NO_PERMITIDA: 'Ya no se puede editar: el reporte cambió de estado o ya tiene responsable.',

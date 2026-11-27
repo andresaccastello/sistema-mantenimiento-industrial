@@ -70,6 +70,7 @@ const TABLAS_CONTROL = [
   'rutinas',
   'rutina_registros',
   'maquina_documentos',
+  'intentos_ingreso',
 ];
 
 async function contarFilas() {

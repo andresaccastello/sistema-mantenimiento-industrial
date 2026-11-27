@@ -5,8 +5,89 @@ import { pool } from './db.ts';
 import { JWT_SECRET } from './config.ts';
 import { jwtVerify, dbVerify } from './middleware.ts';
 import { resolverPermisosEfectivos } from './intervenciones/permisos.ts';
+import { ErrorNegocio, responderError } from './intervenciones/errores.ts';
 
 const authApp = new Hono();
+
+/** PUB1, 1 (D-037): 5 fallos seguidos de un legajo en 15 minutos bloquean el ingreso. */
+export const MAXIMO_FALLOS_INGRESO = 5;
+export const VENTANA_FALLOS_MINUTOS = 15;
+/** En cada ingreso exitoso se borran los intentos más viejos que esto, de todos los legajos. */
+export const DIAS_INTENTOS_GUARDADOS = 7;
+
+interface UsuarioIngreso {
+  id: string | number;
+  legajo: string;
+  nombre: string;
+  apellido: string | null;
+  sesion_version: string | number | null;
+  perfil_nombre: string;
+}
+
+/**
+ * PUB1, 1: cuenta los fallos recientes del legajo, compara la contraseña y registra el intento,
+ * todo en una transacción y con el legajo bloqueado (advisory lock), así cinco pedidos a la vez
+ * no se saltean el límite. Devuelve el usuario si entró, o null si las credenciales no sirven.
+ * Con 5 o más fallos, 429 sin mirar la contraseña; exista o no el legajo, la respuesta es la misma.
+ */
+async function verificarIngreso(legajo: unknown, password: unknown): Promise<UsuarioIngreso | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // upper(trim()) y a lo sumo 50 caracteres, como la columna
+    const { rows: norm } = await client.query<{ legajo: string }>(
+      'SELECT trim(left(upper(trim($1::text)), 50)) AS legajo',
+      [legajo]
+    );
+    const legajoIntento = norm[0].legajo;
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext('ingreso:' || $1))`, [legajoIntento]);
+
+    // Los fallos de los últimos 15 minutos que vinieron después del último ingreso exitoso
+    const { rows: cuenta } = await client.query<{ fallos: number }>(
+      `SELECT count(*)::int AS fallos
+       FROM intentos_ingreso
+       WHERE legajo = $1
+         AND NOT exitoso
+         AND creado_en > NOW() - make_interval(mins => $2)
+         AND id > COALESCE((SELECT max(id) FROM intentos_ingreso WHERE legajo = $1 AND exitoso), 0)`,
+      [legajoIntento, VENTANA_FALLOS_MINUTOS]
+    );
+    if (cuenta[0].fallos >= MAXIMO_FALLOS_INGRESO) {
+      throw new ErrorNegocio(429, 'DEMASIADOS_INTENTOS', 'Demasiados intentos. Probá de nuevo en unos minutos');
+    }
+
+    // Buscar usuario por legajo y verificar estado propio y de su perfil
+    const { rows } = await client.query(
+      `SELECT u.id, u.legajo, u.password_hash, u.nombre, u.apellido, u.activo AS usuario_activo, u.es_sistema,
+              u.debe_cambiar_password, u.password_actualizado_en, u.sesion_version,
+              p.id AS perfil_id, p.nombre AS perfil_nombre, p.activo AS perfil_activo
+       FROM usuarios u
+       JOIN perfiles p ON u.perfil_id = p.id
+       WHERE u.legajo = $1`,
+      [legajo]
+    );
+
+    const user = rows[0];
+    // PV5, 2.1: el usuario del sistema no inicia sesión, aunque esté activo o tenga contraseña
+    const habilitado = user && user.password_hash && user.usuario_activo && user.perfil_activo && !user.es_sistema;
+    // Verificar contraseña con bcrypt
+    const exitoso = habilitado ? await bcrypt.compare(password as string, user.password_hash) : false;
+
+    await client.query('INSERT INTO intentos_ingreso (legajo, exitoso) VALUES ($1, $2)', [legajoIntento, exitoso]);
+    if (exitoso) {
+      await client.query('DELETE FROM intentos_ingreso WHERE creado_en < NOW() - make_interval(days => $1)', [
+        DIAS_INTENTOS_GUARDADOS,
+      ]);
+    }
+    await client.query('COMMIT');
+    return exitoso ? user : null;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
 
 /**
  * POST /api/auth/login
@@ -21,31 +102,13 @@ authApp.post('/login', async (c) => {
       return c.json({ error: 'Faltan credenciales', codigo: 'DATOS_INVALIDOS' }, 400);
     }
 
-    // Buscar usuario por legajo y verificar estado propio y de su perfil
-    const { rows } = await pool.query(
-      `SELECT u.id, u.legajo, u.password_hash, u.nombre, u.apellido, u.activo AS usuario_activo, u.es_sistema,
-              u.debe_cambiar_password, u.password_actualizado_en, u.sesion_version,
-              p.id AS perfil_id, p.nombre AS perfil_nombre, p.activo AS perfil_activo
-       FROM usuarios u
-       JOIN perfiles p ON u.perfil_id = p.id
-       WHERE u.legajo = $1`,
-      [legajo]
-    );
-
-    const user = rows[0];
-    // PV5, 2.1: el usuario del sistema no inicia sesión, aunque esté activo o tenga contraseña
-    if (!user || !user.password_hash || !user.usuario_activo || !user.perfil_activo || user.es_sistema) {
-      return c.json({ error: 'Credenciales inválidas', codigo: 'CREDENCIALES_INVALIDAS' }, 401);
-    }
-
-    // Verificar contraseña con bcrypt
-    const isValid = await bcrypt.compare(password, user.password_hash);
-    if (!isValid) {
+    const user = await verificarIngreso(legajo, password);
+    if (!user) {
       return c.json({ error: 'Credenciales inválidas', codigo: 'CREDENCIALES_INVALIDAS' }, 401);
     }
 
     // Resolver permisos efectivos (perfil + excepciones individuales)
-    const info = await resolverPermisosEfectivos(pool, user.id);
+    const info = await resolverPermisosEfectivos(pool, Number(user.id));
 
     // Generar JWT Token llevando solo sub, legajo, sv, iat y exp (24h)
     const nowSec = Math.floor(Date.now() / 1000);
@@ -78,6 +141,7 @@ authApp.post('/login', async (c) => {
     });
 
   } catch (error) {
+    if (error instanceof ErrorNegocio) return responderError(c, error);
     console.error('Error en login:', error);
     return c.json({ error: 'Error interno del servidor', codigo: 'ERROR_INTERNO' }, 500);
   }

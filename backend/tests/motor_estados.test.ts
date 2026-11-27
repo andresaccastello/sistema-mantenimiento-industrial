@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { pool } from '../functions/db.ts';
 import { clienteSano } from './conexion.ts';
+import { seguirIngresos } from './ingresos.ts';
 import app from '../functions/api.ts';
 import { recalcularEstadoMaquina } from '../functions/intervenciones/recalculoMaquina.ts';
 import { transicionesDeAccion } from '../functions/intervenciones/transiciones.ts';
@@ -24,6 +25,8 @@ if (!testBranchId || !dbUrl.includes(testBranchId) || dbUrl.includes('ep-broad-f
 
 test('Etapa 4A — Motor de estados: núcleo, asignación e inicio del trabajo', async (t) => {
   let client = await pool.connect();
+  // PUB1: los intentos de ingreso que deja la prueba se borran al final
+  const ingresos = await seguirIngresos(client, app);
 
   const limpiarIntervenciones = async (ids: number[]) => {
     if (!ids || ids.length === 0) return;
@@ -1476,6 +1479,7 @@ test('Etapa 4A — Motor de estados: núcleo, asignación e inicio del trabajo',
 
   } finally {
     client = await clienteSano(client);
+    await ingresos.borrar(client);
     // Cleanup general
     try {
       // Intervenciones creadas en las máquinas de los sectores creados por el test

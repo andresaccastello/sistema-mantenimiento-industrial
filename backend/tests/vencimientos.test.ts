@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { sign } from 'hono/jwt';
 import { pool } from '../functions/db.ts';
 import { clienteSano } from './conexion.ts';
+import { seguirIngresos } from './ingresos.ts';
 import app from '../functions/api.ts';
 import { JWT_SECRET } from '../functions/config.ts';
 import { procesarVencimientos, ResultadoVencimientos } from '../functions/preventivos/vencimientos.ts';
@@ -79,6 +80,8 @@ const errorDe = (r: ResultadoVencimientos, planId: number) => r.errores?.find((e
 
 test('Etapa PV5 — Generación automática y avisos de vencimiento (PA-01 a PA-10)', async (t) => {
   let client = await pool.connect();
+  // PUB1: los intentos de ingreso que deja la prueba se borran al final
+  const ingresos = await seguirIngresos(client, app);
 
   const createdPlantaIds: number[] = [];
   const createdSectorIds: number[] = [];
@@ -730,6 +733,7 @@ test('Etapa PV5 — Generación automática y avisos de vencimiento (PA-01 a PA-
     });
   } finally {
     client = await clienteSano(client);
+    await ingresos.borrar(client);
     // Limpieza: lo que creó esta prueba, y los avisos de vencimiento de esta corrida
     try {
       await client.query('UPDATE configuracion_sistema SET vencimientos_revisados_el = $1::date WHERE id = 1', [revisadosEl]);

@@ -42,6 +42,8 @@
     "test:tiempos": "tsx --env-file=.env --test backend/tests/tiempos.test.ts",
     "test:reportes": "tsx --env-file=.env --test backend/tests/reportes.test.ts",
     "test:reportes-preventivos": "tsx --env-file=.env --test backend/tests/reportes_preventivos.test.ts",
+    "test:migration-027": "tsx --env-file=.env --test backend/tests/migration_027.test.ts",
+    "test:ingreso": "tsx --env-file=.env --test backend/tests/ingreso.test.ts",
     "test:reportes-evolucion": "tsx --env-file=.env --test backend/tests/reportes_evolucion.test.ts",
     "test:motor": "tsx --env-file=.env --test backend/tests/motor_estados.test.ts",
     "test:cierres": "tsx --env-file=.env --test backend/tests/motor_cierres.test.ts",

@@ -130,3 +130,14 @@ describe('FE-20: requiereRecargar y mensajeError', () => {
     );
   });
 });
+
+describe('FE-193: el ingreso bloqueado por demasiados intentos (PUB1, 1)', () => {
+  it('DEMASIADOS_INTENTOS (429) se muestra en la pantalla de ingreso, sin cerrar sesión ni recargar', () => {
+    const error = new ApiError(429, 'DEMASIADOS_INTENTOS', 'Demasiados intentos. Probá de nuevo en unos minutos');
+    assert.equal(reaccionError(error), 'mostrar');
+    assert.equal(requiereRecargar(error), false);
+    assert.equal(mensajeError(error), 'Demasiados intentos. Probá de nuevo en unos minutos');
+    // Aunque la respuesta no traiga el texto, el mensaje es el mismo
+    assert.equal(mensajeError(new ApiError(429, 'DEMASIADOS_INTENTOS')), 'Demasiados intentos. Probá de nuevo en unos minutos');
+  });
+});
