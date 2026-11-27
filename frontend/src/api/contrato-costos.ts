@@ -1,0 +1,270 @@
+/**
+ * Contrato de las respuestas de costos (sección 7 de la Etapa C1).
+ *
+ * Un ejemplo de cada respuesta, con su tipo de `api/tipos.ts`:
+ * - del lado del frontend, el typecheck controla que respeten los tipos, y FE-62 los usa;
+ * - del lado del backend, CO-15 compara cada respuesta real con su ejemplo (`mismaForma`).
+ *
+ * Solo importa tipos: el backend lo importa desde sus pruebas.
+ */
+import type {
+  IntervencionCostosRespuesta,
+  RenglonCosto,
+  PersonaCostoOpcion,
+  ReporteCostosRespuesta,
+  LoteCostosRespuesta,
+} from './tipos';
+
+/** `GET /api/intervenciones/:id/costos`, con un renglón de cada tipo y uno anulado. */
+export const costosIntervencionEjemplo: IntervencionCostosRespuesta = {
+  renglones: [
+    {
+      id: 101,
+      tipo: 'MANO_OBRA',
+      descripcion: 'Cambio de rodamientos',
+      importe: 3000,
+      valor_hora: 1200,
+      horas: 2.5,
+      persona: { id: 41, nombre: 'Laura', apellido: 'Gómez' },
+      proveedor: null,
+      motivo: 'Horas del sábado',
+      registrado_por: { id: 12, nombre: 'Responsable', apellido: 'Ejemplo' },
+      registrado_en: '2026-11-04T13:10:00.000Z',
+      anulado: true,
+      anulado_por: { id: 12, nombre: 'Responsable', apellido: 'Ejemplo' },
+      anulado_en: '2026-11-04T14:00:00.000Z',
+      motivo_anulacion: 'Se cargó dos veces',
+    },
+    {
+      id: 102,
+      tipo: 'MANO_OBRA',
+      descripcion: 'Cambio de rodamientos',
+      importe: 3000,
+      valor_hora: 1200,
+      horas: 2.5,
+      persona: { id: 41, nombre: 'Laura', apellido: 'Gómez' },
+      proveedor: null,
+      motivo: null,
+      registrado_por: { id: 12, nombre: 'Responsable', apellido: 'Ejemplo' },
+      registrado_en: '2026-11-04T14:05:00.000Z',
+      anulado: false,
+      anulado_por: null,
+      anulado_en: null,
+      motivo_anulacion: null,
+    },
+    {
+      id: 103,
+      tipo: 'SERVICIO_EXTERNO',
+      descripcion: 'Rebobinado del motor',
+      importe: 8000,
+      valor_hora: null,
+      horas: null,
+      persona: null,
+      proveedor: { id: 7, nombre: 'Taller Ejemplo' },
+      motivo: null,
+      registrado_por: { id: 12, nombre: 'Responsable', apellido: 'Ejemplo' },
+      registrado_en: '2026-11-04T15:00:00.000Z',
+      anulado: false,
+      anulado_por: null,
+      anulado_en: null,
+      motivo_anulacion: null,
+    },
+    {
+      id: 104,
+      tipo: 'TRANSPORTE',
+      descripcion: 'Flete del motor',
+      importe: 500,
+      valor_hora: null,
+      horas: null,
+      persona: null,
+      proveedor: null,
+      motivo: null,
+      registrado_por: { id: 12, nombre: 'Responsable', apellido: 'Ejemplo' },
+      registrado_en: '2026-11-04T15:10:00.000Z',
+      anulado: false,
+      anulado_por: null,
+      anulado_en: null,
+      motivo_anulacion: null,
+    },
+    {
+      id: 105,
+      tipo: 'OTRO',
+      descripcion: 'Insumos de limpieza',
+      importe: 150,
+      valor_hora: null,
+      horas: null,
+      persona: null,
+      proveedor: null,
+      motivo: null,
+      registrado_por: { id: 12, nombre: 'Responsable', apellido: 'Ejemplo' },
+      registrado_en: '2026-11-04T15:20:00.000Z',
+      anulado: false,
+      anulado_por: null,
+      anulado_en: null,
+      motivo_anulacion: null,
+    },
+    {
+      id: 106,
+      tipo: 'AJUSTE',
+      descripcion: 'Bonificación del taller',
+      importe: -200,
+      valor_hora: null,
+      horas: null,
+      persona: null,
+      proveedor: null,
+      motivo: 'Bonificación acordada',
+      registrado_por: { id: 12, nombre: 'Responsable', apellido: 'Ejemplo' },
+      registrado_en: '2026-11-04T15:30:00.000Z',
+      anulado: false,
+      anulado_por: null,
+      anulado_en: null,
+      motivo_anulacion: null,
+    },
+  ],
+  resumen: {
+    repuestos: 200,
+    mano_obra: 3000,
+    servicio_externo: 8000,
+    transporte: 500,
+    otro: 150,
+    ajuste: -200,
+    total: 11650,
+  },
+  horas_mano_obra: 2.5,
+  ve_costos: true,
+  puede_registrar: true,
+  puede_anular: true,
+};
+
+/** `POST /api/intervenciones/:id/costos`: el renglón creado. */
+export const renglonCreadoEjemplo: RenglonCosto = {
+  id: 107,
+  tipo: 'SERVICIO_EXTERNO',
+  descripcion: 'Alineación láser',
+  importe: 12000,
+  valor_hora: null,
+  horas: null,
+  persona: null,
+  proveedor: { id: 7, nombre: 'Taller Ejemplo' },
+  motivo: 'Pedido por calidad',
+  registrado_por: { id: 12, nombre: 'Responsable', apellido: 'Ejemplo' },
+  registrado_en: '2026-11-05T10:00:00.000Z',
+  anulado: false,
+  anulado_por: null,
+  anulado_en: null,
+  motivo_anulacion: null,
+};
+
+/**
+ * `POST /api/intervenciones/:id/costos/lote` (Etapa C1.2): mano de obra interna con
+ * valor hora, transporte con proveedor y ajuste, en el orden del pedido.
+ */
+export const loteCreadoEjemplo: LoteCostosRespuesta = {
+  renglones: [
+    {
+      id: 108,
+      tipo: 'MANO_OBRA',
+      descripcion: 'Mano de obra',
+      importe: 3000,
+      valor_hora: 1200,
+      horas: 2.5,
+      persona: { id: 41, nombre: 'Laura', apellido: 'Gómez' },
+      proveedor: null,
+      motivo: null,
+      registrado_por: { id: 12, nombre: 'Responsable', apellido: 'Ejemplo' },
+      registrado_en: '2026-11-08T10:00:00.000Z',
+      anulado: false,
+      anulado_por: null,
+      anulado_en: null,
+      motivo_anulacion: null,
+    },
+    {
+      id: 109,
+      tipo: 'TRANSPORTE',
+      descripcion: 'Flete del motor',
+      importe: 500,
+      valor_hora: null,
+      horas: null,
+      persona: null,
+      proveedor: { id: 7, nombre: 'Taller Ejemplo' },
+      motivo: null,
+      registrado_por: { id: 12, nombre: 'Responsable', apellido: 'Ejemplo' },
+      registrado_en: '2026-11-08T10:00:00.000Z',
+      anulado: false,
+      anulado_por: null,
+      anulado_en: null,
+      motivo_anulacion: null,
+    },
+    {
+      id: 110,
+      tipo: 'AJUSTE',
+      descripcion: 'Descuento acordado',
+      importe: -100,
+      valor_hora: null,
+      horas: null,
+      persona: null,
+      proveedor: null,
+      motivo: 'Descuento por pronto pago',
+      registrado_por: { id: 12, nombre: 'Responsable', apellido: 'Ejemplo' },
+      registrado_en: '2026-11-08T10:00:00.000Z',
+      anulado: false,
+      anulado_por: null,
+      anulado_en: null,
+      motivo_anulacion: null,
+    },
+  ],
+};
+
+/** `GET /api/costos/personas`. */
+export const personasCostosEjemplo: PersonaCostoOpcion[] = [
+  { id: 41, legajo: 'L-041', nombre: 'Laura', apellido: 'Gómez' },
+  { id: 42, legajo: 'L-042', nombre: 'Martín', apellido: 'Pérez' },
+];
+
+/** `GET /api/reportes/costos`. */
+export const reporteCostosEjemplo: ReporteCostosRespuesta = {
+  desde: '2026-10-01T03:00:00.000Z',
+  hasta: '2026-11-01T03:00:00.000Z',
+  total: 23700,
+  intervenciones: 2,
+  por_tipo: {
+    repuestos: 200,
+    mano_obra: 23000,
+    servicio_externo: 0,
+    transporte: 500,
+    otro: 0,
+    ajuste: 0,
+  },
+  por_maquina: [
+    {
+      maquina: { id: 9, codigo: 'M-009', nombre: 'Compresor 2' },
+      sector: { id: 3, nombre: 'Sector Ejemplo 2' },
+      repuestos: 0,
+      mano_obra: 20000,
+      otros: 0,
+      total: 20000,
+    },
+    {
+      maquina: { id: 8, codigo: 'M-008', nombre: 'Torno 1' },
+      sector: { id: 2, nombre: 'Sector Ejemplo 1' },
+      repuestos: 200,
+      mano_obra: 3000,
+      otros: 500,
+      total: 3700,
+    },
+  ],
+  horas_por_persona: [
+    {
+      persona: null,
+      proveedor: { id: 7, nombre: 'Taller Ejemplo' },
+      horas: 4,
+      importe: 20000,
+    },
+    {
+      persona: { id: 41, nombre: 'Laura', apellido: 'Gómez' },
+      proveedor: null,
+      horas: 2,
+      importe: 3000,
+    },
+  ],
+};

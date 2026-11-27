@@ -1,0 +1,290 @@
+import React, { useState } from 'react';
+import {
+  Stack,
+  Group,
+  SimpleGrid,
+  Card,
+  Text,
+  Badge,
+  Button,
+  Box,
+  Title,
+  Loader,
+  Center,
+} from '@mantine/core';
+import { IconAlertTriangle } from '@tabler/icons-react';
+import { useNavigate, Navigate } from 'react-router';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useAuth } from '../auth/AuthContext';
+import { clienteApi } from '../api/cliente';
+import { destinoInicio } from '../lib/inicio';
+import { useEsCelular } from '../lib/useEsCelular';
+import { useModoSimple } from '../lib/useModoSimple';
+import { etiquetaMaquina } from '../lib/maquinas';
+import { formatHace } from '../lib/formato';
+import { nombreCompleto } from '../lib/personas';
+import { EstadoBadge } from '../componentes/EstadoBadge';
+import { PantallaVacia } from '../componentes/PantallaVacia';
+import { EncabezadoPagina } from '../componentes/EncabezadoPagina';
+import type { IntervencionLista, ListaResultado } from '../api/tipos';
+
+function TarjetaReporte({
+  item,
+  onClick,
+}: {
+  item: IntervencionLista;
+  onClick: () => void;
+}) {
+  return (
+    <Card
+      withBorder
+      radius="md"
+      p="md"
+      tabIndex={0}
+      role="button"
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      style={{
+        cursor: 'pointer',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        transition: 'transform 150ms ease, box-shadow 150ms ease',
+      }}
+    >
+      <Stack gap="xs">
+        <Group justify="space-between" align="flex-start" wrap="nowrap">
+          <Box style={{ minWidth: 0, flex: 1 }}>
+            <Text fw={600} size="sm" c="var(--sm-titulo)" lineClamp={1}>
+              {etiquetaMaquina(item.maquina)}
+            </Text>
+            <Text size="xs" c="var(--sm-tenue)" lineClamp={1}>
+              {item.maquina.sector.nombre}
+            </Text>
+          </Box>
+          <EstadoBadge entidad="intervencion" estado={item.estado} size="xs" />
+        </Group>
+
+        <Group gap="xs" wrap="wrap">
+          <Text size="xs" c="var(--sm-tenue)">
+            Reportado {formatHace(item.fecha_creacion)}
+          </Text>
+          {item.detiene_maquina_actualmente && (
+            <Badge color="red" variant="filled" size="xs">
+              Máquina detenida
+            </Badge>
+          )}
+        </Group>
+
+        <Text size="sm" c="var(--sm-texto)" lineClamp={2}>
+          {item.descripcion}
+        </Text>
+      </Stack>
+
+      <Box mt="sm" pt="xs" style={{ borderTop: '1px solid var(--sm-separador)' }}>
+        <Text size="xs" c="var(--sm-tenue)">
+          Responsable:{' '}
+          <Text span fw={500} c="var(--sm-texto-fuerte)">
+            {nombreCompleto(item.responsable) || 'Sin asignar'}
+          </Text>
+        </Text>
+      </Box>
+    </Card>
+  );
+}
+
+export function MisReportes() {
+  const { usuario } = useAuth();
+  // Se lee en el primer render: si arrancara en false, en el celular redirigiría a "/" y
+  // "/" volvería acá, en un bucle sin fin (pantalla en blanco)
+  const esCelular = useEsCelular();
+
+  // En computadora, o en el celular sin el modo simple (D1, 4), redirigir si no es el destino
+  // de inicio del perfil
+  const modoSimple = useModoSimple();
+  if (!modoSimple && destinoInicio(usuario?.permisos) !== '/mis-reportes') {
+    return <Navigate to="/" replace />;
+  }
+
+  return <MisReportesContenido esCelular={esCelular} />;
+}
+
+function MisReportesContenido({ esCelular }: { esCelular: boolean }) {
+  const { usuario } = useAuth();
+  const navigate = useNavigate();
+
+  const tieneCrear = Boolean(usuario?.permisos?.['INTERVENCIONES_CREAR']);
+  const tieneVer = Boolean(usuario?.permisos?.['INTERVENCIONES_VER']);
+
+  const [limitCerrados, setLimitCerrados] = useState(10);
+
+  const { data: dataAbiertos, isLoading: cargandoAbiertos } = useQuery<ListaResultado<IntervencionLista>>({
+    queryKey: ['intervenciones', { estado: 'PENDIENTE,EN_PROCESO,EN_ESPERA_REPUESTOS', limit: 50 }],
+    queryFn: () =>
+      clienteApi.listar<IntervencionLista>('/api/intervenciones', {
+        params: { estado: 'PENDIENTE,EN_PROCESO,EN_ESPERA_REPUESTOS', limit: 50 },
+      }),
+    enabled: tieneVer,
+    refetchInterval: 60000,
+  });
+
+  const {
+    data: dataCerrados,
+    isLoading: cargandoCerrados,
+    isPlaceholderData: trayendoMasCerrados,
+  } = useQuery<ListaResultado<IntervencionLista>>({
+    queryKey: ['intervenciones', { estado: 'FINALIZADA,CANCELADA', limit: limitCerrados }],
+    queryFn: () =>
+      clienteApi.listar<IntervencionLista>('/api/intervenciones', {
+        params: { estado: 'FINALIZADA,CANCELADA', limit: limitCerrados },
+      }),
+    enabled: tieneVer,
+    refetchInterval: 60000,
+    placeholderData: keepPreviousData,
+  });
+
+  const botonReportar = tieneCrear ? (
+    <Button
+      size="xl"
+      color="marca"
+      fullWidth={esCelular}
+      leftSection={<IconAlertTriangle size={24} />}
+      onClick={() => navigate('/reportar')}
+      w={{ base: '100%', sm: 'auto' }}
+    >
+      {esCelular ? 'Reportar una falla' : 'Reportar falla'}
+    </Button>
+  ) : null;
+
+  if (!tieneVer) {
+    return (
+      <Stack gap="lg">
+        {esCelular && botonReportar && <Box>{botonReportar}</Box>}
+        <EncabezadoPagina titulo="Mis reportes" />
+        {!esCelular && botonReportar && <Box>{botonReportar}</Box>}
+      </Stack>
+    );
+  }
+
+  const primeraCarga = (cargandoAbiertos && !dataAbiertos) || (cargandoCerrados && !dataCerrados);
+  const abiertos = dataAbiertos?.items || [];
+  const cerrados = dataCerrados?.items || [];
+  const totalAbiertos = dataAbiertos?.total ?? abiertos.length;
+  const totalCerrados = dataCerrados?.total ?? cerrados.length;
+  const sinReportes = !primeraCarga && totalAbiertos === 0 && totalCerrados === 0;
+
+  return (
+    <Stack gap="xl">
+      {esCelular ? (
+        <Stack gap="md">
+          {botonReportar}
+          <EncabezadoPagina
+            titulo="Mis reportes"
+            subtitulo="Seguimiento de fallas que reportaste"
+          />
+        </Stack>
+      ) : (
+        <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
+          <EncabezadoPagina
+            titulo="Mis reportes"
+            subtitulo="Seguimiento de fallas que reportaste"
+          />
+          {botonReportar && <Box w={{ base: '100%', sm: 'auto' }}>{botonReportar}</Box>}
+        </Group>
+      )}
+
+      {primeraCarga && (
+        <Center py="xl">
+          <Loader color="marca" />
+        </Center>
+      )}
+
+      {sinReportes && (
+        <PantallaVacia
+          titulo="Todavía no reportaste fallas."
+          mensaje="Cuando cargues una falla la vas a poder seguir desde acá."
+          accion={esCelular ? undefined : botonReportar}
+        />
+      )}
+
+      {!primeraCarga && !sinReportes && (
+        <Stack gap="xl">
+          {/* Bloque Abiertos */}
+          <Stack gap="sm">
+            <Group justify="space-between" align="baseline">
+              <Title order={3} size="h4" c="var(--sm-titulo)">
+                Abiertos ({totalAbiertos})
+              </Title>
+              {totalAbiertos > 50 && (
+                <Text size="xs" c="var(--sm-tenue)">
+                  Se muestran los 50 más recientes de {totalAbiertos}.
+                </Text>
+              )}
+            </Group>
+
+            {abiertos.length === 0 ? (
+              <Text size="sm" c="var(--sm-tenue)">
+                No tenés reportes abiertos en este momento.
+              </Text>
+            ) : (
+              <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+                {abiertos.map((item) => (
+                  <TarjetaReporte
+                    key={item.id}
+                    item={item}
+                    onClick={() => navigate(`/intervenciones/${item.id}`)}
+                  />
+                ))}
+              </SimpleGrid>
+            )}
+          </Stack>
+
+          {/* Bloque Cerrados recientemente */}
+          <Stack gap="sm">
+            <Title order={3} size="h4" c="var(--sm-titulo)">
+              Cerrados recientemente
+            </Title>
+
+            {cerrados.length === 0 ? (
+              <Text size="sm" c="var(--sm-tenue)">
+                No hay reportes cerrados recientemente.
+              </Text>
+            ) : (
+              <>
+                <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+                  {cerrados.map((item) => (
+                    <TarjetaReporte
+                      key={item.id}
+                      item={item}
+                      onClick={() => navigate(`/intervenciones/${item.id}`)}
+                    />
+                  ))}
+                </SimpleGrid>
+
+                {cerrados.length < totalCerrados && (
+                  <Group justify="center" mt="md">
+                    <Button
+                      variant="default"
+                      size="md"
+                      loading={trayendoMasCerrados}
+                      onClick={() => setLimitCerrados((l) => l + 10)}
+                    >
+                      Ver más
+                    </Button>
+                  </Group>
+                )}
+              </>
+            )}
+          </Stack>
+        </Stack>
+      )}
+    </Stack>
+  );
+}
+
+export default MisReportes;

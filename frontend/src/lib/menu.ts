@@ -1,0 +1,153 @@
+/**
+ * Ítems del menú según permisos (sección 7.2 de docs/etapas/etapa-f0-base-frontend.md)
+ */
+
+import { itemsMenuCelular, permitidaEnCelular } from './celular';
+
+export { itemsMenuCelular, permitidaEnCelular };
+
+export interface ItemMenu {
+  etiqueta: string;
+  ruta: string;
+  icono: string;
+}
+
+export type PermisosEntrada =
+  | Record<string, unknown>
+  | string[]
+  | Set<string>
+  | null
+  | undefined;
+
+export function verificarPermiso(permisos: PermisosEntrada, codigo: string): boolean {
+  if (!permisos) return false;
+
+  if (Array.isArray(permisos)) {
+    return permisos.some((p) => {
+      if (typeof p === 'string') return p === codigo;
+      if (typeof p === 'object' && p !== null && 'codigo' in p) {
+        return (p as { codigo: string }).codigo === codigo;
+      }
+      return false;
+    });
+  }
+
+  if (permisos instanceof Set) {
+    return permisos.has(codigo);
+  }
+
+  if (typeof permisos === 'object') {
+    return Boolean((permisos as Record<string, unknown>)[codigo]);
+  }
+
+  return false;
+}
+
+/**
+ * Devuelve en orden canónico los ítems de navegación según los permisos dados.
+ * En el celular (enCelular = true), devuelve solo las secciones permitidas que el usuario tiene.
+ */
+export function itemsMenu(permisos: PermisosEntrada, enCelular = false): ItemMenu[] {
+  if (enCelular) {
+    return itemsMenuCelular(permisos);
+  }
+
+  const items: ItemMenu[] = [
+    {
+      etiqueta: 'Inicio',
+      ruta: '/',
+      icono: 'IconHome',
+    },
+  ];
+
+  if (verificarPermiso(permisos, 'INTERVENCIONES_CREAR')) {
+    items.push({
+      etiqueta: 'Reportar falla',
+      ruta: '/reportar',
+      icono: 'IconAlertTriangle',
+    });
+  }
+
+  if (verificarPermiso(permisos, 'INTERVENCIONES_VER')) {
+    items.push({
+      etiqueta: 'Intervenciones',
+      ruta: '/intervenciones',
+      icono: 'IconTool',
+    });
+  }
+
+  if (verificarPermiso(permisos, 'PLANES_GESTIONAR')) {
+    items.push({
+      etiqueta: 'Preventivos',
+      ruta: '/preventivos',
+      icono: 'IconCalendarCheck',
+    });
+  }
+
+  // LE1, 4.4: la ronda de lecturas, después de Preventivos
+  if (verificarPermiso(permisos, 'MAQUINAS_REGISTRAR_LECTURAS')) {
+    items.push({
+      etiqueta: 'Lecturas',
+      ruta: '/lecturas',
+      icono: 'IconGauge',
+    });
+  }
+
+  // RT1, 4: las tareas de rutina, después de Lecturas
+  if (verificarPermiso(permisos, 'RUTINAS_REALIZAR')) {
+    items.push({
+      etiqueta: 'Tareas de hoy',
+      ruta: '/rutinas',
+      icono: 'IconChecklist',
+    });
+  }
+
+  // Máquinas siempre visible
+  items.push({
+    etiqueta: 'Máquinas',
+    ruta: '/maquinas',
+    icono: 'IconCpu',
+  });
+
+  if (verificarPermiso(permisos, 'REPUESTOS_GESTIONAR')) {
+    items.push({
+      etiqueta: 'Repuestos',
+      ruta: '/repuestos',
+      icono: 'IconPackage',
+    });
+  }
+
+  if (verificarPermiso(permisos, 'REPORTES_CONSULTAR')) {
+    items.push({
+      etiqueta: 'Reportes',
+      ruta: '/reportes',
+      icono: 'IconReportAnalytics',
+    });
+  }
+
+  if (verificarPermiso(permisos, 'USUARIOS_GESTIONAR')) {
+    items.push({
+      etiqueta: 'Usuarios',
+      ruta: '/usuarios',
+      icono: 'IconUsers',
+    });
+  }
+
+  if (verificarPermiso(permisos, 'MAQUINAS_GESTIONAR')) {
+    items.push({
+      etiqueta: 'Sectores y catálogos',
+      ruta: '/sectores',
+      icono: 'IconBuildingFactory2',
+    });
+  }
+
+  if (verificarPermiso(permisos, 'CONFIGURACION_GESTIONAR')) {
+    items.push({
+      etiqueta: 'Configuración',
+      ruta: '/configuracion',
+      icono: 'IconSettings',
+    });
+  }
+
+  return items;
+}
